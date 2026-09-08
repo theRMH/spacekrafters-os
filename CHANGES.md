@@ -1,3 +1,11 @@
+## 2026-09-09
+
+### Phase 5: Statement Import — personal-account scope toggle
+**Commit:** Uncommitted
+- Closes the "Not yet done" item from 2026-09-08: `StatementImportScreen` previously only posted to `CompanyAccounts`. Added an Import Into (Company/Personal) toggle so the Owner can also import a personal bank statement without a second importer screen, per the original plan to reuse this screen for both.
+- **Changed:** `src/screens/Finance/StatementImportScreen.tsx` — added `scope: 'company' | 'personal'` state with a toggle; account dropdown now lists `CompanyAccount[]` or `PersonalAccount[]` depending on scope; `handleConfirm` branches to `addPersonalTransaction()` (mapping CSV debit/credit → `expense`/`income`, `source: 'imported'`, classified category folded into `narration` since `PersonalTransaction.categoryId` is a FK, not free text) instead of `addCompanyTransaction()` + `addTransactionAllocations()` when scope is personal.
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/statement-import` returns HTTP 200.
+
 ## 2026-09-08
 
 ### Phase 5: Personal Finance Module (merged with Company Finance into one Finance area)
@@ -20,7 +28,7 @@
 - **Changed:** `src/components/navigation/navItems.ts` — added new "Personal Finance" nav section with all 7 items.
 - **Changed:** `src/App.tsx` — added routes + `ProtectedRoute screenPath="..."` wiring for all 7 screens.
 - **Verified:** `tsc --noEmit` clean. Dev server started; all 7 new routes (`/personal-finance`, `/personal-categories`, `/personal-commitments`, `/personal-plans`, `/personal-reports`, `/personal-calendar`, `/combined-finance`) return HTTP 200. Owner-only gating relies entirely on the existing `SCREEN_PERMISSIONS`/`canAccessScreen`/`ProtectedRoute` mechanism (no new code needed) since `view_personal_finance`/`view_combined_finance` are Owner-only permissions.
-- **Not yet done:** adding a personal-account toggle to `StatementImportScreen.tsx` so it can import personal statements too (mentioned in the original plan, not yet re-confirmed as in scope) — deferred pending user confirmation.
+- **Done 2026-09-09:** added the personal-account toggle to `StatementImportScreen.tsx` — see that day's entry.
 - **Next:** `OwnerCommandCenter` dashboard (Phase 5, still unbuilt).
 
 ### Phase 5: Audit Log (viewer + retrofit writes into approve/reject flows)

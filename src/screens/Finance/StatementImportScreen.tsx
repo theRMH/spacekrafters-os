@@ -4,7 +4,8 @@ import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllCompanyAccounts, addCompanyTransaction, addTransactionAllocations } from '../../services/companyAccountService'
-import type { CompanyAccount, CompanyTransaction, CompanyTransactionType, TransactionAllocation } from '../../types'
+import { getAllPersonalAccounts, addPersonalTransaction } from '../../services/personalFinanceService'
+import type { CompanyAccount, CompanyTransaction, CompanyTransactionType, TransactionAllocation, PersonalAccount, PersonalTransaction } from '../../types'
 
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
@@ -92,8 +93,12 @@ function parseCSV(text: string): ParsedRow[] {
 const inp = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400'
 const label = 'block text-xs font-semibold text-slate-500 mb-1'
 
+type ImportScope = 'company' | 'personal'
+
 export default function StatementImportScreen() {
+  const [scope, setScope] = useState<ImportScope>('company')
   const [accounts, setAccounts] = useState<CompanyAccount[]>([])
+  const [personalAccounts, setPersonalAccounts] = useState<PersonalAccount[]>([])
   const [accountId, setAccountId] = useState('')
   const [rows, setRows] = useState<ParsedRow[]>([])
   const [fileName, setFileName] = useState('')
@@ -102,7 +107,15 @@ export default function StatementImportScreen() {
 
   useEffect(() => {
     getAllCompanyAccounts().then(setAccounts)
+    getAllPersonalAccounts().then(setPersonalAccounts)
   }, [])
+
+  function handleScopeChange(next: ImportScope) {
+    setScope(next)
+    setAccountId('')
+    setRows([])
+    setFileName('')
+  }
 
   function handleFile(file: File) {
     setFileName(file.name)
@@ -137,6 +150,21 @@ export default function StatementImportScreen() {
     setIsPosting(true)
     let failed = 0
     for (const row of includedRows) {
+      if (scope === 'personal') {
+        const txn: PersonalTransaction = {
+          id: `ptxn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          accountId,
+          date: new Date(row.date).toISOString() || new Date().toISOString(),
+          amount: row.amount,
+          type: row.type === 'credit' ? 'income' : 'expense',
+          narration: `${row.category}: ${row.description}`,
+          source: 'imported',
+          createdAt: new Date().toISOString(),
+        }
+        const result = await addPersonalTransaction(txn)
+        if (!result.ok) failed++
+        continue
+      }
       const txn: CompanyTransaction = {
         id: `txn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         accountId,
@@ -161,10 +189,11 @@ export default function StatementImportScreen() {
       await addTransactionAllocations([allocation])
     }
     setIsPosting(false)
+    const destination = scope === 'personal' ? 'Personal Finance' : 'Company Accounts'
     if (failed > 0) {
       setSnack({ open: true, msg: `${includedRows.length - failed} of ${includedRows.length} rows posted. ${failed} failed.`, type: 'error' })
     } else {
-      setSnack({ open: true, msg: `${includedRows.length} transactions posted to Company Accounts.`, type: 'success' })
+      setSnack({ open: true, msg: `${includedRows.length} transactions posted to ${destination}.`, type: 'success' })
       setRows([])
       setFileName('')
     }
@@ -175,7 +204,7 @@ export default function StatementImportScreen() {
       <AppHeader />
       <div className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-14 z-20">
         <h1 className="text-lg font-extrabold text-slate-800">Statement Import</h1>
-        <p className="text-xs text-slate-400">Upload a CSV bank statement, review, and post to Company Accounts.</p>
+        <p className="text-xs text-slate-400">Upload a CSV bank statement, review, and post to Company or Personal Finance.</p>
       </div>
 
       <PermissionGate permission="manage_company_accounts" fallback={
@@ -183,10 +212,24 @@ export default function StatementImportScreen() {
       }>
         <div className="px-4 pt-4 space-y-4">
           <div>
+            <label className={label}>Import Into</label>
+            <div className="flex gap-2">
+              <button onClick={() => handleScopeChange('company')}
+                className={`flex-1 py-2 rounded-xl text-sm font-semibold ${scope === 'company' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                Company
+              </button>
+              <button onClick={() => handleScopeChange('personal')}
+                className={`flex-1 py-2 rounded-xl text-sm font-semibold ${scope === 'personal' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                Personal
+              </button>
+            </div>
+          </div>
+
+          <div>
             <label className={label}>Deposit Account *</label>
             <select className={inp} value={accountId} onChange={e => setAccountId(e.target.value)}>
               <option value="">Select account…</option>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              {(scope === 'company' ? accounts : personalAccounts).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </div>
 
