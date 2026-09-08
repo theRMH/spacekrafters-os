@@ -1,5 +1,14 @@
 ## 2026-09-08
 
+### Repo separation: SpaceKrafters OS now has its own git repository
+**Commit:** `d8c4ba3` (initial commit of the new repo)
+- SKS previously lived as a subfolder inside the shared Fenster monorepo (single repo rooted at `OS/`, sharing `origin` = `RMHDeveloper/fensterOS` with Fenster's own `src/`). Per user request, extracted it into its own independent repository.
+- **Added:** `sks/.gitignore` — excludes `node_modules/`, `.env*`, `dist/`, `supabase/.temp/` (Supabase CLI cache containing the project ref/pooler URL), and the stray empty `supabase/supabase/` folder.
+- Ran `git init` inside `sks/` (confirmed via `git rev-parse --show-toplevel` that it's now a standalone repo, not nested under the parent). Committed the current file state as one fresh initial commit (101 files, no `.env*`/secrets — verified before committing) — this is a "fresh start" extraction, so prior commit-by-commit history from the monorepo is not carried over (still recoverable from the old repo's local reflog for a time if ever needed).
+- Added remote `origin` = `https://github.com/theRMH/spacekrafters-os.git`, pushed `master` — confirmed with user before pushing.
+- **Reversed the earlier mistaken push:** a previous action this session had pushed SKS commits to `RMHDeveloper/fensterOS` as a new `master` branch (wrong destination). That branch has been deleted (`git push origin --delete master`) — confirmed `origin/deploy` (the real Fenster deployment branch) was untouched.
+- **Note:** the `sks/` prefix used in file paths throughout this changelog is a holdover from the monorepo days — paths are now relative to this repo's own root, but the historical entries below keep the old prefix for continuity.
+
 ### Branding: SpaceKrafters logo asset
 **Commit:** Uncommitted
 - **Added:** `sks/public/brand/spacekrafters-logo.png` — downloaded from the URL the user provided (spacekrafters.com); `AppHeader.tsx` already referenced this exact path but the file never existed, so the header image was broken until now. No code changes needed.
