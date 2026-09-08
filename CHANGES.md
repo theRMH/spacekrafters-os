@@ -1,5 +1,10 @@
 ## 2026-09-08
 
+### Rename misleading .env to credentials-notes.txt
+**Commit:** Uncommitted
+- **Changed:** renamed `sks/.env` → `sks/credentials-notes.txt` (filesystem rename, not tracked by git — the old file was gitignored and untracked). It held unstructured plaintext credential notes (DB password, PAT, keys), not `KEY=value` pairs — Vite never read it; `.env.local` is the real config source. Renamed so it can't be mistaken for live config.
+- **Changed:** `.gitignore` — added `credentials-notes.txt` explicitly, since the old `.env*` pattern no longer covers the new filename and this file contains a raw DB password + PAT that must never be committed.
+
 ### Wire up standalone /tasks and /gantt nav items
 **Commit:** Uncommitted
 - **Scope decision (explicit, asked before building):** Tasks and Gantt are inherently project-scoped (a task list / timeline only makes sense within a project), so rather than building duplicate global cross-project list/gantt views, the standalone screens are project pickers that deep-link into Project Workspace's existing Tasks/Gantt tabs — reuses all existing logic, no duplication.
