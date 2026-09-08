@@ -1,5 +1,16 @@
 ## 2026-09-08
 
+### MVP: Attendance module (new UI, pulled forward from Phase 5)
+**Commit:** Uncommitted
+- **Added:** `src/services/attendanceService.ts` — `getAllAttendance`/`upsertAttendance` against `sks_attendance`. Uses a deterministic id (`att_${userId}_${date}`) so `upsert` with `onConflict: 'user_id,date'` (the table's actual unique constraint — the PK is `id`) is idempotent per user/day.
+- **Added:** `src/screens/Attendance/AttendanceScreen.tsx` — no Fenster equivalent existed, built new per the build-doc spec:
+  - Month calendar grid; tapping a day selects it below.
+  - Everyone: marks their own Present/Absent/Half Day for the selected date. A date covered by one of their own *approved* leave applications shows as "Leave" automatically (computed client-side from `sks_leave_applications`, not a separate write) and is not directly editable.
+  - Owner/Admin (`approve_leave` permission — reused rather than adding a new permission, since it already gates "manage others' HR records"): instead of the calendar-only self view, additionally see a team roster for the selected date (via `getManagedUsersDirectory()`) and can mark attendance for any team member.
+- **Changed:** `src/App.tsx` — added `/attendance` route. Nav item and `SCREEN_PERMISSIONS['attendance'] = 'view_attendance'` already existed from Phase 0.
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` and `/attendance` both return HTTP 200.
+- **Note:** Daily Diary auto-mark-present linkage (mentioned in the build doc) is deferred until Daily Diary itself is built later in Phase 2 — no diary exists yet to link from.
+
 ### MVP reorder: Leave module (pulled forward from Phase 5)
 **Commit:** Uncommitted
 - **Changed:** `SPACEKRAFTERS-PHASE-PLAN.md` — added an "MVP Reordering" section documenting the confirmed build order: Leave → Attendance → resume/finish Phase 2 → defer Phase 3/4/rest-of-5 to v2.
