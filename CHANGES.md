@@ -1,5 +1,20 @@
 ## 2026-09-08
 
+### Phase 2: Project Workspace tabs shell + Task/TaskDependency types & service
+**Commit:** Uncommitted
+- **Changed:** `src/types/index.ts` — added `TaskStatus`, `Task`, `TaskDependency` types, matching `sks_tasks`/`sks_task_dependencies` columns. `Task.lateReason` is included now (unused until Task Detail is built) since it needs to exist on the type before the completion-blocking-on-late-reason UI can be added.
+- **Added:** `src/services/taskService.ts` — `getAllTasks`/`upsertTask`/`deleteTask` against `sks_tasks`; `getAllTaskDependencies`/`addTaskDependency`/`deleteTaskDependency` against `sks_task_dependencies`. `addTaskDependency` uses `.insert()` not `.upsert()`, because `sks_task_dependencies` has no `updated_at` column and no UPDATE RLS policy (SELECT/INSERT/DELETE only) — same append-only reasoning as `addDesignVersion`.
+- **Added:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — tabs shell at a new `/projects/:id` route, per explicit user scoping decision (shell now with working tabs only; remaining tabs wired in later without revisiting the shell). Tab bar: Overview, Gantt, Team, Requirements, BOQ, Design, Finance, Procurement, Documents, Handover.
+  - **Overview** — `Accordion` with Project Details + Finance Summary sections, from the `Project` record itself.
+  - **Team** — coordinator (`project.coordinatorId`) plus every distinct `assigneeId` across the project's tasks, resolved via `getManagedUsersDirectory()`.
+  - **Requirements** — `getAllRequirements()` filtered by `projectId` (note: most existing requirements are linked via `siteVisitId`→lead rather than `projectId` directly, since `RequirementsScreen.tsx` doesn't set `projectId` today — this tab will only show requirements that do have it set; not a regression, just an existing data-linkage gap that's out of scope here).
+  - **BOQ** — the project's `Quotation` (via `getAllQuotations()` filtered by `projectId`) rendered by section/line-item, reusing the `Quotation`/`BOQSection`/`BOQLineItem` types and service that already existed from a prior session.
+  - **Design** — `getAllDesignPackages()` filtered by `projectId`, with version counts from `getAllDesignVersions()`, and a link to the full Design Center.
+  - **Gantt / Finance / Procurement / Documents / Handover** — placeholder "Coming soon" panels until their own phase items are built.
+- **Changed:** `src/App.tsx` — added `/projects/:id` route (reuses the existing `projects` screen-permission mapping / `view_projects`, no new permission needed). `ProjectsScreen.tsx` already had a "Open Project Workspace" button wired to `navigate(\`/projects/${selected.id}\`)` from a prior session, so no edit was needed there.
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Next:** Task Detail screen (subtasks, dependencies, mandatory late-reason on late completion), then Gantt chart, then Daily Diary — each gets wired into this shell's placeholder tabs as it's built.
+
 ### Phase 2: Design Center (new UI, no Fenster equivalent)
 **Commit:** Uncommitted
 - **Changed:** `src/types/index.ts` — added `DesignPackageStatus`, `DesignPackage`, `DesignVersion` types, matching `sks_design_packages`/`sks_design_versions` columns.

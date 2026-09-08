@@ -17,6 +17,7 @@ import SiteVisitsScreen from './screens/SiteVisits/SiteVisitsScreen'
 import RequirementsScreen from './screens/Requirements/RequirementsScreen'
 import QuotationsScreen from './screens/Quotations/QuotationsScreen'
 import ProjectsScreen from './screens/Projects/ProjectsScreen'
+import ProjectWorkspaceScreen from './screens/ProjectWorkspace/ProjectWorkspaceScreen'
 import LeaveScreen from './screens/Leave/LeaveScreen'
 import AttendanceScreen from './screens/Attendance/AttendanceScreen'
 import DesignCenterScreen from './screens/Design/DesignCenterScreen'
@@ -135,6 +136,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="projects">
             <AppShell><ProjectsScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/projects/:id"
+        element={
+          <ProtectedRoute screenPath="projects">
+            <AppShell><ProjectWorkspaceScreen /></AppShell>
           </ProtectedRoute>
         }
       />

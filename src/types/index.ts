@@ -266,6 +266,34 @@ export interface Project {
   updatedAt: string
 }
 
+// ─── Tasks ───────────────────────────────────────────────────────────────────
+export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'blocked'
+
+export interface Task {
+  id: string
+  projectId: string
+  parentTaskId?: string
+  assigneeId?: string
+  assigneeName?: string
+  title: string
+  description?: string
+  status: TaskStatus
+  deadline?: string
+  completedAt?: string
+  lateReason?: string
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TaskDependency {
+  id: string
+  projectId: string
+  taskId: string
+  dependsOnId: string
+  createdAt: string
+}
+
 // ─── Design Center ───────────────────────────────────────────────────────────
 export type DesignPackageStatus = 'in_progress' | 'client_review' | 'client_approved' | 'revision_requested'
 
