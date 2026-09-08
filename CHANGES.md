@@ -1,5 +1,18 @@
 ## 2026-09-08
 
+### Phase 2: Task Detail (subtasks, dependencies, mandatory late-reason)
+**Commit:** Uncommitted
+- **Added:** `src/screens/ProjectWorkspace/TaskDetailScreen.tsx` at a new `/projects/:id/tasks/:taskId` route.
+  - Status buttons (`complete_task` permission) covering all four `TaskStatus` values.
+  - Marking a task `completed` when `deadline` is in the past and `lateReason` isn't already set blocks the status change and instead opens a mandatory-reason `Dialog` (`confirmDisabled` until text is entered) — matches the phase-plan verify criterion exactly.
+  - Subtasks: list of child tasks (`parentTaskId === task.id`) with an "Add" flow (`add_subtask` permission) creating a new `Task` row with `parentTaskId` set.
+  - Dependencies: list of `TaskDependency` rows for this task with an "Add" flow (`edit_task` permission) picking another task in the same project, and a delete button per row. Uses `addTaskDependency`/`deleteTaskDependency` from the service added in the previous slice.
+- **Changed:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — added a "Tasks" tab (top-level tasks only, i.e. `!parentTaskId`) between Team and Requirements, with an `add_task`-gated "Add Task" flow; each row navigates to the new Task Detail route.
+- **Changed:** `src/App.tsx` — added the `/projects/:id/tasks/:taskId` route (reuses `projects`/`view_projects`, no new permission).
+- **Scope note (explicit user decision):** the existing `/tasks` nav item (in `navItems.ts`, `view_tasks`) is intentionally left unwired for now — Task Detail is reached only through Project Workspace's Tasks tab, not a standalone cross-project Tasks list. A cross-project Tasks list remains a pending/open item for a future slice if wanted.
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Next:** Gantt chart (Phase 2 item 6), then Daily Diary (item 7) — both currently placeholder tabs in Project Workspace.
+
 ### Phase 2: Project Workspace tabs shell + Task/TaskDependency types & service
 **Commit:** Uncommitted
 - **Changed:** `src/types/index.ts` — added `TaskStatus`, `Task`, `TaskDependency` types, matching `sks_tasks`/`sks_task_dependencies` columns. `Task.lateReason` is included now (unused until Task Detail is built) since it needs to exist on the type before the completion-blocking-on-late-reason UI can be added.

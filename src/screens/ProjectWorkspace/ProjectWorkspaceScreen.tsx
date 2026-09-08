@@ -1,23 +1,28 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Plus } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { Accordion } from '../../components/layout/Accordion'
 import { StatusBadge } from '../../components/badges/StatusBadge'
+import { PermissionGate } from '../../components/layout/PermissionGate'
+import { BottomSheet } from '../../components/feedback/BottomSheet'
+import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllProjects } from '../../services/projectService'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getAllRequirements } from '../../services/requirementService'
 import { getAllQuotations } from '../../services/quotationService'
 import { getAllDesignPackages, getAllDesignVersions } from '../../services/designService'
-import { getAllTasks } from '../../services/taskService'
+import { getAllTasks, upsertTask } from '../../services/taskService'
 import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task } from '../../types'
 
-type Tab = 'overview' | 'gantt' | 'team' | 'requirements' | 'boq' | 'design' | 'finance' | 'procurement' | 'documents' | 'handover'
+type Tab = 'overview' | 'gantt' | 'team' | 'tasks' | 'requirements' | 'boq' | 'design' | 'finance' | 'procurement' | 'documents' | 'handover'
 
 const TABS: { value: Tab; label: string; placeholder?: boolean }[] = [
   { value: 'overview',     label: 'Overview' },
   { value: 'gantt',        label: 'Gantt', placeholder: true },
   { value: 'team',         label: 'Team' },
+  { value: 'tasks',        label: 'Tasks' },
   { value: 'requirements', label: 'Requirements' },
   { value: 'boq',          label: 'BOQ' },
   { value: 'design',       label: 'Design' },
@@ -39,9 +44,19 @@ function fmtCurrency(n?: number): string {
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 }
 
+function emptyTask(projectId: string, createdBy: string): Task {
+  const now = new Date().toISOString()
+  return {
+    id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    projectId, title: '', status: 'not_started',
+    createdBy, createdAt: now, updatedAt: now,
+  }
+}
+
 export default function ProjectWorkspaceScreen() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const [tab, setTab] = useState<Tab>('overview')
   const [isLoading, setIsLoading] = useState(true)
@@ -52,6 +67,9 @@ export default function ProjectWorkspaceScreen() {
   const [designPackages, setDesignPackages] = useState<DesignPackage[]>([])
   const [designVersions, setDesignVersions] = useState<DesignVersion[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
+  const [showNewTask, setShowNewTask] = useState(false)
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   useEffect(() => {
     async function load() {
@@ -99,8 +117,20 @@ export default function ProjectWorkspaceScreen() {
   const projectQuotation = quotations.find(q => q.projectId === project.id)
   const projectDesignPackages = designPackages.filter(p => p.projectId === project.id)
   const projectTasks = tasks.filter(t => t.projectId === project.id)
+  const topLevelTasks = projectTasks.filter(t => !t.parentTaskId)
   const assigneeIds = Array.from(new Set(projectTasks.map(t => t.assigneeId).filter(Boolean))) as string[]
   const teamMembers = users.filter(u => u.id === project.coordinatorId || assigneeIds.includes(u.id))
+
+  async function handleAddTask() {
+    if (!project || !user || !newTaskTitle.trim()) return
+    const task = { ...emptyTask(project.id, user.id), title: newTaskTitle.trim() }
+    const result = await upsertTask(task)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to add task.', type: 'error' }); return }
+    setTasks(prev => [task, ...prev])
+    setNewTaskTitle('')
+    setShowNewTask(false)
+    setSnack({ open: true, msg: 'Task added.', type: 'success' })
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] pb-24">
@@ -183,6 +213,31 @@ export default function ProjectWorkspaceScreen() {
           </div>
         )}
 
+        {tab === 'tasks' && (
+          <div className="space-y-2.5">
+            <PermissionGate permission="add_task">
+              <button onClick={() => setShowNewTask(true)}
+                className="w-full py-2.5 rounded-xl border border-dashed border-slate-300 text-slate-500 text-xs font-semibold active:bg-slate-50 flex items-center justify-center gap-1">
+                <Plus size={14} /> Add Task
+              </button>
+            </PermissionGate>
+            {topLevelTasks.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-10">No tasks yet.</p>
+            ) : (
+              topLevelTasks.map(t => (
+                <button key={t.id} onClick={() => navigate(`/projects/${project.id}/tasks/${t.id}`)}
+                  className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-bold text-slate-800">{t.title}</span>
+                    <StatusBadge status={t.status} />
+                  </div>
+                  {t.assigneeName && <p className="text-xs text-slate-500 mt-1">{t.assigneeName}</p>}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
         {tab === 'requirements' && (
           <div className="space-y-2.5">
             {projectRequirements.length === 0 ? (
@@ -260,6 +315,21 @@ export default function ProjectWorkspaceScreen() {
           </div>
         )}
       </div>
+
+      <BottomSheet isOpen={showNewTask} onClose={() => setShowNewTask(false)} title="New Task">
+        <div className="space-y-4 pb-4">
+          <input
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400"
+            value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} placeholder="Task title" autoFocus
+          />
+          <button onClick={handleAddTask} disabled={!newTaskTitle.trim()}
+            className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700 disabled:opacity-40">
+            Add Task
+          </button>
+        </div>
+      </BottomSheet>
+
+      <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
     </div>
   )
 }
