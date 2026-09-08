@@ -1,5 +1,13 @@
 ## 2026-09-08
 
+### Phase 3 complete: Company Accounts screen
+**Commit:** Uncommitted
+- **Added:** `src/screens/Finance/CompanyAccountsScreen.tsx` — list of bank/cash/UPI accounts with live balance (`opening_balance + sum(credits) - sum(debits)`, computed from `sks_company_transactions`, not stored redundantly), create form (`manage_company_accounts`), and a detail sheet showing full transaction history per account.
+- **Changed:** `src/App.tsx` — added `/company-accounts` route (nav item + `SCREEN_PERMISSIONS` entry already existed).
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Phase 3 (Procurement & Expenses) is now feature-complete:** Vendor Master, Procurement flow-sheet (PR→PO→GRN→Bill), Expense Request lifecycle, Company Accounts. Finance Architecture Rules 4 and 5 verified applied in the Expense screen; the remaining rules (1, 2, 3, 6, 7, 8) apply to Phase 4/5 screens not yet built and will be checked as those are built.
+- **Next:** Phase 4 (Finance) — Receivables + PaymentMilestone, Payables, FinanceContext + dashboard, ProjectFinancialsScreen tab, Statement Import, ReportsScreen.
+
 ### Phase 3: Expense Request lifecycle (Requested → Approved → Paid → Closed)
 **Commit:** Uncommitted
 - **Finance Architecture Rule 4 applied (non-negotiable, per build doc):** "Approval ≠ Payment. Approved expense shows as commitment/payable. Only recorded payment creates cashflow." `handleApprove()` only flips `ExpenseRequest.status` to `approved` — no `CompanyTransaction` is written. Only `handlePay()` (gated on `record_payment`, requires selecting a `CompanyAccount`) writes a `debit` `CompanyTransaction` and then marks the request `paid`. Verified by reading the code path directly: the two functions touch entirely disjoint tables.

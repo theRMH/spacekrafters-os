@@ -28,6 +28,7 @@ import GanttListScreen from './screens/Gantt/GanttListScreen'
 import VendorMasterScreen from './screens/Procurement/VendorMasterScreen'
 import ProcurementScreen from './screens/Procurement/ProcurementScreen'
 import ExpenseRequestScreen from './screens/Expenses/ExpenseRequestScreen'
+import CompanyAccountsScreen from './screens/Finance/CompanyAccountsScreen'
 
 function AppLoadingScreen() {
   return (
@@ -199,6 +200,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="expenses">
             <AppShell><ExpenseRequestScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/company-accounts"
+        element={
+          <ProtectedRoute screenPath="company-accounts">
+            <AppShell><CompanyAccountsScreen /></AppShell>
           </ProtectedRoute>
         }
       />
