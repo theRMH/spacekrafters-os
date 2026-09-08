@@ -1,5 +1,15 @@
 ## 2026-09-08
 
+### Phase 4: Receivables screen + PaymentMilestone model
+**Commit:** Uncommitted
+- Confirmed via `schema.sql`/`rls-policies.sql` that all four Phase 4 tables (`sks_payment_milestones`, `sks_receipts`, `sks_payables`, `sks_payments`) and their RLS policies already exist from Phase 0 — no migration needed. Confirmed via `permissions.ts`/`navItems.ts` that all Phase 4 permissions (`view_receivables`, `record_receipt`, `view_payables`, `reconcile`) and nav items (`/receivables`, `/payables`) already exist — no permission-system changes needed.
+- **Added:** `src/types/index.ts` — `PaymentMilestone` (+ `PaymentMilestoneStatus`), `Receipt`, `Payable` (+ `PayableStatus`), `Payment` interfaces under a new "Finance: Receivables & Payables" section.
+- **Added:** `src/services/financeService.ts` — CRUD for all four tables (`getAllPaymentMilestones`/`upsertPaymentMilestone`, `getAllReceipts`/`addReceipt`, `getAllPayables`/`upsertPayable`, `getAllPayments`/`addPayment`), following the established one-file-per-table-group pattern.
+- **Added:** `src/screens/Finance/ReceivablesScreen.tsx` — list of payment milestones (search by title) + create form + detail sheet for recording receipts. `handleRecordReceipt()` validates the amount against the remaining balance, writes a `Receipt` row, updates the milestone's `receivedAmount`/`receivedDates`, and sets `status: 'partial'` if `receivedAmount < amount` or `'received'` only once fully paid (Phase 4 verify criterion). Also posts a `credit` `CompanyTransaction` against the chosen account so the receipt is reflected in Company Accounts. An `effectiveStatus()` helper displays `'overdue'` when `dueDate` has passed and the milestone isn't fully received yet, without mutating the stored status.
+- **Changed:** `src/App.tsx` — added `/receivables` route (nav item + `SCREEN_PERMISSIONS` entry already existed).
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Next:** `PayablesScreen.tsx` (vendor/employee payables, due dates, ageing).
+
 ### Phase 3 complete: Company Accounts screen
 **Commit:** Uncommitted
 - **Added:** `src/screens/Finance/CompanyAccountsScreen.tsx` — list of bank/cash/UPI accounts with live balance (`opening_balance + sum(credits) - sum(debits)`, computed from `sks_company_transactions`, not stored redundantly), create form (`manage_company_accounts`), and a detail sheet showing full transaction history per account.

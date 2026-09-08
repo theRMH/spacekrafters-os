@@ -490,3 +490,58 @@ export interface CompanyTransaction {
   date: string
   createdAt: string
 }
+
+// ─── Finance: Receivables & Payables ────────────────────────────────────────
+export type PaymentMilestoneStatus = 'pending' | 'invoiced' | 'partial' | 'received' | 'overdue'
+
+export interface PaymentMilestone {
+  id: string
+  projectId: string
+  title: string
+  amount: number
+  dueDate?: string
+  status: PaymentMilestoneStatus
+  receivedAmount: number
+  receivedDates: string[]
+  invoiceRef?: string
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Receipt {
+  id: string
+  projectId?: string
+  milestoneId?: string
+  amount: number
+  receivedDate: string
+  paymentAccount?: string
+  reference?: string
+  notes?: string
+  createdAt: string
+}
+
+export type PayableStatus = 'pending' | 'partial' | 'paid'
+
+export interface Payable {
+  id: string
+  vendorId?: string
+  payeeName?: string
+  description: string
+  amount: number
+  paidAmount: number
+  dueDate?: string
+  status: PayableStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Payment {
+  id: string
+  payableId: string
+  amount: number
+  paidDate: string
+  paymentAccount?: string
+  reference?: string
+  createdAt: string
+}
