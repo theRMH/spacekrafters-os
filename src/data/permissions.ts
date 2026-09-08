@@ -1,0 +1,137 @@
+import type { UserRole, Permission } from '../types'
+
+const OWNER_PERMS: Permission[] = [
+  'view_home',
+  'view_leads', 'add_lead', 'edit_lead', 'delete_lead', 'convert_lead', 'view_activity',
+  'view_appointments', 'add_appointment', 'edit_appointment',
+  'view_site_visits', 'add_site_visit', 'edit_site_visit', 'add_requirements',
+  'view_quotations', 'create_quotation', 'approve_quotation_internal', 'send_quotation_client',
+  'view_design', 'upload_design', 'approve_design', 'request_revision',
+  'view_projects', 'create_project', 'edit_project', 'delete_project',
+  'view_tasks', 'add_task', 'edit_task', 'complete_task', 'add_subtask',
+  'view_gantt', 'edit_deadline',
+  'view_procurement', 'raise_purchase_request', 'approve_purchase_request', 'create_po', 'receive_goods', 'enter_vendor_bill',
+  'view_expenses', 'raise_expense_request', 'approve_expense', 'record_payment',
+  'view_company_finance', 'manage_company_accounts', 'view_receivables', 'record_receipt', 'view_payables', 'reconcile',
+  'view_attendance', 'mark_attendance', 'view_leave', 'approve_leave',
+  'view_reports', 'view_financial_reports',
+  'manage_users', 'manage_permissions', 'manage_settings', 'view_audit_log',
+  'view_personal_finance', 'view_combined_finance',
+]
+
+export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
+  owner: OWNER_PERMS,
+
+  accounts: [
+    'view_home',
+    'view_expenses', 'approve_expense', 'record_payment',
+    'view_company_finance', 'manage_company_accounts', 'view_receivables', 'record_receipt', 'view_payables', 'reconcile',
+    'view_attendance', 'view_leave',
+    'view_reports', 'view_financial_reports',
+  ],
+
+  project_coordinator: [
+    'view_home',
+    'view_leads', 'add_lead', 'edit_lead', 'convert_lead', 'view_activity',
+    'view_appointments', 'add_appointment', 'edit_appointment',
+    'view_site_visits', 'add_site_visit', 'edit_site_visit', 'add_requirements',
+    'view_quotations', 'create_quotation',
+    'view_design',
+    'view_projects', 'create_project', 'edit_project',
+    'view_tasks', 'add_task', 'edit_task', 'complete_task', 'add_subtask',
+    'view_gantt', 'edit_deadline',
+    'raise_expense_request',
+    'view_attendance', 'mark_attendance', 'view_leave',
+    'view_reports',
+  ],
+
+  site_engineer: [
+    'view_home',
+    'view_site_visits', 'add_site_visit', 'edit_site_visit', 'add_requirements',
+    'view_tasks', 'complete_task',
+    'view_gantt',
+    'raise_expense_request',
+    'view_attendance', 'mark_attendance', 'view_leave',
+  ],
+
+  designer: [
+    'view_home',
+    'view_design', 'upload_design', 'request_revision',
+    'view_tasks', 'complete_task',
+    'view_attendance', 'mark_attendance', 'view_leave',
+  ],
+
+  qs: [
+    'view_home',
+    'view_quotations', 'create_quotation', 'approve_quotation_internal',
+    'view_projects',
+    'view_procurement',
+    'view_attendance', 'mark_attendance', 'view_leave',
+    'view_reports',
+  ],
+
+  purchase: [
+    'view_home',
+    'view_procurement', 'raise_purchase_request', 'create_po', 'receive_goods', 'enter_vendor_bill',
+    'view_attendance', 'mark_attendance', 'view_leave',
+  ],
+
+  admin: [
+    'view_home',
+    'view_attendance', 'mark_attendance', 'view_leave', 'approve_leave',
+    'manage_users', 'manage_permissions', 'manage_settings',
+  ],
+}
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  owner:                'Owner',
+  accounts:             'Accounts',
+  project_coordinator:  'Project Coordinator',
+  site_engineer:        'Site Engineer',
+  designer:             'Designer',
+  qs:                   'Quantity Surveyor',
+  purchase:             'Purchase',
+  admin:                'Admin',
+}
+
+export function getRoleDisplayLabel(role: UserRole, displayRole?: string): string {
+  return displayRole ?? ROLE_LABELS[role]
+}
+
+export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
+  owner:                'Full access, personal finance, and combined financial view',
+  accounts:             'Company finance, payables, receivables, reconciliation',
+  project_coordinator:  'Projects, tasks, CRM, site visits, expense requests',
+  site_engineer:        'Site visits, tasks, daily diary, expense requests',
+  designer:             'Design center and assigned tasks',
+  qs:                   'BOQ, cost plan, quantity and cost control',
+  purchase:             'Procurement, vendors, purchase orders, vendor bills',
+  admin:                'Owner-configured module access',
+}
+
+export const SCREEN_PERMISSIONS: Record<string, Permission> = {
+  home:              'view_home',
+  leads:             'view_leads',
+  appointments:      'view_appointments',
+  'follow-ups':      'view_activity',
+  'site-visits':     'view_site_visits',
+  requirements:      'add_requirements',
+  quotations:        'view_quotations',
+  design:            'view_design',
+  projects:          'view_projects',
+  tasks:             'view_tasks',
+  gantt:             'view_gantt',
+  'daily-diary':     'view_tasks',
+  procurement:       'view_procurement',
+  vendors:           'view_procurement',
+  expenses:          'view_expenses',
+  'company-accounts':'view_company_finance',
+  receivables:       'view_receivables',
+  payables:          'view_payables',
+  reports:           'view_reports',
+  attendance:        'view_attendance',
+  leave:             'view_leave',
+  'personal-finance':'view_personal_finance',
+  'combined-finance':'view_combined_finance',
+  'settings/users':  'manage_users',
+}

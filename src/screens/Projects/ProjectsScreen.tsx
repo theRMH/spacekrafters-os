@@ -1,0 +1,314 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Trash2 } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
+import { useCRM } from '../../context/CRMContext'
+import { PermissionGate } from '../../components/layout/PermissionGate'
+import { AppHeader } from '../../components/layout/AppHeader'
+import { SearchBar } from '../../components/forms/SearchBar'
+import { BottomSheet } from '../../components/feedback/BottomSheet'
+import { Dialog } from '../../components/feedback/Dialog'
+import { Snackbar } from '../../components/feedback/Snackbar'
+import { StatusBadge } from '../../components/badges/StatusBadge'
+import { getManagedUsersDirectory } from '../../services/userService'
+import { getAllProjects, upsertProject, deleteProject } from '../../services/projectService'
+import type { ManagedUser, Project, ProjectStage } from '../../types'
+
+const STAGE_OPTIONS: { value: ProjectStage; label: string }[] = [
+  { value: 'lead_converted',   label: 'Lead Converted' },
+  { value: 'site_visit',       label: 'Site Visit' },
+  { value: 'requirements',     label: 'Requirements' },
+  { value: 'boq_preparation',  label: 'BOQ Preparation' },
+  { value: 'internal_approval',label: 'Internal Approval' },
+  { value: 'design',           label: 'Design' },
+  { value: 'client_approval',  label: 'Client Approval' },
+  { value: 'advance_payment',  label: 'Advance Payment' },
+  { value: 'execution',        label: 'Execution' },
+  { value: 'procurement',      label: 'Procurement' },
+  { value: 'handover_prep',    label: 'Handover Prep' },
+  { value: 'final_payment',    label: 'Final Payment' },
+  { value: 'reconciliation',   label: 'Reconciliation' },
+  { value: 'closed',           label: 'Closed' },
+]
+
+const STATUS_OPTIONS: { value: Project['status']; label: string }[] = [
+  { value: 'active',    label: 'Active' },
+  { value: 'on_hold',   label: 'On Hold' },
+  { value: 'closed',    label: 'Closed' },
+  { value: 'cancelled', label: 'Cancelled' },
+]
+
+function fmtDate(val?: string): string {
+  if (!val) return '—'
+  const d = new Date(val)
+  if (isNaN(d.getTime())) return val
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function fmtCurrency(n?: number): string {
+  if (n == null) return '—'
+  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+}
+
+function emptyProject(): Project {
+  return {
+    id: `prj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    name: '',
+    leadId: undefined,
+    quotationId: undefined,
+    coordinatorId: '',
+    clientName: '',
+    clientPhone: '',
+    coordinatorName: '',
+    stage: 'lead_converted',
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+const inp = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400'
+const label = 'block text-xs font-semibold text-slate-500 mb-1'
+
+export default function ProjectsScreen() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const { leads } = useCRM()
+  const [projects, setProjects] = useState<Project[]>([])
+  const [coordinators, setCoordinators] = useState<ManagedUser[]>([])
+  const [search, setSearch] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState<Project>(emptyProject())
+  const [selected, setSelected] = useState<Project | null>(null)
+  const [showDelete, setShowDelete] = useState(false)
+  const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
+
+  useEffect(() => {
+    getAllProjects().then(setProjects)
+    getManagedUsersDirectory().then(setCoordinators)
+  }, [])
+
+  const eligibleLeads = leads.filter(l => l.status === 'won')
+
+  function openCreate() {
+    setForm(emptyProject())
+    setShowForm(true)
+  }
+
+  function onLeadChange(leadId: string) {
+    const lead = leads.find(l => l.id === leadId)
+    setForm(f => ({
+      ...f,
+      leadId: leadId || undefined,
+      clientName: lead?.name ?? f.clientName,
+      clientPhone: lead?.phone ?? f.clientPhone,
+    }))
+  }
+
+  function onCoordinatorChange(coordinatorId: string) {
+    const coordinator = coordinators.find(c => c.id === coordinatorId)
+    setForm(f => ({ ...f, coordinatorId, coordinatorName: coordinator?.fullName ?? '' }))
+  }
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.clientName.trim() || !form.coordinatorId) {
+      setSnack({ open: true, msg: 'Name, client name, and coordinator are required.', type: 'error' })
+      return
+    }
+    const toSave: Project = { ...form, updatedAt: new Date().toISOString() }
+    const result = await upsertProject(toSave)
+    if (!result.ok) {
+      setSnack({ open: true, msg: result.error ?? 'Failed to save project.', type: 'error' })
+      return
+    }
+    setProjects(prev => {
+      const exists = prev.some(p => p.id === toSave.id)
+      return exists ? prev.map(p => (p.id === toSave.id ? toSave : p)) : [toSave, ...prev]
+    })
+    setShowForm(false)
+    setSnack({ open: true, msg: 'Project saved.', type: 'success' })
+  }
+
+  async function handleDelete() {
+    if (!selected) return
+    const result = await deleteProject(selected.id)
+    if (!result.ok) {
+      setSnack({ open: true, msg: result.error ?? 'Failed to delete project.', type: 'error' })
+      return
+    }
+    setProjects(prev => prev.filter(p => p.id !== selected.id))
+    setShowDelete(false)
+    setSelected(null)
+    setSnack({ open: true, msg: 'Project deleted.', type: 'success' })
+  }
+
+  const filtered = projects.filter(p => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return p.name.toLowerCase().includes(q) || p.clientName.toLowerCase().includes(q)
+  })
+
+  const canDelete = user?.role === 'owner'
+
+  return (
+    <div className="min-h-screen bg-[#f8f9fa] pb-24">
+      <AppHeader />
+
+      <div className="bg-white px-4 pt-4 pb-4 border-b border-slate-200 sticky top-14 z-20">
+        <h1 className="text-lg font-extrabold text-slate-800 mb-3">Projects</h1>
+        <div className="flex items-center gap-2">
+          <SearchBar value={search} onChange={setSearch} placeholder="Search projects…" className="flex-1" />
+          <PermissionGate permission="create_project">
+            <button onClick={openCreate} aria-label="New project"
+              className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-fab active:bg-indigo-700 flex-shrink-0">
+              <Plus size={18} className="text-white" />
+            </button>
+          </PermissionGate>
+        </div>
+      </div>
+
+      <div className="px-4 pt-4 space-y-3">
+        {filtered.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-10">No projects yet.</p>
+        ) : (
+          filtered.map(project => (
+            <button key={project.id} onClick={() => setSelected(project)}
+              className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <span className="font-bold text-sm text-slate-800">{project.name}</span>
+                <StatusBadge status={project.status} />
+              </div>
+              <p className="text-xs text-slate-500 mb-2">{project.clientName}</p>
+              <div className="flex items-center justify-between">
+                <StatusBadge status={project.stage} />
+                <span className="text-xs font-semibold text-slate-600">{fmtCurrency(project.contractValue)}</span>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+
+      {/* Create Project */}
+      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title="New Project">
+        <div className="space-y-4 pb-4">
+          <div>
+            <label className={label}>Project Name *</label>
+            <input className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="SKS-1024" />
+          </div>
+          <div>
+            <label className={label}>From Won Lead (optional)</label>
+            <select className={inp} value={form.leadId ?? ''} onChange={e => onLeadChange(e.target.value)}>
+              <option value="">— None —</option>
+              {eligibleLeads.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={label}>Client Name *</label>
+            <input className={inp} value={form.clientName} onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))} />
+          </div>
+          <div>
+            <label className={label}>Client Phone</label>
+            <input className={inp} value={form.clientPhone} onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))} />
+          </div>
+          <div>
+            <label className={label}>Coordinator *</label>
+            <select className={inp} value={form.coordinatorId} onChange={e => onCoordinatorChange(e.target.value)}>
+              <option value="">— Select —</option>
+              {coordinators.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={label}>Stage</label>
+              <select className={inp} value={form.stage} onChange={e => setForm(f => ({ ...f, stage: e.target.value as ProjectStage }))}>
+                {STAGE_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={label}>Status</label>
+              <select className={inp} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as Project['status'] }))}>
+                {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={label}>Contract Value</label>
+              <input type="number" className={inp} value={form.contractValue ?? ''}
+                onChange={e => setForm(f => ({ ...f, contractValue: e.target.value === '' ? undefined : Number(e.target.value) }))} />
+            </div>
+            <div>
+              <label className={label}>Internal Budget</label>
+              <input type="number" className={inp} value={form.internalBudget ?? ''}
+                onChange={e => setForm(f => ({ ...f, internalBudget: e.target.value === '' ? undefined : Number(e.target.value) }))} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={label}>Start Date</label>
+              <input type="date" className={inp} value={form.startDate ?? ''} onChange={e => setForm(f => ({ ...f, startDate: e.target.value || undefined }))} />
+            </div>
+            <div>
+              <label className={label}>Expected Handover</label>
+              <input type="date" className={inp} value={form.expectedHandoverDate ?? ''} onChange={e => setForm(f => ({ ...f, expectedHandoverDate: e.target.value || undefined }))} />
+            </div>
+          </div>
+          <button onClick={handleSave} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
+            Save Project
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Project Detail */}
+      <BottomSheet isOpen={!!selected} onClose={() => setSelected(null)} title={selected?.name ?? ''}>
+        {selected && (
+          <div className="space-y-4 pb-4">
+            <div className="flex items-center gap-2">
+              <StatusBadge status={selected.status} />
+              <StatusBadge status={selected.stage} />
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">Client</span><span className="font-semibold text-slate-800">{selected.clientName}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Phone</span><span className="font-semibold text-slate-800">{selected.clientPhone || '—'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Coordinator</span><span className="font-semibold text-slate-800">{selected.coordinatorName}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Contract Value</span><span className="font-semibold text-slate-800">{fmtCurrency(selected.contractValue)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Internal Budget</span><span className="font-semibold text-slate-800">{fmtCurrency(selected.internalBudget)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Advance Received</span><span className="font-semibold text-slate-800">{fmtCurrency(selected.advanceReceived)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Start Date</span><span className="font-semibold text-slate-800">{fmtDate(selected.startDate)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Expected Handover</span><span className="font-semibold text-slate-800">{fmtDate(selected.expectedHandoverDate)}</span></div>
+            </div>
+            <button onClick={() => navigate(`/projects/${selected.id}`)}
+              className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
+              Open Project Workspace
+            </button>
+            <PermissionGate permission="edit_project">
+              <button onClick={() => { setForm(selected); setSelected(null); setShowForm(true) }}
+                className="w-full py-3 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold active:bg-slate-50">
+                Edit
+              </button>
+            </PermissionGate>
+            {canDelete && (
+              <button onClick={() => setShowDelete(true)}
+                className="w-full py-3 rounded-xl border border-red-200 text-red-600 text-sm font-semibold active:bg-red-50 flex items-center justify-center gap-2">
+                <Trash2 size={15} /> Delete Project
+              </button>
+            )}
+          </div>
+        )}
+      </BottomSheet>
+
+      <Dialog
+        isOpen={showDelete}
+        onClose={() => setShowDelete(false)}
+        title="Delete Project"
+        message="This permanently deletes the project. This cannot be undone."
+        variant="danger"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={handleDelete}>
+      </Dialog>
+
+      <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
+    </div>
+  )
+}
