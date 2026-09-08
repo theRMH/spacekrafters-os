@@ -1,5 +1,18 @@
 ## 2026-09-08
 
+### Phase 3 (Procurement & Expenses) kickoff: types, services, Vendor Master screen
+**Commit:** Uncommitted
+- **Scope note:** Phase 3/4 database schema and RLS policies already existed from Phase 0's foundational migration — confirmed via `supabase/schema.sql` and `supabase/rls-policies.sql`, no migration work needed. All Phase 3 permissions already existed in `Permission`/`ROLE_PERMISSIONS` — no permission-system changes needed. This slice is types + service layer + first screen only.
+- **Added:** `src/types/index.ts` — `Vendor`, `PurchaseRequest`, `VendorQuote`, `PurchaseOrder`, `GoodsReceipt`, `VendorBill` (Procurement section) and `ExpenseRequest`, `CompanyAccount`, `CompanyTransaction` (Finance: Expenses section), matching `schema.sql` column shapes. `Vendor`/`PurchaseOrder`/`GoodsReceipt`/`VendorBill`/`CompanyAccount`/`CompanyTransaction` were not pre-specified in `SPACEKRAFTERS-BUILD.md`, so shapes were designed to match existing conventions (camelCase, `createdBy`/`createdAt`/`updatedAt`, no `updatedAt` on append-only child rows).
+- **Added:** `src/services/vendorService.ts` — `getAllVendors()`/`upsertVendor()` against `sks_vendors`.
+- **Added:** `src/services/procurementService.ts` — bundles `sks_purchase_requests`, `sks_vendor_quotes`, `sks_purchase_orders`, `sks_goods_receipts`, `sks_vendor_bills` (one flow-sheet, mirrors `taskService.ts`'s Task+TaskDependency bundling).
+- **Added:** `src/services/expenseService.ts` — `getAllExpenseRequests()`/`upsertExpenseRequest()` against `sks_expense_requests`.
+- **Added:** `src/services/companyAccountService.ts` — `getAllCompanyAccounts()`/`upsertCompanyAccount()`/`getAllCompanyTransactions()`/`addCompanyTransaction()` against `sks_company_accounts`/`sks_company_transactions`.
+- **Added:** `src/screens/Procurement/VendorMasterScreen.tsx` — list + create + detail (Profile/Quotes/POs/Bills tabs) screen for vendor management, modeled on `ProjectsScreen.tsx`'s list+detail pattern. Detail view shows outstanding balance computed from vendor bills (`amount - paidAmount`).
+- **Changed:** `src/App.tsx` — added `/vendors` route (nav item + `SCREEN_PERMISSIONS` entry already existed, same gap pattern as the earlier `/tasks`/`/gantt` fix).
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Next:** `ProcurementScreen.tsx` (PR → quotes → comparison → approval → PO → GRN → vendor bill flow-sheet), then `ExpenseRequestScreen.tsx`, then `CompanyAccountsScreen.tsx`, then wire their routes (`/procurement`, `/expenses`, `/company-accounts` nav items already exist). Must check the 8 Finance Architecture Rules before considering Phase 3 done — approving an expense must not create a cashflow entry, only recording payment should.
+
 ### Rename misleading .env to credentials-notes.txt
 **Commit:** Uncommitted
 - **Changed:** renamed `sks/.env` → `sks/credentials-notes.txt` (filesystem rename, not tracked by git — the old file was gitignored and untracked). It held unstructured plaintext credential notes (DB password, PAT, keys), not `KEY=value` pairs — Vite never read it; `.env.local` is the real config source. Renamed so it can't be mistaken for live config.

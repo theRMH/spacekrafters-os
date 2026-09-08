@@ -360,3 +360,133 @@ export interface AttendanceRecord {
   createdAt: string
   updatedAt: string
 }
+
+// ─── Procurement ─────────────────────────────────────────────────────────────
+export type VendorStatus = 'active' | 'inactive'
+
+export interface Vendor {
+  id: string
+  name: string
+  contactPerson?: string
+  phone?: string
+  email?: string
+  category?: string
+  gstin?: string
+  address?: string
+  status: VendorStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export type PurchaseRequestStatus = 'draft' | 'approved' | 'quoted' | 'po_raised' | 'received' | 'billed' | 'paid'
+
+export interface PurchaseRequest {
+  id: string
+  projectId?: string
+  description: string
+  quantity: number
+  unit: string
+  neededBy?: string
+  status: PurchaseRequestStatus
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface VendorQuote {
+  id: string
+  purchaseRequestId: string
+  vendorId: string
+  amount: number
+  notes?: string
+  createdAt: string
+}
+
+export type PurchaseOrderStatus = 'issued' | 'received' | 'billed' | 'closed'
+
+export interface PurchaseOrder {
+  id: string
+  purchaseRequestId?: string
+  vendorId: string
+  projectId?: string
+  amount: number
+  status: PurchaseOrderStatus
+  issuedAt: string
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GoodsReceipt {
+  id: string
+  purchaseOrderId: string
+  receivedBy: string
+  receivedAt: string
+  notes?: string
+  createdAt: string
+}
+
+export type VendorBillStatus = 'unpaid' | 'partial' | 'paid'
+
+export interface VendorBill {
+  id: string
+  vendorId: string
+  purchaseOrderId?: string
+  billNumber: string
+  amount: number
+  paidAmount: number
+  status: VendorBillStatus
+  billDate: string
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── Finance: Expenses ───────────────────────────────────────────────────────
+export type ExpenseRequestStatus = 'requested' | 'approved' | 'rejected' | 'paid' | 'closed'
+
+export interface ExpenseRequest {
+  id: string
+  projectId?: string
+  category: string
+  subcategory?: string
+  purpose: string
+  amount: number
+  vendorPayee?: string
+  neededBy?: string
+  requestedBy: string
+  requestedByName: string
+  status: ExpenseRequestStatus
+  approvedBy?: string
+  approvedAt?: string
+  rejectionReason?: string
+  paidAmount?: number
+  paidAt?: string
+  paymentAccount?: string
+  paymentRef?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type CompanyAccountType = 'bank' | 'cash' | 'upi'
+
+export interface CompanyAccount {
+  id: string
+  name: string
+  type: CompanyAccountType
+  openingBalance: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type CompanyTransactionType = 'credit' | 'debit'
+
+export interface CompanyTransaction {
+  id: string
+  accountId: string
+  type: CompanyTransactionType
+  amount: number
+  description: string
+  reference?: string
+  date: string
+  createdAt: string
+}

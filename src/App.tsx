@@ -25,6 +25,7 @@ import DesignCenterScreen from './screens/Design/DesignCenterScreen'
 import DailyDiaryScreen from './screens/DailyDiary/DailyDiaryScreen'
 import TasksScreen from './screens/Tasks/TasksScreen'
 import GanttListScreen from './screens/Gantt/GanttListScreen'
+import VendorMasterScreen from './screens/Procurement/VendorMasterScreen'
 
 function AppLoadingScreen() {
   return (
@@ -172,6 +173,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="gantt">
             <AppShell><GanttListScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendors"
+        element={
+          <ProtectedRoute screenPath="vendors">
+            <AppShell><VendorMasterScreen /></AppShell>
           </ProtectedRoute>
         }
       />
