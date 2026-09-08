@@ -31,6 +31,7 @@ import ExpenseRequestScreen from './screens/Expenses/ExpenseRequestScreen'
 import CompanyAccountsScreen from './screens/Finance/CompanyAccountsScreen'
 import ReceivablesScreen from './screens/Finance/ReceivablesScreen'
 import PayablesScreen from './screens/Finance/PayablesScreen'
+import StatementImportScreen from './screens/Finance/StatementImportScreen'
 
 function AppLoadingScreen() {
   return (
@@ -226,6 +227,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="payables">
             <AppShell><PayablesScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/statement-import"
+        element={
+          <ProtectedRoute screenPath="statement-import">
+            <AppShell><StatementImportScreen /></AppShell>
           </ProtectedRoute>
         }
       />

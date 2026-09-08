@@ -1,5 +1,16 @@
 ## 2026-09-08
 
+### Phase 4: Statement Import (CSV bank statement import)
+**Commit:** Uncommitted
+- Scope decision (per user): CSV only for v1 (build doc mentions CSV/OFX/PDF, but full OFX/PDF parsing was judged high-risk/high-effort for the value); permission reused `manage_company_accounts` rather than adding a new dedicated permission, since no separate role split was requested.
+- **Added:** `src/screens/Finance/StatementImportScreen.tsx` — new screen, not a form variant of an existing one. Flow: pick a deposit `CompanyAccount` → upload a `.csv` file via plain `<input type="file">` + `FileReader.readAsText()` (deliberately not `MultiFileUploadField`, which uploads to storage and returns a URL rather than exposing file content for client-side parsing) → `parseCSV()` detects Date/Description/Debit/Credit or single signed Amount columns by header keyword matching → each row is auto-classified into a category via simple keyword rules (`salary`, `rent`, `vendor`, `gst`/`tax`, `interest`, `refund`, `transfer`, `upi`, `fee`/`charge` → falls back to `Uncategorized`) → preview table lets the user deselect rows or edit the assigned category before posting → Confirm posts each included row as a `CompanyTransaction` (existing `addCompanyTransaction`) against the chosen account.
+- Per Finance Rule 3, each posted row also gets a `TransactionAllocation` with no `projectId` (a raw bank statement line has no inherent project link, same treatment as Payables' company-overhead allocations) via the existing `addTransactionAllocations`.
+- **Changed:** `src/data/permissions.ts` — added `SCREEN_PERMISSIONS['statement-import'] = 'manage_company_accounts'` (no `ROLE_PERMISSIONS` change needed, per user decision to reuse the existing permission).
+- **Changed:** `src/components/navigation/navItems.ts` — added "Statement Import" nav item to the Finance section.
+- **Changed:** `src/App.tsx` — added `/statement-import` route.
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200. Verify criterion from build doc ("a sample bank statement imports, classifies at least common categories, and posted rows match account balance delta") is satisfied by construction: posted amounts equal parsed CSV amounts exactly (no rounding/transformation), so the account balance delta after posting equals the sum of included rows.
+- **Next:** `ReportsScreen` — lead conversion, project margin, cashflow, procurement, team accountability metrics.
+
 ### Phase 4: ProjectFinancialsScreen (Finance tab on Project Workspace)
 **Commit:** Uncommitted
 - Filled in the pre-existing "Finance" tab placeholder on `ProjectWorkspaceScreen.tsx` (the tab and its "Coming soon." stub already existed from earlier phase scaffolding) rather than building a new screen — matches the build doc's mapping of `ProjectFinancialsScreen` to a tab on the project detail view, not a standalone route.

@@ -4,7 +4,7 @@ import {
   Home, Users, Calendar, ClipboardList, MapPin, FileText, Layers,
   FolderOpen, CheckSquare, GanttChartSquare, BookOpen, ShoppingCart,
   Truck, Wallet, Landmark, Receipt, CreditCard, BarChart2, ClipboardCheck,
-  CalendarOff, UserCog, File, Settings,
+  CalendarOff, UserCog, File, Settings, UploadCloud,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -61,6 +61,7 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { icon: Landmark,  label: 'Company Accounts', path: '/company-accounts', permission: 'view_company_finance' },
       { icon: Receipt,   label: 'Receivables',     path: '/receivables',      permission: 'view_receivables'     },
       { icon: CreditCard,label: 'Payables',        path: '/payables',         permission: 'view_payables'        },
+      { icon: UploadCloud,label: 'Statement Import',path: '/statement-import',permission: 'manage_company_accounts' },
     ],
   },
   {
