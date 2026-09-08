@@ -318,6 +318,20 @@ export interface DesignVersion {
   createdAt: string
 }
 
+// ─── Daily Diary ─────────────────────────────────────────────────────────────
+export interface DailyDiaryEntry {
+  id: string
+  projectId: string
+  date: string
+  workDone: string
+  blockers?: string
+  photos: string[]
+  createdBy: string
+  createdByName: string
+  createdAt: string
+  updatedAt: string
+}
+
 // ─── HR: Leave & Attendance ────────────────────────────────────────────────
 export type LeaveStatus = 'pending' | 'approved' | 'rejected'
 
