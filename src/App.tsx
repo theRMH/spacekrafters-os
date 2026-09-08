@@ -23,6 +23,8 @@ import LeaveScreen from './screens/Leave/LeaveScreen'
 import AttendanceScreen from './screens/Attendance/AttendanceScreen'
 import DesignCenterScreen from './screens/Design/DesignCenterScreen'
 import DailyDiaryScreen from './screens/DailyDiary/DailyDiaryScreen'
+import TasksScreen from './screens/Tasks/TasksScreen'
+import GanttListScreen from './screens/Gantt/GanttListScreen'
 
 function AppLoadingScreen() {
   return (
@@ -154,6 +156,22 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="projects">
             <AppShell><TaskDetailScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tasks"
+        element={
+          <ProtectedRoute screenPath="tasks">
+            <AppShell><TasksScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/gantt"
+        element={
+          <ProtectedRoute screenPath="gantt">
+            <AppShell><GanttListScreen /></AppShell>
           </ProtectedRoute>
         }
       />

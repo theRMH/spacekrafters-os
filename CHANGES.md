@@ -1,5 +1,14 @@
 ## 2026-09-08
 
+### Wire up standalone /tasks and /gantt nav items
+**Commit:** Uncommitted
+- **Scope decision (explicit, asked before building):** Tasks and Gantt are inherently project-scoped (a task list / timeline only makes sense within a project), so rather than building duplicate global cross-project list/gantt views, the standalone screens are project pickers that deep-link into Project Workspace's existing Tasks/Gantt tabs — reuses all existing logic, no duplication.
+- **Added:** `src/screens/Tasks/TasksScreen.tsx` — lists all projects with an open-task rollup (`N open of M tasks`), tapping a project navigates to `/projects/:id?tab=tasks`.
+- **Added:** `src/screens/Gantt/GanttListScreen.tsx` — lists all projects with a scheduled-task count, tapping a project navigates to `/projects/:id?tab=gantt`.
+- **Changed:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — reads an optional `?tab=` query param on mount (via `useSearchParams`) to pre-select the workspace tab, falling back to `overview` if missing/invalid. Enables deep-linking from the new standalone screens.
+- **Changed:** `src/App.tsx` — added `/tasks` and `/gantt` routes (both already had nav items in `navItems.ts` and `SCREEN_PERMISSIONS` entries in `data/permissions.ts`, but no matching `<Route>`, so they previously fell through to the catch-all redirect).
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+
 ### File storage: Hostinger upload endpoint for SKS
 **Commit:** Uncommitted
 - **Added:** `hostinger/upload.php` — SKS-specific copy of Fenster's upload script (same POST-upload/DELETE-remove protocol that `src/utils/fileStorage.ts` already spoke, but was previously unconfigured for SKS). Separate CORS allowlist (`https://spacekrafters.com` + local dev ports, not Fenster's domains), separate secret key, separate `uploads/` directory — fully isolated from Fenster's Hostinger storage.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
@@ -64,9 +64,11 @@ function emptyTask(projectId: string, createdBy: string): Task {
 export default function ProjectWorkspaceScreen() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user, can } = useAuth()
 
-  const [tab, setTab] = useState<Tab>('overview')
+  const tabParam = searchParams.get('tab') as Tab | null
+  const [tab, setTab] = useState<Tab>(tabParam && TABS.some(t => t.value === tabParam) ? tabParam : 'overview')
   const [isLoading, setIsLoading] = useState(true)
   const [project, setProject] = useState<Project | null>(null)
   const [users, setUsers] = useState<ManagedUser[]>([])
