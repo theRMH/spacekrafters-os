@@ -1,5 +1,14 @@
 ## 2026-09-08
 
+### Phase 2: Gantt chart — read-only timeline (scoped slice, per user decision)
+**Commit:** Uncommitted
+- **Scope decision (explicit, asked before building):** the phase-plan spec for Gantt includes drag-to-reschedule and a persisted deadline-change-history log — both large, separately-verifiable pieces of new UI/data model. Built a read-only timeline first: task/subtask bars, dependency tooltips, red bars for overdue tasks, and deadline edits via a plain form (not drag-and-drop). Drag-and-drop and a persisted change-history table are deferred to a follow-up slice.
+- **Added:** `src/screens/ProjectWorkspace/GanttChart.tsx` — a component (not a route) taking a project's `tasks`/`dependencies` as props (reuses data already loaded by `ProjectWorkspaceScreen`, no separate fetch). Renders one row per task as a horizontal bar spanning `createdAt` → `deadline`, subtasks indented, red bar when overdue and not completed, hover tooltip listing dependency task names. Tapping a bar opens a BottomSheet to edit the deadline directly (`upsertTask`), gated by the existing `edit_deadline` permission — no drag-and-drop, no separate history log yet.
+- **Changed:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — Gantt tab is no longer a placeholder; renders `GanttChart` with the project's tasks/dependencies. Added `getAllTaskDependencies()` to the screen's initial data load.
+- **Not built this slice (tracked as pending):** drag-to-reschedule, a persisted deadline-change-history log (would need a new type/table — none exists today; `updatedAt` alone doesn't capture *what* changed), and `sks_project_stages` (confirmed to exist in schema.sql/RLS but has no app type/service and is unused — the "stages" in the phase-plan's Gantt spec are represented here only via the project's existing single `ProjectStage` field, not a separate multi-stage timeline).
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Next:** Daily Diary (Phase 2 item 7, last item before the Phase 2 exit criteria are met).
+
 ### Phase 2: Task Detail (subtasks, dependencies, mandatory late-reason)
 **Commit:** Uncommitted
 - **Added:** `src/screens/ProjectWorkspace/TaskDetailScreen.tsx` at a new `/projects/:id/tasks/:taskId` route.

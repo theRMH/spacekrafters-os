@@ -13,14 +13,15 @@ import { getManagedUsersDirectory } from '../../services/userService'
 import { getAllRequirements } from '../../services/requirementService'
 import { getAllQuotations } from '../../services/quotationService'
 import { getAllDesignPackages, getAllDesignVersions } from '../../services/designService'
-import { getAllTasks, upsertTask } from '../../services/taskService'
-import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task } from '../../types'
+import { getAllTasks, upsertTask, getAllTaskDependencies } from '../../services/taskService'
+import { GanttChart } from './GanttChart'
+import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task, TaskDependency } from '../../types'
 
 type Tab = 'overview' | 'gantt' | 'team' | 'tasks' | 'requirements' | 'boq' | 'design' | 'finance' | 'procurement' | 'documents' | 'handover'
 
 const TABS: { value: Tab; label: string; placeholder?: boolean }[] = [
   { value: 'overview',     label: 'Overview' },
-  { value: 'gantt',        label: 'Gantt', placeholder: true },
+  { value: 'gantt',        label: 'Gantt' },
   { value: 'team',         label: 'Team' },
   { value: 'tasks',        label: 'Tasks' },
   { value: 'requirements', label: 'Requirements' },
@@ -56,7 +57,7 @@ function emptyTask(projectId: string, createdBy: string): Task {
 export default function ProjectWorkspaceScreen() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, can } = useAuth()
 
   const [tab, setTab] = useState<Tab>('overview')
   const [isLoading, setIsLoading] = useState(true)
@@ -67,6 +68,7 @@ export default function ProjectWorkspaceScreen() {
   const [designPackages, setDesignPackages] = useState<DesignPackage[]>([])
   const [designVersions, setDesignVersions] = useState<DesignVersion[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
+  const [dependencies, setDependencies] = useState<TaskDependency[]>([])
   const [showNewTask, setShowNewTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
@@ -74,7 +76,7 @@ export default function ProjectWorkspaceScreen() {
   useEffect(() => {
     async function load() {
       setIsLoading(true)
-      const [projects, dirUsers, reqs, quotes, pkgs, versions, allTasks] = await Promise.all([
+      const [projects, dirUsers, reqs, quotes, pkgs, versions, allTasks, allDeps] = await Promise.all([
         getAllProjects(),
         getManagedUsersDirectory(),
         getAllRequirements(),
@@ -82,6 +84,7 @@ export default function ProjectWorkspaceScreen() {
         getAllDesignPackages(),
         getAllDesignVersions(),
         getAllTasks(),
+        getAllTaskDependencies(),
       ])
       setProject(projects.find(p => p.id === id) ?? null)
       setUsers(dirUsers)
@@ -90,6 +93,7 @@ export default function ProjectWorkspaceScreen() {
       setDesignPackages(pkgs)
       setDesignVersions(versions)
       setTasks(allTasks)
+      setDependencies(allDeps)
       setIsLoading(false)
     }
     load()
@@ -117,6 +121,7 @@ export default function ProjectWorkspaceScreen() {
   const projectQuotation = quotations.find(q => q.projectId === project.id)
   const projectDesignPackages = designPackages.filter(p => p.projectId === project.id)
   const projectTasks = tasks.filter(t => t.projectId === project.id)
+  const projectDependencies = dependencies.filter(d => d.projectId === project.id)
   const topLevelTasks = projectTasks.filter(t => !t.parentTaskId)
   const assigneeIds = Array.from(new Set(projectTasks.map(t => t.assigneeId).filter(Boolean))) as string[]
   const teamMembers = users.filter(u => u.id === project.coordinatorId || assigneeIds.includes(u.id))
@@ -309,7 +314,16 @@ export default function ProjectWorkspaceScreen() {
           </div>
         )}
 
-        {(tab === 'gantt' || tab === 'finance' || tab === 'procurement' || tab === 'documents' || tab === 'handover') && (
+        {tab === 'gantt' && (
+          <GanttChart
+            tasks={projectTasks}
+            dependencies={projectDependencies}
+            canEditDeadline={can('edit_deadline')}
+            onTaskUpdated={updated => setTasks(prev => prev.map(t => (t.id === updated.id ? updated : t)))}
+          />
+        )}
+
+        {(tab === 'finance' || tab === 'procurement' || tab === 'documents' || tab === 'handover') && (
           <div className="text-center py-16 text-slate-400">
             <p className="text-sm">Coming soon.</p>
           </div>
