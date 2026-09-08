@@ -1,5 +1,13 @@
 ## 2026-09-08
 
+### Phase 3: Procurement flow-sheet (PR → Quotes → PO → GRN → Vendor Bill)
+**Commit:** Uncommitted
+- **Added:** `src/screens/Procurement/ProcurementScreen.tsx` — flow-sheet pattern per the build doc's `DemoFlowSheet.tsx` mapping. A Purchase Request list (create via BottomSheet) opens into a full-height detail sheet that walks through every stage in place: draft → approve (`approve_purchase_request`) → add vendor quotes (`raise_purchase_request`, sorted cheapest-first for comparison) → raise PO from a chosen quote (`create_po`) → mark goods received (`receive_goods`) → enter vendor bill (`enter_vendor_bill`). Each stage transition upserts the PR's status alongside creating/updating the child record, so the PR's `StatusBadge` always reflects its furthest stage.
+- **Verify criterion met:** a PR moves through every stage in one sheet, and entering a vendor bill immediately shows on the PO card — vendor's outstanding balance (on `VendorMasterScreen`'s Bills tab) updates automatically since it's computed live from `amount - paidAmount` across that vendor's bills, not stored separately.
+- **Changed:** `src/App.tsx` — added `/procurement` route (nav item + `SCREEN_PERMISSIONS` entry already existed).
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Next:** `ExpenseRequestScreen.tsx` (Requested → Approved → Committed → Paid → Closed), then `CompanyAccountsScreen.tsx`.
+
 ### Phase 3 (Procurement & Expenses) kickoff: types, services, Vendor Master screen
 **Commit:** Uncommitted
 - **Scope note:** Phase 3/4 database schema and RLS policies already existed from Phase 0's foundational migration — confirmed via `supabase/schema.sql` and `supabase/rls-policies.sql`, no migration work needed. All Phase 3 permissions already existed in `Permission`/`ROLE_PERMISSIONS` — no permission-system changes needed. This slice is types + service layer + first screen only.
