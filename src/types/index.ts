@@ -566,3 +566,82 @@ export interface AuditLog {
   createdByRole: UserRole
   createdAt: string
 }
+
+// ─── Personal Finance (Owner-only) ──────────────────────────────────────────
+// Model ported from spacekrafter-personal-finance-tracker. Everything here is
+// personal by definition — no personal_or_office tagging (company finance
+// lives entirely in the sks_company_* / sks_purchase_* tables instead).
+export type PersonalAccountType = 'bank' | 'credit_card' | 'upi_wallet' | 'cash' | 'loan'
+
+export interface PersonalAccount {
+  id: string
+  name: string
+  type: PersonalAccountType
+  openingBalance: number
+  active: boolean
+  createdAt: string
+}
+
+export interface PersonalCategory {
+  id: string
+  groupName: string
+  name: string
+  code: string
+  createdAt: string
+}
+
+export interface PersonalSubcategory {
+  id: string
+  categoryId: string
+  name: string
+  createdAt: string
+}
+
+export type PersonalTransactionType =
+  | 'income' | 'expense' | 'transfer' | 'investment'
+  | 'advance_received' | 'advance_paid' | 'loan_received' | 'loan_paid'
+
+export interface PersonalTransaction {
+  id: string
+  accountId: string
+  date: string
+  amount: number
+  type: PersonalTransactionType
+  categoryId?: string
+  subcategoryId?: string
+  payeePayer?: string
+  reference?: string
+  narration?: string
+  source: 'manual' | 'imported'
+  transferPairId?: string
+  createdAt: string
+}
+
+export type PersonalCommitmentType = 'insurance' | 'utility' | 'subscription' | 'emi' | 'sip' | 'expected_income' | 'other'
+export type PersonalCommitmentFrequency = 'one_time' | 'monthly' | 'quarterly' | 'half_yearly' | 'annual' | 'custom'
+export type PersonalCommitmentStatus = 'upcoming' | 'due' | 'overdue' | 'paid' | 'paused' | 'cancelled' | 'expired'
+
+export interface PersonalCommitment {
+  id: string
+  commitmentType: PersonalCommitmentType
+  name: string
+  expectedAmount?: number
+  frequency: PersonalCommitmentFrequency
+  dueDate: string
+  linkedAccountId?: string
+  provider?: string
+  status: PersonalCommitmentStatus
+  linkedTransactionId?: string
+  createdAt: string
+}
+
+export type PersonalPlanType = 'personal_income' | 'business_income' | 'home_expense' | 'office_expense' | 'investment'
+
+export interface PersonalPlan {
+  id: string
+  financialYear: number
+  month: number
+  planType: PersonalPlanType
+  projectedAmount: number
+  createdAt: string
+}

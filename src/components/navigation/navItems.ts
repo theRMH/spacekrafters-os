@@ -5,6 +5,7 @@ import {
   FolderOpen, CheckSquare, GanttChartSquare, BookOpen, ShoppingCart,
   Truck, Wallet, Landmark, Receipt, CreditCard, BarChart2, ClipboardCheck,
   CalendarOff, UserCog, File, Settings, UploadCloud, History,
+  PiggyBank, Tags, BellRing, TrendingUp, PieChart, CalendarDays, Scale,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -62,6 +63,18 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { icon: Receipt,   label: 'Receivables',     path: '/receivables',      permission: 'view_receivables'     },
       { icon: CreditCard,label: 'Payables',        path: '/payables',         permission: 'view_payables'        },
       { icon: UploadCloud,label: 'Statement Import',path: '/statement-import',permission: 'manage_company_accounts' },
+    ],
+  },
+  {
+    label: 'Personal Finance',
+    items: [
+      { icon: PiggyBank,     label: 'Personal Finance',     path: '/personal-finance',     permission: 'view_personal_finance' },
+      { icon: Tags,          label: 'Personal Categories',  path: '/personal-categories',  permission: 'view_personal_finance' },
+      { icon: BellRing,      label: 'Personal Commitments', path: '/personal-commitments', permission: 'view_personal_finance' },
+      { icon: TrendingUp,    label: 'Personal Plans',       path: '/personal-plans',       permission: 'view_personal_finance' },
+      { icon: PieChart,      label: 'Personal Reports',     path: '/personal-reports',     permission: 'view_personal_finance' },
+      { icon: CalendarDays,  label: 'Personal Calendar',    path: '/personal-calendar',    permission: 'view_personal_finance' },
+      { icon: Scale,         label: 'Combined Finance',     path: '/combined-finance',     permission: 'view_combined_finance' },
     ],
   },
   {

@@ -436,3 +436,23 @@ CREATE POLICY "authenticated write integration settings owner only" ON sks_integ
   FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner'));
 CREATE POLICY "authenticated update integration settings owner only" ON sks_integration_settings
   FOR UPDATE TO authenticated USING (sks_has_role('owner')) WITH CHECK (sks_has_role('owner'));
+
+-- ─── sks_personal_* ──────────────────────────────────────────────────────────
+-- Personal Finance is Owner-only — never visible to any other role (Finance Rule 1).
+CREATE POLICY "authenticated all personal accounts owner only" ON sks_personal_accounts
+  FOR ALL TO authenticated USING (sks_has_role('owner')) WITH CHECK (sks_has_role('owner'));
+
+CREATE POLICY "authenticated all personal categories owner only" ON sks_personal_categories
+  FOR ALL TO authenticated USING (sks_has_role('owner')) WITH CHECK (sks_has_role('owner'));
+
+CREATE POLICY "authenticated all personal subcategories owner only" ON sks_personal_subcategories
+  FOR ALL TO authenticated USING (sks_has_role('owner')) WITH CHECK (sks_has_role('owner'));
+
+CREATE POLICY "authenticated all personal transactions owner only" ON sks_personal_transactions
+  FOR ALL TO authenticated USING (sks_has_role('owner')) WITH CHECK (sks_has_role('owner'));
+
+CREATE POLICY "authenticated all personal commitments owner only" ON sks_personal_commitments
+  FOR ALL TO authenticated USING (sks_has_role('owner')) WITH CHECK (sks_has_role('owner'));
+
+CREATE POLICY "authenticated all personal plans owner only" ON sks_personal_plans
+  FOR ALL TO authenticated USING (sks_has_role('owner')) WITH CHECK (sks_has_role('owner'));

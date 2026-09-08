@@ -436,3 +436,52 @@ CREATE TABLE IF NOT EXISTS sks_integration_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE sks_integration_settings ENABLE ROW LEVEL SECURITY;
+
+-- ─── Personal Finance (Owner-only; ported model from spacekrafter-personal-finance-tracker) ─
+CREATE TABLE IF NOT EXISTS sks_personal_accounts (
+  id         TEXT        PRIMARY KEY,
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE sks_personal_accounts ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS sks_personal_categories (
+  id         TEXT        PRIMARY KEY,
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE sks_personal_categories ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS sks_personal_subcategories (
+  id          TEXT        PRIMARY KEY,
+  category_id TEXT        NOT NULL REFERENCES sks_personal_categories(id) ON DELETE CASCADE,
+  data        JSONB       NOT NULL DEFAULT '{}',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS sks_personal_subcategories_category_id_idx ON sks_personal_subcategories(category_id);
+ALTER TABLE sks_personal_subcategories ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS sks_personal_transactions (
+  id         TEXT        PRIMARY KEY,
+  account_id TEXT        NOT NULL REFERENCES sks_personal_accounts(id),
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS sks_personal_transactions_account_id_idx ON sks_personal_transactions(account_id);
+ALTER TABLE sks_personal_transactions ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS sks_personal_commitments (
+  id         TEXT        PRIMARY KEY,
+  status     TEXT        NOT NULL DEFAULT '',
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE sks_personal_commitments ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS sks_personal_plans (
+  id         TEXT        PRIMARY KEY,
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE sks_personal_plans ENABLE ROW LEVEL SECURITY;

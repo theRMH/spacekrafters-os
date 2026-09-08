@@ -34,6 +34,13 @@ import PayablesScreen from './screens/Finance/PayablesScreen'
 import StatementImportScreen from './screens/Finance/StatementImportScreen'
 import ReportsScreen from './screens/Reports/ReportsScreen'
 import AuditLogScreen from './screens/Settings/AuditLogScreen'
+import PersonalFinanceScreen from './screens/PersonalFinance/PersonalFinanceScreen'
+import PersonalCategoriesScreen from './screens/PersonalFinance/PersonalCategoriesScreen'
+import PersonalCommitmentsScreen from './screens/PersonalFinance/PersonalCommitmentsScreen'
+import PersonalPlansScreen from './screens/PersonalFinance/PersonalPlansScreen'
+import PersonalReportsScreen from './screens/PersonalFinance/PersonalReportsScreen'
+import PersonalCalendarScreen from './screens/PersonalFinance/PersonalCalendarScreen'
+import CombinedFinanceScreen from './screens/PersonalFinance/CombinedFinanceScreen'
 
 function AppLoadingScreen() {
   return (
@@ -285,6 +292,62 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="attendance">
             <AppShell><AttendanceScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/personal-finance"
+        element={
+          <ProtectedRoute screenPath="personal-finance">
+            <AppShell><PersonalFinanceScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/personal-categories"
+        element={
+          <ProtectedRoute screenPath="personal-categories">
+            <AppShell><PersonalCategoriesScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/personal-commitments"
+        element={
+          <ProtectedRoute screenPath="personal-commitments">
+            <AppShell><PersonalCommitmentsScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/personal-plans"
+        element={
+          <ProtectedRoute screenPath="personal-plans">
+            <AppShell><PersonalPlansScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/personal-reports"
+        element={
+          <ProtectedRoute screenPath="personal-reports">
+            <AppShell><PersonalReportsScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/personal-calendar"
+        element={
+          <ProtectedRoute screenPath="personal-calendar">
+            <AppShell><PersonalCalendarScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/combined-finance"
+        element={
+          <ProtectedRoute screenPath="combined-finance">
+            <AppShell><CombinedFinanceScreen /></AppShell>
           </ProtectedRoute>
         }
       />
