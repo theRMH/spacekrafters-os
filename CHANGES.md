@@ -1,5 +1,16 @@
 ## 2026-09-08
 
+### MVP reorder: Leave module (pulled forward from Phase 5)
+**Commit:** Uncommitted
+- **Changed:** `SPACEKRAFTERS-PHASE-PLAN.md` — added an "MVP Reordering" section documenting the confirmed build order: Leave → Attendance → resume/finish Phase 2 → defer Phase 3/4/rest-of-5 to v2.
+- **Changed:** `src/types/index.ts` — added `LeaveStatus`, `LeaveApplication`, and (for the next slice) `AttendanceStatus`/`AttendanceRecord` types. `LeaveApplication` uses `userId`/`userName` (a real FK to `sks_managed_users`) rather than Fenster's free-text `technicianName`, because `sks_leave_applications.user_id` is `NOT NULL REFERENCES sks_managed_users(id)`.
+- **Added:** `src/services/leaveService.ts` — `getAllLeaveApplications`/`upsertLeaveApplication`/`deleteLeaveApplication` against `sks_leave_applications`, matching the `{ok, error?}` pattern used by `projectService.ts`/`requirementService.ts` (not Fenster's cache+fire-and-forget `leaveStorage.ts` pattern, since SKS already moved off localStorage fallbacks entirely).
+- **Added:** `src/screens/Leave/LeaveScreen.tsx` — adapted from Fenster's `LeaveApplicationScreen.tsx`, with one significant behavioral deviation driven by RLS: `sks_leave_applications`' INSERT policy only allows `user_id = sks_my_id()` (no owner/admin-on-behalf-of-someone-else), so unlike Fenster (where anyone could pick any technician to file for), SKS's screen only ever lets a user file leave for themselves. Owner/admin (`approve_leave` permission) additionally see everyone's applications and can approve/reject; everyone else sees and manages only their own.
+- **Changed:** `src/components/badges/StatusBadge.tsx` — added `approved`/`rejected` label + color entries (green/red, matching the existing `won`/`lost` convention) so leave status badges aren't stuck on the generic gray fallback.
+- **Changed:** `src/App.tsx` — added `/leave` route. Nav item already existed from Phase 0 (`navItems.ts`), and `SCREEN_PERMISSIONS['leave'] = 'view_leave'` / `approve_leave` permission already existed — no permission-map changes needed.
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` and `/leave` both return HTTP 200 (SPA routing; full role-based render behavior needs a logged-in browser check, not curl-verifiable).
+- **Next:** Attendance screen (calendar grid, auto-mark from approved leave) — `sks_attendance` table/RLS already exist, same as leave.
+
 ### Repo separation: SpaceKrafters OS now has its own git repository
 **Commit:** `d8c4ba3` (initial commit of the new repo)
 - SKS previously lived as a subfolder inside the shared Fenster monorepo (single repo rooted at `OS/`, sharing `origin` = `RMHDeveloper/fensterOS` with Fenster's own `src/`). Per user request, extracted it into its own independent repository.

@@ -265,3 +265,32 @@ export interface Project {
   createdAt: string
   updatedAt: string
 }
+
+// ─── HR: Leave & Attendance ────────────────────────────────────────────────
+export type LeaveStatus = 'pending' | 'approved' | 'rejected'
+
+export interface LeaveApplication {
+  id: string
+  userId: string
+  userName: string
+  fromDate: string
+  toDate: string
+  reason: string
+  status: LeaveStatus
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type AttendanceStatus = 'present' | 'absent' | 'half_day' | 'leave'
+
+export interface AttendanceRecord {
+  id: string
+  userId: string
+  userName: string
+  date: string
+  status: AttendanceStatus
+  markedBy: string
+  createdAt: string
+  updatedAt: string
+}

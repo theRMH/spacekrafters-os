@@ -37,6 +37,19 @@ Mobile responsiveness (bottom nav vs. sidebar breakpoints, safe-area insets, Bot
 
 ---
 
+## MVP Reordering (client needs to start using the app)
+
+Phases below stay as the source of truth for scope/verification per item, but **build order deviates** from Phase-number order for the MVP handoff:
+
+1. **Leave** (Phase 5, item 1) — pulled forward, no dependency on Phase 3/4 Finance. Direct reuse of Fenster's `LeaveApplicationScreen`/`leaveStorage.ts`/`leaveService.ts`.
+2. **Attendance** (Phase 5, item 2) — pulled forward with Leave, since it auto-marks from approved leave. `sks_attendance`/`sks_leave_applications` tables + RLS already exist from Phase 0 — zero schema work needed.
+3. **Resume and finish Phase 2** — remaining items: Design Center → Project Workspace (tabs shell) + Task Detail → Gantt chart → Daily Diary.
+4. **Phase 3 (Procurement & Expenses), Phase 4 (Finance), and the rest of Phase 5** (Owner Command Center, Personal Finance, Combined Finance, Audit Log) are deferred past MVP — v2 scope.
+
+Reasoning: attendance/leave were the client's most urgent ask and carry no data dependency on unbuilt Finance features, so pulling them forward doesn't block or get blocked by anything.
+
+---
+
 ## Phase 0 — Foundation
 
 **Goal:** A running, empty SKS app with auth, nav shell, and all direct-reuse components in place — nothing domain-specific yet.
