@@ -266,6 +266,30 @@ export interface Project {
   updatedAt: string
 }
 
+// ─── Design Center ───────────────────────────────────────────────────────────
+export type DesignPackageStatus = 'in_progress' | 'client_review' | 'client_approved' | 'revision_requested'
+
+export interface DesignPackage {
+  id: string
+  projectId: string
+  name: string
+  status: DesignPackageStatus
+  notes?: string
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DesignVersion {
+  id: string
+  designPackageId: string
+  versionNumber: number
+  files: string[]
+  note?: string
+  createdBy: string
+  createdAt: string
+}
+
 // ─── HR: Leave & Attendance ────────────────────────────────────────────────
 export type LeaveStatus = 'pending' | 'approved' | 'rejected'
 

@@ -19,6 +19,7 @@ import QuotationsScreen from './screens/Quotations/QuotationsScreen'
 import ProjectsScreen from './screens/Projects/ProjectsScreen'
 import LeaveScreen from './screens/Leave/LeaveScreen'
 import AttendanceScreen from './screens/Attendance/AttendanceScreen'
+import DesignCenterScreen from './screens/Design/DesignCenterScreen'
 
 function AppLoadingScreen() {
   return (
@@ -134,6 +135,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="projects">
             <AppShell><ProjectsScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/design"
+        element={
+          <ProtectedRoute screenPath="design">
+            <AppShell><DesignCenterScreen /></AppShell>
           </ProtectedRoute>
         }
       />

@@ -1,5 +1,15 @@
 ## 2026-09-08
 
+### Phase 2: Design Center (new UI, no Fenster equivalent)
+**Commit:** Uncommitted
+- **Changed:** `src/types/index.ts` — added `DesignPackageStatus`, `DesignPackage`, `DesignVersion` types, matching `sks_design_packages`/`sks_design_versions` columns.
+- **Added:** `src/services/designService.ts` — `getAllDesignPackages`/`upsertDesignPackage` against `sks_design_packages`; `getAllDesignVersions`/`addDesignVersion` against `sks_design_versions`. `addDesignVersion` deliberately uses `.insert()` not `.upsert()`, because `sks_design_versions` has no `updated_at` column and no UPDATE/DELETE RLS policy — it's an append-only version history table.
+- **Added:** `src/screens/Design/DesignCenterScreen.tsx` — list of design packages (project + version count + status), a create-package flow (`upload_design` permission — owner/designer), a detail sheet with version history and an "Add Version" flow using `MultiFileUploadField`, and status-change buttons split by permission: `request_revision` (designer) can only set `revision_requested`; `approve_design` (owner) can set any of the other three. This mirrors the RLS UPDATE policy on `sks_design_packages`, which allows any project-visible role to update but the app only exposes the transitions each role's permission set already allows at the app level (`project_coordinator` has `view_design` only, so is read-only here even though RLS would technically allow it — kept intentionally conservative rather than opening a write path with no dedicated permission).
+- **Changed:** `src/App.tsx` — added `/design` route. Nav item and `SCREEN_PERMISSIONS['design'] = 'view_design'` already existed from Phase 0.
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Known limitation (pre-existing Phase 0 RLS design, not introduced here):** `sks_design_packages` INSERT only requires the `designer` role (no project-visibility check), but SELECT requires `sks_can_see_project(project_id)`, which does not grant designers visibility directly — only via an assigned task in that project. A designer could theoretically create a package for a project they have no task in and then be unable to see it again. Not addressed in this slice; would need either a project-picker restricted to the designer's assigned-task projects, or an RLS change.
+- **Next:** Project Workspace screen (tabs shell) + Task Detail, then Gantt chart, then Daily Diary.
+
 ### MVP: Attendance module (new UI, pulled forward from Phase 5)
 **Commit:** Uncommitted
 - **Added:** `src/services/attendanceService.ts` — `getAllAttendance`/`upsertAttendance` against `sks_attendance`. Uses a deterministic id (`att_${userId}_${date}`) so `upsert` with `onConflict: 'user_id,date'` (the table's actual unique constraint — the PK is `id`) is idempotent per user/day.
