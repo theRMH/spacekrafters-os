@@ -1,5 +1,13 @@
 ## 2026-09-08
 
+### File storage: Hostinger upload endpoint for SKS
+**Commit:** Uncommitted
+- **Added:** `hostinger/upload.php` — SKS-specific copy of Fenster's upload script (same POST-upload/DELETE-remove protocol that `src/utils/fileStorage.ts` already spoke, but was previously unconfigured for SKS). Separate CORS allowlist (`https://spacekrafters.com` + local dev ports, not Fenster's domains), separate secret key, separate `uploads/` directory — fully isolated from Fenster's Hostinger storage.
+- **Deployed:** uploaded to `https://spacekrafters.com/os/upload.php` (user-performed). Verified end-to-end directly against the live endpoint: CORS/origin check, auth key check, file-type allowlist (correctly rejects disallowed MIME types), upload → returned URL is publicly fetchable, and DELETE removes the file (confirmed via a cache-busting request past Hostinger's edge CDN, which otherwise briefly serves a stale cached copy after delete — expected, harmless given unique per-upload filenames).
+- **Changed:** `sks/.env.local` (untracked) — set `VITE_UPLOAD_URL=https://spacekrafters.com/os/upload.php` and `VITE_UPLOAD_KEY` to the new SKS-only secret. No app code changes needed — `fileStorage.ts`/`MultiFileUploadField` already supported this protocol, they were just unconfigured.
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Note:** `sks/.env`'s current contents are unstructured notes (not `KEY=value` pairs Vite can read) — the app actually loads config from `sks/.env.local`. Worth cleaning up `.env` at some point so it isn't misleading, but left untouched here since it's out of scope for this change.
+
 ### Phase 2: Daily Diary — standalone screen + Project Workspace tab (last Phase 2 item)
 **Commit:** Uncommitted
 - **Scope decision (explicit, asked before building):** the phase-plan verify criterion requires a diary entry to be "visible from both Diary and Project Workspace." User chose to build both surfaces (not Project-Workspace-only), so a standalone screen and an embedded tab share the same table/service and both read+write against it.
