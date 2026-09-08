@@ -27,6 +27,7 @@ import TasksScreen from './screens/Tasks/TasksScreen'
 import GanttListScreen from './screens/Gantt/GanttListScreen'
 import VendorMasterScreen from './screens/Procurement/VendorMasterScreen'
 import ProcurementScreen from './screens/Procurement/ProcurementScreen'
+import ExpenseRequestScreen from './screens/Expenses/ExpenseRequestScreen'
 
 function AppLoadingScreen() {
   return (
@@ -190,6 +191,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="vendors">
             <AppShell><VendorMasterScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/expenses"
+        element={
+          <ProtectedRoute screenPath="expenses">
+            <AppShell><ExpenseRequestScreen /></AppShell>
           </ProtectedRoute>
         }
       />

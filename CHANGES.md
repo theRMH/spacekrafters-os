@@ -1,5 +1,14 @@
 ## 2026-09-08
 
+### Phase 3: Expense Request lifecycle (Requested → Approved → Paid → Closed)
+**Commit:** Uncommitted
+- **Finance Architecture Rule 4 applied (non-negotiable, per build doc):** "Approval ≠ Payment. Approved expense shows as commitment/payable. Only recorded payment creates cashflow." `handleApprove()` only flips `ExpenseRequest.status` to `approved` — no `CompanyTransaction` is written. Only `handlePay()` (gated on `record_payment`, requires selecting a `CompanyAccount`) writes a `debit` `CompanyTransaction` and then marks the request `paid`. Verified by reading the code path directly: the two functions touch entirely disjoint tables.
+- **Finance Architecture Rule 5 applied:** rejecting a request never deletes it — it moves to `status: 'rejected'` with a mandatory `rejectionReason`, `approvedBy`, and `approvedAt`, and stays visible/searchable like any other request.
+- **Added:** `src/screens/Expenses/ExpenseRequestScreen.tsx` — list (search by purpose/category) + create form + detail sheet driving the full lifecycle: `requested` → Approve/Reject (`approve_expense`) → `approved` → Record Payment against a company account (`record_payment`) → `paid` → Close (`approve_expense`) → `closed`.
+- **Changed:** `src/App.tsx` — added `/expenses` route (nav item + `SCREEN_PERMISSIONS` entry already existed).
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Next:** `CompanyAccountsScreen.tsx` (bank/cash/UPI accounts, opening balances) — needed before Expense payments have any accounts to select from in a real deployment (currently the picker will be empty until accounts exist).
+
 ### Phase 3: Procurement flow-sheet (PR → Quotes → PO → GRN → Vendor Bill)
 **Commit:** Uncommitted
 - **Added:** `src/screens/Procurement/ProcurementScreen.tsx` — flow-sheet pattern per the build doc's `DemoFlowSheet.tsx` mapping. A Purchase Request list (create via BottomSheet) opens into a full-height detail sheet that walks through every stage in place: draft → approve (`approve_purchase_request`) → add vendor quotes (`raise_purchase_request`, sorted cheapest-first for comparison) → raise PO from a chosen quote (`create_po`) → mark goods received (`receive_goods`) → enter vendor bill (`enter_vendor_bill`). Each stage transition upserts the PR's status alongside creating/updating the child record, so the PR's `StatusBadge` always reflects its furthest stage.
