@@ -1,5 +1,12 @@
 ## 2026-09-08
 
+### Phase 4: Payables screen (vendor/employee payables, partial payments)
+**Commit:** Uncommitted
+- **Added:** `src/screens/Finance/PayablesScreen.tsx` — list of payables (search by description) + create form + detail sheet for recording payments. Create form toggles between "Vendor" (picks from `getAllVendors()`, sets `vendorId`) and "Other payee" (free-text `payeeName`), matching the nullable `vendor_id` schema for employee/other payables. `handleRecordPayment()` mirrors Receivables' partial logic: validates amount against remaining balance, writes a `Payment` row, updates `paidAmount`, and sets `status: 'paid'` only once `paidAmount >= amount` (else `'partial'`), then posts a `debit` `CompanyTransaction` against the chosen account. `effectiveStatus()` shows `'overdue'` when `dueDate` has passed and the payable isn't fully paid, without mutating stored status. Payment-recording gated on `reconcile` permission (paired with `view_payables` for owner/accounts roles, same pattern as `record_receipt`/`view_receivables`).
+- **Changed:** `src/App.tsx` — added `/payables` route (nav item + `SCREEN_PERMISSIONS` entry already existed).
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Next:** `FinanceContext` + company finance dashboard — needs a `transaction_allocations` mechanism (not yet in schema) to satisfy "one cash movement never appears as more than one transaction row even when split across projects" (Finance Rule 3). Likely the first new migration needed since Phase 0; will flag `⚠ DEPLOY` once built.
+
 ### Phase 4: Receivables screen + PaymentMilestone model
 **Commit:** Uncommitted
 - Confirmed via `schema.sql`/`rls-policies.sql` that all four Phase 4 tables (`sks_payment_milestones`, `sks_receipts`, `sks_payables`, `sks_payments`) and their RLS policies already exist from Phase 0 — no migration needed. Confirmed via `permissions.ts`/`navItems.ts` that all Phase 4 permissions (`view_receivables`, `record_receipt`, `view_payables`, `reconcile`) and nav items (`/receivables`, `/payables`) already exist — no permission-system changes needed.
