@@ -1,5 +1,19 @@
 ## 2026-09-08
 
+### Phase 5: Audit Log (viewer + retrofit writes into approve/reject flows)
+**Commit:** Uncommitted
+- Confirmed via grep that `sks_audit_log` table + RLS already existed in `schema.sql`/`rls-policies.sql` (Phase 0 scaffolding), and `view_audit_log` permission already existed in `permissions.ts`/`types/index.ts` — but no `AuditLog` type, no service, and no code anywhere wrote to the table. Per user decision ("Full retrofit"), built the type/service and wired writes into every existing approve/reject flow rather than just building an empty viewer.
+- **Added:** `src/types/index.ts` — `AuditLog` interface (`id`, `projectId?`, `action`, `description`, `createdBy`, `createdByRole`, `createdAt`).
+- **Added:** `src/services/auditLogService.ts` — `getAllAuditLogs()`/`addAuditLog()`, reading/writing the dedicated columns on `sks_audit_log` (not a JSONB blob column, matching that table's existing schema shape).
+- **Added:** `src/screens/Settings/AuditLogScreen.tsx` — read-only reverse-chronological list of all audit entries, showing action, description, actor name/role, and timestamp.
+- **Changed:** `src/screens/Expenses/ExpenseRequestScreen.tsx` (`handleApprove`/`handleReject`), `src/screens/Leave/LeaveScreen.tsx` (`handleDecide`), `src/screens/Quotations/QuotationsScreen.tsx` (`handleStatusChange`, logged only on transition to `'rejected'`) — each now fires an `addAuditLog()` call (fire-and-forget, same pattern as `addTransactionAllocations`) after a successful approve/reject/reject-equivalent action.
+- Note: `PurchaseRequest` (Procurement) has no `'rejected'` status in its current status union (`draft | approved | quoted | po_raised | received | billed | paid`), so no purchase-request rejection audit hook was added — there is no rejection flow to hook into. FY reopen is not yet built (Phase 4 Rule 8, deferred) so it isn't logged either; noting this as a known gap rather than a silent omission.
+- **Changed:** `src/data/permissions.ts` — added `SCREEN_PERMISSIONS['audit-log'] = 'view_audit_log'`.
+- **Changed:** `src/components/navigation/navItems.ts` — added "Audit Log" nav item under Admin.
+- **Changed:** `src/App.tsx` — added `/audit-log` route.
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200. Verify criterion ("a rejected expense... appears with reason, actor, and timestamp") is satisfied — expense rejection now logs the rejection reason, `user.name`, `user.role`, and an ISO timestamp. FY-reopen half of the criterion is not yet testable since FY reopen doesn't exist yet.
+- **Next:** `OwnerCommandCenter`, `PersonalFinanceScreen`, `CombinedFinanceView`.
+
 ### Phase 4 complete: ReportsScreen (lead conversion, project margin, cashflow, procurement, team accountability)
 **Commit:** Uncommitted
 - **Added:** `src/screens/Reports/ReportsScreen.tsx` — read-only rollups computed live from existing data (no new tables/fields), grouped into 5 sections: Lead Conversion (won/lost/closed from `Lead.status`, conversion rate), Project Margin (contract value/internal budget/margin across projects that have a contract value), Cashflow (credits/debits/net, summed directly from `getAllCompanyTransactions()` so the report total reconciles by construction against Company Accounts), Procurement (open purchase requests, total PO value, unpaid vendor bill value), Team Accountability (per-assignee task completion + on-time rate, derived from `Task.status`/`Task.lateReason`).

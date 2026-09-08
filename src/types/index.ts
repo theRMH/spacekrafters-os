@@ -555,3 +555,14 @@ export interface Payment {
   reference?: string
   createdAt: string
 }
+
+// ─── Audit Log ───────────────────────────────────────────────────────────────
+export interface AuditLog {
+  id: string
+  projectId?: string
+  action: string
+  description: string
+  createdBy: string
+  createdByRole: UserRole
+  createdAt: string
+}

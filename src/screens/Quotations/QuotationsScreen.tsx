@@ -12,8 +12,9 @@ import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllRequirements } from '../../services/requirementService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllQuotations, upsertQuotation, deleteQuotation } from '../../services/quotationService'
+import { addAuditLog } from '../../services/auditLogService'
 import { downloadQuotationExcel } from '../../utils/quotationExport'
-import type { Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem } from '../../types'
+import type { Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem, AuditLog } from '../../types'
 
 const UNIT_OPTIONS = ['sqft', 'nos', 'rft', 'sft', 'lot', 'set']
 
@@ -232,6 +233,18 @@ export default function QuotationsScreen() {
     setQuotations(prev => prev.map(x => (x.id === updated.id ? updated : x)))
     setSelected(updated)
     setSnack({ open: true, msg: 'Status updated.', type: 'success' })
+    if (user && status === 'rejected') {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: updated.projectId,
+        action: 'quotation_rejected',
+        description: `Quotation v${updated.version} (${fmtCurrency(updated.netAmount)}) rejected.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
   }
 
   async function confirmDelete() {

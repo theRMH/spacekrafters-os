@@ -4,7 +4,7 @@ import {
   Home, Users, Calendar, ClipboardList, MapPin, FileText, Layers,
   FolderOpen, CheckSquare, GanttChartSquare, BookOpen, ShoppingCart,
   Truck, Wallet, Landmark, Receipt, CreditCard, BarChart2, ClipboardCheck,
-  CalendarOff, UserCog, File, Settings, UploadCloud,
+  CalendarOff, UserCog, File, Settings, UploadCloud, History,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -83,6 +83,7 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     items: [
       { icon: UserCog,  label: 'User Management', path: '/settings/users', permission: 'manage_users' },
       { icon: Settings, label: 'Settings',        path: '/settings',       permission: 'view_home'    },
+      { icon: History,  label: 'Audit Log',       path: '/audit-log',      permission: 'view_audit_log' },
     ],
   },
 ]

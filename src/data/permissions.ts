@@ -135,4 +135,5 @@ export const SCREEN_PERMISSIONS: Record<string, Permission> = {
   'personal-finance':'view_personal_finance',
   'combined-finance':'view_combined_finance',
   'settings/users':  'manage_users',
+  'audit-log':       'view_audit_log',
 }

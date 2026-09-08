@@ -10,7 +10,8 @@ import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllProjects } from '../../services/projectService'
 import { getAllExpenseRequests, upsertExpenseRequest } from '../../services/expenseService'
 import { getAllCompanyAccounts, addCompanyTransaction, addTransactionAllocations } from '../../services/companyAccountService'
-import type { Project, ExpenseRequest, CompanyAccount, CompanyTransaction, TransactionAllocation } from '../../types'
+import { addAuditLog } from '../../services/auditLogService'
+import type { Project, ExpenseRequest, CompanyAccount, CompanyTransaction, TransactionAllocation, AuditLog } from '../../types'
 
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
@@ -109,6 +110,18 @@ export default function ExpenseRequestScreen() {
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to approve.', type: 'error' }); return }
     setRequests(prev => prev.map(r => (r.id === toSave.id ? toSave : r)))
     setSnack({ open: true, msg: 'Expense approved — committed, not yet paid.', type: 'success' })
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: toSave.projectId,
+        action: 'expense_approved',
+        description: `Expense request "${toSave.purpose}" (${fmtCurrency(toSave.amount)}) approved.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
   }
 
   async function handleReject() {
@@ -123,6 +136,18 @@ export default function ExpenseRequestScreen() {
     setShowReject(false)
     setRejectReason('')
     setSnack({ open: true, msg: 'Expense request rejected.', type: 'success' })
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: toSave.projectId,
+        action: 'expense_rejected',
+        description: `Expense request "${toSave.purpose}" (${fmtCurrency(toSave.amount)}) rejected: ${toSave.rejectionReason}`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
   }
 
   // Only this action creates a cashflow entry (Finance Rule 4: Approval != Payment).

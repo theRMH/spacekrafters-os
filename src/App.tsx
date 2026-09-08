@@ -33,6 +33,7 @@ import ReceivablesScreen from './screens/Finance/ReceivablesScreen'
 import PayablesScreen from './screens/Finance/PayablesScreen'
 import StatementImportScreen from './screens/Finance/StatementImportScreen'
 import ReportsScreen from './screens/Reports/ReportsScreen'
+import AuditLogScreen from './screens/Settings/AuditLogScreen'
 
 function AppLoadingScreen() {
   return (
@@ -228,6 +229,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="payables">
             <AppShell><PayablesScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/audit-log"
+        element={
+          <ProtectedRoute screenPath="audit-log">
+            <AppShell><AuditLogScreen /></AppShell>
           </ProtectedRoute>
         }
       />

@@ -7,7 +7,8 @@ import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllLeaveApplications, upsertLeaveApplication, deleteLeaveApplication } from '../../services/leaveService'
-import type { LeaveApplication } from '../../types'
+import { addAuditLog } from '../../services/auditLogService'
+import type { LeaveApplication, AuditLog } from '../../types'
 
 const inp = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-primary'
 const lbl = 'text-xs font-semibold text-slate-500 mb-1.5 block'
@@ -78,6 +79,17 @@ export default function LeaveScreen() {
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update leave.', type: 'error' }); return }
     setLeaves(prev => prev.map(l => l.id === updated.id ? updated : l))
     setSnack({ open: true, msg: `Leave ${status}.`, type: 'success' })
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: `leave_${status}`,
+        description: `Leave application for ${updated.userName} (${updated.fromDate} → ${updated.toDate}) ${status}.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
   }
 
   async function confirmDelete() {
