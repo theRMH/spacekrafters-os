@@ -1,5 +1,12 @@
 ## 2026-09-08
 
+### Phase 4: ProjectFinancialsScreen (Finance tab on Project Workspace)
+**Commit:** Uncommitted
+- Filled in the pre-existing "Finance" tab placeholder on `ProjectWorkspaceScreen.tsx` (the tab and its "Coming soon." stub already existed from earlier phase scaffolding) rather than building a new screen — matches the build doc's mapping of `ProjectFinancialsScreen` to a tab on the project detail view, not a standalone route.
+- **Changed:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — Finance tab now shows Contract Value / Internal Budget (from `Project`), Actual Spend (sum of that project's `paid` `ExpenseRequest`s), Collections (sum of that project's `Receipt`s), Margin (`contractValue - internalBudget`, with %), and Budget Variance (`internalBudget - actualSpend`), all computed live — no new stored fields. Also lists the project's `PaymentMilestone`s with status and received/total. Removed the now-inaccurate `placeholder: true` flag from the Finance tab entry.
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200.
+- **Next:** Statement Import (new UI) — CSV/OFX/PDF upload → parse → preview → auto-classify → user correction → confirm → post to Company Accounts.
+
 ### Phase 4: transaction_allocations + Company Accounts dashboard stat cards
 **Commit:** Uncommitted
 - Finance Rule 3 ("one cash movement never appears as more than one transaction row even when split across projects") required a new table — confirmed via grep that no `transaction_allocations`/allocation mechanism existed anywhere in `schema.sql`. Per user decision, built it now rather than deferring.

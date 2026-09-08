@@ -15,9 +15,11 @@ import { getAllQuotations } from '../../services/quotationService'
 import { getAllDesignPackages, getAllDesignVersions } from '../../services/designService'
 import { getAllTasks, upsertTask, getAllTaskDependencies } from '../../services/taskService'
 import { getAllDiaryEntries, upsertDiaryEntry } from '../../services/dailyDiaryService'
+import { getAllExpenseRequests } from '../../services/expenseService'
+import { getAllPaymentMilestones, getAllReceipts } from '../../services/financeService'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { GanttChart } from './GanttChart'
-import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task, TaskDependency, DailyDiaryEntry } from '../../types'
+import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task, TaskDependency, DailyDiaryEntry, ExpenseRequest, PaymentMilestone, Receipt } from '../../types'
 
 type Tab = 'overview' | 'gantt' | 'team' | 'tasks' | 'requirements' | 'boq' | 'design' | 'diary' | 'finance' | 'procurement' | 'documents' | 'handover'
 
@@ -30,7 +32,7 @@ const TABS: { value: Tab; label: string; placeholder?: boolean }[] = [
   { value: 'boq',          label: 'BOQ' },
   { value: 'design',       label: 'Design' },
   { value: 'diary',        label: 'Diary' },
-  { value: 'finance',      label: 'Finance', placeholder: true },
+  { value: 'finance',      label: 'Finance' },
   { value: 'procurement',  label: 'Procurement', placeholder: true },
   { value: 'documents',    label: 'Documents', placeholder: true },
   { value: 'handover',     label: 'Handover', placeholder: true },
@@ -79,6 +81,9 @@ export default function ProjectWorkspaceScreen() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [dependencies, setDependencies] = useState<TaskDependency[]>([])
   const [diaryEntries, setDiaryEntries] = useState<DailyDiaryEntry[]>([])
+  const [expenseRequests, setExpenseRequests] = useState<ExpenseRequest[]>([])
+  const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
+  const [receipts, setReceipts] = useState<Receipt[]>([])
   const [showNewTask, setShowNewTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [showNewDiary, setShowNewDiary] = useState(false)
@@ -91,7 +96,7 @@ export default function ProjectWorkspaceScreen() {
   useEffect(() => {
     async function load() {
       setIsLoading(true)
-      const [projects, dirUsers, reqs, quotes, pkgs, versions, allTasks, allDeps, allDiary] = await Promise.all([
+      const [projects, dirUsers, reqs, quotes, pkgs, versions, allTasks, allDeps, allDiary, allExpenses, allMilestones, allReceipts] = await Promise.all([
         getAllProjects(),
         getManagedUsersDirectory(),
         getAllRequirements(),
@@ -101,6 +106,9 @@ export default function ProjectWorkspaceScreen() {
         getAllTasks(),
         getAllTaskDependencies(),
         getAllDiaryEntries(),
+        getAllExpenseRequests(),
+        getAllPaymentMilestones(),
+        getAllReceipts(),
       ])
       setProject(projects.find(p => p.id === id) ?? null)
       setUsers(dirUsers)
@@ -111,6 +119,9 @@ export default function ProjectWorkspaceScreen() {
       setTasks(allTasks)
       setDependencies(allDeps)
       setDiaryEntries(allDiary)
+      setExpenseRequests(allExpenses)
+      setMilestones(allMilestones)
+      setReceipts(allReceipts)
       setIsLoading(false)
     }
     load()
@@ -141,6 +152,16 @@ export default function ProjectWorkspaceScreen() {
   const projectDependencies = dependencies.filter(d => d.projectId === project.id)
   const topLevelTasks = projectTasks.filter(t => !t.parentTaskId)
   const projectDiaryEntries = diaryEntries.filter(e => e.projectId === project.id)
+  const projectExpenses = expenseRequests.filter(e => e.projectId === project.id && e.status === 'paid')
+  const projectMilestones = milestones.filter(m => m.projectId === project.id)
+  const projectReceipts = receipts.filter(r => r.projectId === project.id)
+  const actualSpend = projectExpenses.reduce((sum, e) => sum + (e.paidAmount ?? e.amount), 0)
+  const totalCollected = projectReceipts.reduce((sum, r) => sum + r.amount, 0)
+  const contractValue = project.contractValue ?? 0
+  const internalBudget = project.internalBudget ?? 0
+  const margin = contractValue - internalBudget
+  const marginPct = contractValue > 0 ? (margin / contractValue) * 100 : 0
+  const budgetVariance = internalBudget - actualSpend
   const assigneeIds = Array.from(new Set(projectTasks.map(t => t.assigneeId).filter(Boolean))) as string[]
   const teamMembers = users.filter(u => u.id === project.coordinatorId || assigneeIds.includes(u.id))
 
@@ -392,7 +413,59 @@ export default function ProjectWorkspaceScreen() {
           </div>
         )}
 
-        {(tab === 'finance' || tab === 'procurement' || tab === 'documents' || tab === 'handover') && (
+        {tab === 'finance' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+                <p className="text-[11px] text-slate-400 mb-0.5">Contract Value</p>
+                <p className="text-base font-extrabold text-slate-800">{fmtCurrency(contractValue)}</p>
+              </div>
+              <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+                <p className="text-[11px] text-slate-400 mb-0.5">Internal Budget</p>
+                <p className="text-base font-extrabold text-slate-800">{fmtCurrency(internalBudget)}</p>
+              </div>
+              <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+                <p className="text-[11px] text-slate-400 mb-0.5">Actual Spend</p>
+                <p className="text-base font-extrabold text-slate-800">{fmtCurrency(actualSpend)}</p>
+              </div>
+              <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+                <p className="text-[11px] text-slate-400 mb-0.5">Collections</p>
+                <p className="text-base font-extrabold text-slate-800">{fmtCurrency(totalCollected)}</p>
+              </div>
+              <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+                <p className="text-[11px] text-slate-400 mb-0.5">Margin</p>
+                <p className={`text-base font-extrabold ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {fmtCurrency(margin)} <span className="text-xs font-semibold">({marginPct.toFixed(1)}%)</span>
+                </p>
+              </div>
+              <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+                <p className="text-[11px] text-slate-400 mb-0.5">Budget Variance</p>
+                <p className={`text-base font-extrabold ${budgetVariance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {fmtCurrency(budgetVariance)}
+                </p>
+              </div>
+            </div>
+
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide pt-1">Payment Milestones</h3>
+            {projectMilestones.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-8">No payment milestones for this project.</p>
+            ) : (
+              <div className="space-y-2">
+                {projectMilestones.map(m => (
+                  <div key={m.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <span className="font-bold text-sm text-slate-800">{m.title}</span>
+                      <StatusBadge status={m.status} />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-700">{fmtCurrency(m.receivedAmount)} / {fmtCurrency(m.amount)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {(tab === 'procurement' || tab === 'documents' || tab === 'handover') && (
           <div className="text-center py-16 text-slate-400">
             <p className="text-sm">Coming soon.</p>
           </div>
