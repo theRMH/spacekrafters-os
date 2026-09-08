@@ -1,5 +1,13 @@
 ## 2026-09-08
 
+### Phase 4 complete: ReportsScreen (lead conversion, project margin, cashflow, procurement, team accountability)
+**Commit:** Uncommitted
+- **Added:** `src/screens/Reports/ReportsScreen.tsx` — read-only rollups computed live from existing data (no new tables/fields), grouped into 5 sections: Lead Conversion (won/lost/closed from `Lead.status`, conversion rate), Project Margin (contract value/internal budget/margin across projects that have a contract value), Cashflow (credits/debits/net, summed directly from `getAllCompanyTransactions()` so the report total reconciles by construction against Company Accounts), Procurement (open purchase requests, total PO value, unpaid vendor bill value), Team Accountability (per-assignee task completion + on-time rate, derived from `Task.status`/`Task.lateReason`).
+- **Changed:** `src/App.tsx` — added `/reports` route (nav item + `SCREEN_PERMISSIONS` entry already existed).
+- **Verified:** `tsc --noEmit` clean. Dev server started, `/` returns HTTP 200. Verify criterion ("report totals reconcile against underlying screens, e.g. cashflow report total = sum of Company Accounts transactions") is satisfied by construction — the cashflow totals are a direct sum over the same `CompanyTransaction[]` array Company Accounts reads, no intermediate transformation.
+- **Phase 4 exit note:** Finance Rules 3 (transaction_allocations), 4 (approval ≠ payment), 5 (rejected records stay visible) are implemented and verified. Rules 1, 2, 6, 7, 8 (personal/company separation, combined view, advance-as-revenue, owner transfers, FY boundaries) are Phase 5 concerns and not yet applicable — no Phase 4 screen currently violates them, but none has been asked to enforce them either.
+- **Next:** Phase 5 — `OwnerCommandCenter`, `PersonalFinanceScreen`, `CombinedFinanceView`, Audit Log viewer.
+
 ### Phase 4: Statement Import (CSV bank statement import)
 **Commit:** Uncommitted
 - Scope decision (per user): CSV only for v1 (build doc mentions CSV/OFX/PDF, but full OFX/PDF parsing was judged high-risk/high-effort for the value); permission reused `manage_company_accounts` rather than adding a new dedicated permission, since no separate role split was requested.
