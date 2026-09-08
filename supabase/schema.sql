@@ -298,6 +298,20 @@ CREATE TABLE IF NOT EXISTS sks_company_transactions (
 CREATE INDEX IF NOT EXISTS sks_company_transactions_account_id_idx ON sks_company_transactions(account_id);
 ALTER TABLE sks_company_transactions ENABLE ROW LEVEL SECURITY;
 
+-- One cash movement (one sks_company_transactions row) can be split across
+-- multiple projects here instead of being duplicated into multiple rows (Finance Rule 3).
+CREATE TABLE IF NOT EXISTS sks_transaction_allocations (
+  id             TEXT        PRIMARY KEY,
+  transaction_id TEXT        NOT NULL REFERENCES sks_company_transactions(id) ON DELETE CASCADE,
+  project_id     TEXT        REFERENCES sks_projects(id),
+  amount         NUMERIC     NOT NULL,
+  data           JSONB       NOT NULL DEFAULT '{}',
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS sks_transaction_allocations_transaction_id_idx ON sks_transaction_allocations(transaction_id);
+CREATE INDEX IF NOT EXISTS sks_transaction_allocations_project_id_idx ON sks_transaction_allocations(project_id);
+ALTER TABLE sks_transaction_allocations ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS sks_payment_milestones (
   id         TEXT        PRIMARY KEY,
   project_id TEXT        NOT NULL REFERENCES sks_projects(id) ON DELETE CASCADE,

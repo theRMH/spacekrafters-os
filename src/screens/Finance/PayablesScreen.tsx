@@ -7,9 +7,9 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllVendors } from '../../services/vendorService'
-import { getAllCompanyAccounts, addCompanyTransaction } from '../../services/companyAccountService'
+import { getAllCompanyAccounts, addCompanyTransaction, addTransactionAllocations } from '../../services/companyAccountService'
 import { getAllPayables, upsertPayable, getAllPayments, addPayment } from '../../services/financeService'
-import type { Vendor, CompanyAccount, Payable, Payment } from '../../types'
+import type { Vendor, CompanyAccount, Payable, Payment, TransactionAllocation } from '../../types'
 
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
@@ -142,8 +142,9 @@ export default function PayablesScreen() {
     const payableResult = await upsertPayable(toSave)
     if (!payableResult.ok) { setSnack({ open: true, msg: payableResult.error ?? 'Payment recorded but failed to update payable.', type: 'error' }); return }
 
+    const txnId = `txn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
     await addCompanyTransaction({
-      id: `txn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: txnId,
       accountId: payAccountId,
       type: 'debit',
       amount,
@@ -152,6 +153,15 @@ export default function PayablesScreen() {
       date: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     })
+
+    // One transaction row, allocated as company overhead (payables have no project link yet) (Finance Rule 3).
+    const allocation: TransactionAllocation = {
+      id: `alloc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      transactionId: txnId,
+      amount,
+      createdAt: new Date().toISOString(),
+    }
+    await addTransactionAllocations([allocation])
 
     setPayments(prev => [payment, ...prev])
     setPayables(prev => prev.map(p => (p.id === toSave.id ? toSave : p)))

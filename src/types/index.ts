@@ -491,6 +491,16 @@ export interface CompanyTransaction {
   createdAt: string
 }
 
+// Splits one CompanyTransaction across multiple projects instead of duplicating
+// the transaction row (Finance Rule 3: one cash movement = one transaction).
+export interface TransactionAllocation {
+  id: string
+  transactionId: string
+  projectId?: string
+  amount: number
+  createdAt: string
+}
+
 // ─── Finance: Receivables & Payables ────────────────────────────────────────
 export type PaymentMilestoneStatus = 'pending' | 'invoiced' | 'partial' | 'received' | 'overdue'
 

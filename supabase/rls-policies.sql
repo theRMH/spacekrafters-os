@@ -339,6 +339,11 @@ CREATE POLICY "authenticated select company transactions" ON sks_company_transac
 CREATE POLICY "authenticated write company transactions" ON sks_company_transactions
   FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner') OR sks_has_role('accounts'));
 
+CREATE POLICY "authenticated select transaction allocations" ON sks_transaction_allocations
+  FOR SELECT TO authenticated USING (sks_has_role('owner') OR sks_has_role('accounts'));
+CREATE POLICY "authenticated write transaction allocations" ON sks_transaction_allocations
+  FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner') OR sks_has_role('accounts'));
+
 -- ─── sks_payment_milestones / sks_receipts / sks_payables / sks_payments ────
 CREATE POLICY "authenticated select payment milestones on visible projects" ON sks_payment_milestones
   FOR SELECT TO authenticated USING (sks_can_see_project(project_id));

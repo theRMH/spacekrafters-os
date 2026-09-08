@@ -7,9 +7,9 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllProjects } from '../../services/projectService'
-import { getAllCompanyAccounts, addCompanyTransaction } from '../../services/companyAccountService'
+import { getAllCompanyAccounts, addCompanyTransaction, addTransactionAllocations } from '../../services/companyAccountService'
 import { getAllPaymentMilestones, upsertPaymentMilestone, getAllReceipts, addReceipt } from '../../services/financeService'
-import type { Project, CompanyAccount, PaymentMilestone, Receipt } from '../../types'
+import type { Project, CompanyAccount, PaymentMilestone, Receipt, TransactionAllocation } from '../../types'
 
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
@@ -140,8 +140,9 @@ export default function ReceivablesScreen() {
     const msResult = await upsertPaymentMilestone(toSave)
     if (!msResult.ok) { setSnack({ open: true, msg: msResult.error ?? 'Receipt recorded but failed to update milestone.', type: 'error' }); return }
 
+    const txnId = `txn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
     await addCompanyTransaction({
-      id: `txn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: txnId,
       accountId: receiptAccountId,
       type: 'credit',
       amount,
@@ -150,6 +151,16 @@ export default function ReceivablesScreen() {
       date: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     })
+
+    // One transaction row, allocated to the milestone's project (Finance Rule 3).
+    const allocation: TransactionAllocation = {
+      id: `alloc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      transactionId: txnId,
+      projectId: selected.projectId,
+      amount,
+      createdAt: new Date().toISOString(),
+    }
+    await addTransactionAllocations([allocation])
 
     setReceipts(prev => [receipt, ...prev])
     setMilestones(prev => prev.map(m => (m.id === toSave.id ? toSave : m)))

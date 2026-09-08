@@ -7,7 +7,8 @@ import { Snackbar } from '../../components/feedback/Snackbar'
 import {
   getAllCompanyAccounts, upsertCompanyAccount, getAllCompanyTransactions,
 } from '../../services/companyAccountService'
-import type { CompanyAccount, CompanyAccountType, CompanyTransaction } from '../../types'
+import { getAllPaymentMilestones, getAllPayables } from '../../services/financeService'
+import type { CompanyAccount, CompanyAccountType, CompanyTransaction, PaymentMilestone, Payable } from '../../types'
 
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
@@ -46,6 +47,8 @@ const label = 'block text-xs font-semibold text-slate-500 mb-1'
 export default function CompanyAccountsScreen() {
   const [accounts, setAccounts] = useState<CompanyAccount[]>([])
   const [transactions, setTransactions] = useState<CompanyTransaction[]>([])
+  const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
+  const [payables, setPayables] = useState<Payable[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const [selected, setSelected] = useState<CompanyAccount | null>(null)
@@ -56,8 +59,8 @@ export default function CompanyAccountsScreen() {
   useEffect(() => {
     async function load() {
       setIsLoading(true)
-      const [a, t] = await Promise.all([getAllCompanyAccounts(), getAllCompanyTransactions()])
-      setAccounts(a); setTransactions(t)
+      const [a, t, m, p] = await Promise.all([getAllCompanyAccounts(), getAllCompanyTransactions(), getAllPaymentMilestones(), getAllPayables()])
+      setAccounts(a); setTransactions(t); setMilestones(m); setPayables(p)
       setIsLoading(false)
     }
     load()
@@ -95,6 +98,14 @@ export default function CompanyAccountsScreen() {
   }
 
   const totalBalance = accounts.reduce((sum, a) => sum + accountBalance(a, transactions), 0)
+  const outstandingReceivables = milestones.reduce((sum, m) => sum + (m.amount - m.receivedAmount), 0)
+  const outstandingPayables = payables.reduce((sum, p) => sum + (p.amount - p.paidAmount), 0)
+  const now = new Date()
+  const monthTransactions = transactions.filter(t => {
+    const d = new Date(t.date)
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  })
+  const monthNetCashflow = monthTransactions.reduce((sum, t) => sum + (t.type === 'credit' ? t.amount : -t.amount), 0)
   const selTransactions = selected ? transactions.filter(t => t.accountId === selected.id).sort((a, b) => b.date.localeCompare(a.date)) : []
 
   return (
@@ -112,6 +123,27 @@ export default function CompanyAccountsScreen() {
           </PermissionGate>
         </div>
         <p className="text-xs text-slate-400">Total balance: <span className="font-bold text-slate-700">{fmtCurrency(totalBalance)}</span></p>
+      </div>
+
+      <div className="px-4 pt-4 grid grid-cols-2 gap-2.5">
+        <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+          <p className="text-[11px] text-slate-400 mb-0.5">Cash on Hand</p>
+          <p className="text-base font-extrabold text-slate-800">{fmtCurrency(totalBalance)}</p>
+        </div>
+        <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+          <p className="text-[11px] text-slate-400 mb-0.5">This Month Net</p>
+          <p className={`text-base font-extrabold ${monthNetCashflow >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            {monthNetCashflow >= 0 ? '+' : ''}{fmtCurrency(monthNetCashflow)}
+          </p>
+        </div>
+        <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+          <p className="text-[11px] text-slate-400 mb-0.5">Outstanding Receivables</p>
+          <p className="text-base font-extrabold text-slate-800">{fmtCurrency(outstandingReceivables)}</p>
+        </div>
+        <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+          <p className="text-[11px] text-slate-400 mb-0.5">Outstanding Payables</p>
+          <p className="text-base font-extrabold text-slate-800">{fmtCurrency(outstandingPayables)}</p>
+        </div>
       </div>
 
       <div className="px-4 pt-4 space-y-2.5">

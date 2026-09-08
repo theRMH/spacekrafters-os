@@ -9,8 +9,8 @@ import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllProjects } from '../../services/projectService'
 import { getAllExpenseRequests, upsertExpenseRequest } from '../../services/expenseService'
-import { getAllCompanyAccounts, addCompanyTransaction } from '../../services/companyAccountService'
-import type { Project, ExpenseRequest, CompanyAccount, CompanyTransaction } from '../../types'
+import { getAllCompanyAccounts, addCompanyTransaction, addTransactionAllocations } from '../../services/companyAccountService'
+import type { Project, ExpenseRequest, CompanyAccount, CompanyTransaction, TransactionAllocation } from '../../types'
 
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
@@ -143,6 +143,16 @@ export default function ExpenseRequestScreen() {
     }
     const txnResult = await addCompanyTransaction(txn)
     if (!txnResult.ok) { setSnack({ open: true, msg: txnResult.error ?? 'Failed to record payment.', type: 'error' }); return }
+
+    // One transaction row, allocated to the expense's project (Finance Rule 3).
+    const allocation: TransactionAllocation = {
+      id: `alloc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      transactionId: txn.id,
+      projectId: selected.projectId,
+      amount: selected.amount,
+      createdAt: new Date().toISOString(),
+    }
+    await addTransactionAllocations([allocation])
 
     const toSave: ExpenseRequest = {
       ...selected, status: 'paid', paidAmount: selected.amount, paidAt: new Date().toISOString(),
