@@ -150,6 +150,13 @@ export default function LeadDetailScreen() {
               <Phone size={16} /> Call {lead.name.split(' ')[0]}
             </a>
 
+            {can('convert_lead') && lead.status === 'won' && (
+              <button onClick={() => navigate(`/projects?leadId=${lead.id}`)}
+                className="w-full py-3.5 rounded-xl bg-indigo-600 text-white text-sm font-bold active:bg-indigo-700">
+                Convert to Project
+              </button>
+            )}
+
             {can('edit_lead') && lead.status !== 'won' && lead.status !== 'lost' && (
               <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-2.5">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status Actions</p>

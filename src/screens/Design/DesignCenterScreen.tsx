@@ -9,7 +9,8 @@ import { StatusBadge } from '../../components/badges/StatusBadge'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { getAllProjects } from '../../services/projectService'
 import { getAllDesignPackages, upsertDesignPackage, getAllDesignVersions, addDesignVersion } from '../../services/designService'
-import type { Project, DesignPackage, DesignPackageStatus, DesignVersion } from '../../types'
+import { addAuditLog } from '../../services/auditLogService'
+import type { Project, DesignPackage, DesignPackageStatus, DesignVersion, AuditLog } from '../../types'
 
 const STATUS_OPTIONS: { value: DesignPackageStatus; label: string }[] = [
   { value: 'in_progress',       label: 'In Progress' },
@@ -90,6 +91,7 @@ export default function DesignCenterScreen() {
     const pkg: DesignPackage = {
       id: `dspkg_${Date.now()}`,
       projectId,
+      quotationId: projects.find(p => p.id === projectId)?.quotationId,
       name: name.trim(),
       status: 'in_progress',
       notes: notes.trim() || undefined,
@@ -132,6 +134,18 @@ export default function DesignCenterScreen() {
     const updated: DesignPackage = { ...selected, status, updatedAt: new Date().toISOString() }
     const result = await upsertDesignPackage(updated)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update status.', type: 'error' }); return }
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: updated.projectId,
+        action: 'design_status_changed',
+        description: `Design package "${updated.name}" status changed to "${status}".`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     setPackages(prev => prev.map(p => (p.id === updated.id ? updated : p)))
     setSelected(updated)
     setSnack({ open: true, msg: 'Status updated.', type: 'success' })
@@ -228,7 +242,8 @@ export default function DesignCenterScreen() {
                       <span className="text-[11px] text-slate-400">{fmtDateTime(v.createdAt)}</span>
                     </div>
                     {v.note && <p className="text-[11px] text-slate-500 mt-1">{v.note}</p>}
-                    <p className="text-[11px] text-slate-400 mt-1">{v.files.length} file{v.files.length !== 1 ? 's' : ''} · by {v.createdBy}</p>
+                    <p className="text-[11px] text-slate-400 mt-1 mb-1.5">by {v.createdBy}</p>
+                    <MultiFileUploadField label="" files={v.files} onChange={() => {}} />
                   </div>
                 ))}
                 {versionsFor(selected.id).length === 0 && (

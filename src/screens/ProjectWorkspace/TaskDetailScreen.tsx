@@ -13,13 +13,15 @@ import {
   getAllTasks, upsertTask,
   getAllTaskDependencies, addTaskDependency, deleteTaskDependency,
 } from '../../services/taskService'
-import type { Task, TaskStatus, TaskDependency, ManagedUser } from '../../types'
+import { addAuditLog } from '../../services/auditLogService'
+import type { Task, TaskStatus, TaskDependency, ManagedUser, AuditLog } from '../../types'
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: 'not_started', label: 'Not Started' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'completed',   label: 'Completed' },
   { value: 'blocked',     label: 'Blocked' },
+  { value: 'awaiting_material', label: 'Awaiting Material' },
 ]
 
 function fmtDate(val?: string): string {
@@ -88,6 +90,18 @@ export default function TaskDetailScreen() {
     const updated: Task = { ...t, status, completedAt: status === 'completed' ? new Date().toISOString() : undefined, updatedAt: new Date().toISOString() }
     const result = await upsertTask(updated)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to update task.', type: 'error' }); return }
+    if (user && status === 'completed') {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: updated.projectId,
+        action: 'task_completed',
+        description: `Task "${updated.title}" marked completed.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     setTasks(prev => prev.map(x => (x.id === updated.id ? updated : x)))
   }
 
@@ -96,6 +110,18 @@ export default function TaskDetailScreen() {
     const updated: Task = { ...task, status: 'completed', completedAt: new Date().toISOString(), lateReason: lateReason.trim(), updatedAt: new Date().toISOString() }
     const result = await upsertTask(updated)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to update task.', type: 'error' }); return }
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: updated.projectId,
+        action: 'task_completed_late',
+        description: `Task "${updated.title}" marked completed late. Reason: ${lateReason.trim()}`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     setTasks(prev => prev.map(x => (x.id === updated.id ? updated : x)))
     setShowLateReasonDialog(false)
     setSnack({ open: true, msg: 'Task marked completed.', type: 'success' })

@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
+import { Dialog } from '../../components/feedback/Dialog'
 import {
-  getAllPersonalAccounts, upsertPersonalAccount,
-  getAllPersonalTransactions, addPersonalTransaction,
+  getAllPersonalAccounts, upsertPersonalAccount, deletePersonalAccount,
+  getAllPersonalTransactions, addPersonalTransaction, deletePersonalTransaction, updatePersonalTransactionStatus,
   getAllPersonalCategories, getAllPersonalSubcategories,
 } from '../../services/personalFinanceService'
+import { addAuditLog } from '../../services/auditLogService'
 import type {
-  PersonalAccount, PersonalAccountType, PersonalTransaction, PersonalTransactionType,
+  PersonalAccount, PersonalAccountType, PersonalTransaction, PersonalTransactionType, PersonalTransactionStatus,
   PersonalCategory, PersonalSubcategory,
 } from '../../types'
 
@@ -50,6 +53,16 @@ const TXN_TYPE_LABEL: Record<PersonalTransactionType, string> = Object.fromEntri
   TXN_TYPE_OPTIONS.map(o => [o.value, o.label])
 ) as Record<PersonalTransactionType, string>
 
+const STATUS_OPTIONS: { value: PersonalTransactionStatus; label: string }[] = [
+  { value: 'pending',    label: 'Pending' },
+  { value: 'cleared',    label: 'Cleared' },
+  { value: 'reconciled', label: 'Reconciled' },
+]
+const STATUS_LABEL: Record<PersonalTransactionStatus, string> = { pending: 'Pending', cleared: 'Cleared', reconciled: 'Reconciled' }
+const STATUS_TONE: Record<PersonalTransactionStatus, string> = {
+  pending: 'text-amber-600 bg-amber-50', cleared: 'text-slate-500 bg-slate-100', reconciled: 'text-emerald-600 bg-emerald-50',
+}
+
 // Real cash inflow to the account, vs. an outflow — used for balance math and
 // the amount sign on Transactions (kept separate from Income/Expense so
 // advances/loans/transfers/investments don't distort those, same split as
@@ -68,6 +81,7 @@ function emptyTransaction(accountId: string): PersonalTransaction {
     amount: 0,
     type: 'expense',
     source: 'manual',
+    status: 'pending',
     createdAt: new Date().toISOString(),
   }
 }
@@ -82,6 +96,7 @@ const inp = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 tex
 const label = 'block text-xs font-semibold text-slate-500 mb-1'
 
 export default function PersonalFinanceScreen() {
+  const { user } = useAuth()
   const [tab, setTab] = useState<'transactions' | 'accounts'>('transactions')
   const [accounts, setAccounts] = useState<PersonalAccount[]>([])
   const [transactions, setTransactions] = useState<PersonalTransaction[]>([])
@@ -91,13 +106,17 @@ export default function PersonalFinanceScreen() {
 
   const [filterAccountId, setFilterAccountId] = useState('')
   const [filterType, setFilterType] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
 
   const [showAccountForm, setShowAccountForm] = useState(false)
   const [accountForm, setAccountForm] = useState<PersonalAccount>(emptyAccount())
   const [selectedAccount, setSelectedAccount] = useState<PersonalAccount | null>(null)
+  const [showDeleteAccountDialog, setShowDeleteAccountDialog] = useState(false)
 
   const [showTxnForm, setShowTxnForm] = useState(false)
   const [txnForm, setTxnForm] = useState<PersonalTransaction>(emptyTransaction(''))
+  const [selectedTxn, setSelectedTxn] = useState<PersonalTransaction | null>(null)
+  const [showDeleteTxnDialog, setShowDeleteTxnDialog] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   useEffect(() => {
@@ -159,12 +178,63 @@ export default function PersonalFinanceScreen() {
     setSnack({ open: true, msg: 'Transaction added.', type: 'success' })
   }
 
+  async function confirmDeleteAccount() {
+    if (!selectedAccount) return
+    const result = await deletePersonalAccount(selectedAccount.id)
+    setShowDeleteAccountDialog(false)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete account.', type: 'error' }); return }
+    if (user) {
+      addAuditLog({
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: 'personal_account_deleted',
+        description: `Personal account "${selectedAccount.name}" deleted.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    setAccounts(prev => prev.filter(a => a.id !== selectedAccount.id))
+    setSelectedAccount(null)
+    setSnack({ open: true, msg: 'Account deleted.', type: 'success' })
+  }
+
+  async function confirmDeleteTxn() {
+    if (!selectedTxn) return
+    const result = await deletePersonalTransaction(selectedTxn.id)
+    setShowDeleteTxnDialog(false)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete transaction.', type: 'error' }); return }
+    if (user) {
+      addAuditLog({
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: 'personal_transaction_deleted',
+        description: `Personal transaction "${selectedTxn.narration || selectedTxn.payeePayer || TXN_TYPE_LABEL[selectedTxn.type]}" deleted.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    setTransactions(prev => prev.filter(t => t.id !== selectedTxn.id))
+    setSelectedTxn(null)
+    setSnack({ open: true, msg: 'Transaction deleted.', type: 'success' })
+  }
+
+  async function handleSetStatus(status: PersonalTransactionStatus) {
+    if (!selectedTxn) return
+    const result = await updatePersonalTransactionStatus(selectedTxn, status)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update status.', type: 'error' }); return }
+    const updated = { ...selectedTxn, status }
+    setTransactions(prev => prev.map(t => (t.id === updated.id ? updated : t)))
+    setSelectedTxn(updated)
+    setSnack({ open: true, msg: `Marked ${STATUS_LABEL[status]}.`, type: 'success' })
+  }
+
   const totalBalance = accounts.reduce((sum, a) => sum + accountBalance(a, transactions), 0)
   const subcategoriesForCategory = subcategories.filter(s => s.categoryId === txnForm.categoryId)
 
   const filteredTransactions = transactions
     .filter(t => !filterAccountId || t.accountId === filterAccountId)
     .filter(t => !filterType || t.type === filterType)
+    .filter(t => !filterStatus || t.status === filterStatus)
     .sort((a, b) => b.date.localeCompare(a.date))
 
   const selAccountTransactions = selectedAccount
@@ -212,10 +282,17 @@ export default function PersonalFinanceScreen() {
               {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
+          <div className="px-4 pt-2">
+            <select className={inp} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+              <option value="">All statuses</option>
+              {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
 
           <div className="px-4 pt-4 space-y-2.5">
             {!isLoading && filteredTransactions.map(t => (
-              <div key={t.id} className="bg-white rounded-xl p-3.5 border border-slate-100">
+              <button key={t.id} onClick={() => setSelectedTxn(t)}
+                className="w-full text-left bg-white rounded-xl p-3.5 border border-slate-100 active:bg-slate-50">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{t.narration || t.payeePayer || TXN_TYPE_LABEL[t.type]}</p>
@@ -225,10 +302,15 @@ export default function PersonalFinanceScreen() {
                     {INFLOW_TYPES.has(t.type) ? '+' : '−'}{fmtCurrency(t.amount)}
                   </span>
                 </div>
-                <span className="inline-block mt-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                  {TXN_TYPE_LABEL[t.type]}
-                </span>
-              </div>
+                <div className="flex gap-1.5 mt-1.5">
+                  <span className="inline-block text-[10px] font-bold uppercase tracking-wide text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                    {TXN_TYPE_LABEL[t.type]}
+                  </span>
+                  <span className={`inline-block text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${STATUS_TONE[t.status]}`}>
+                    {STATUS_LABEL[t.status]}
+                  </span>
+                </div>
+              </button>
             ))}
             {!isLoading && filteredTransactions.length === 0 && (
               <p className="text-sm text-slate-400 text-center py-16">No transactions yet.</p>
@@ -291,7 +373,8 @@ export default function PersonalFinanceScreen() {
             <div className="space-y-2">
               {selAccountTransactions.length === 0 && <p className="text-sm text-slate-400 text-center py-10">No transactions yet.</p>}
               {selAccountTransactions.map(t => (
-                <div key={t.id} className="bg-white rounded-xl p-3 border border-slate-100 flex items-center justify-between">
+                <button key={t.id} onClick={() => setSelectedTxn(t)}
+                  className="w-full text-left bg-white rounded-xl p-3 border border-slate-100 flex items-center justify-between active:bg-slate-50">
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{t.narration || t.payeePayer || TXN_TYPE_LABEL[t.type]}</p>
                     <p className="text-[11px] text-slate-400">{fmtDate(t.date)}{t.reference ? ` · ${t.reference}` : ''}</p>
@@ -299,9 +382,15 @@ export default function PersonalFinanceScreen() {
                   <span className={`text-sm font-bold ${INFLOW_TYPES.has(t.type) ? 'text-emerald-600' : 'text-red-600'}`}>
                     {INFLOW_TYPES.has(t.type) ? '+' : '−'}{fmtCurrency(t.amount)}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
+            {user?.role === 'owner' && (
+              <button onClick={() => setShowDeleteAccountDialog(true)}
+                className="w-full text-center text-xs font-semibold text-red-500 py-2">
+                Delete Account
+              </button>
+            )}
           </div>
         )}
       </BottomSheet>
@@ -363,6 +452,62 @@ export default function PersonalFinanceScreen() {
           </button>
         </div>
       </BottomSheet>
+
+      {/* Transaction detail */}
+      <BottomSheet isOpen={!!selectedTxn} onClose={() => setSelectedTxn(null)} title="Transaction">
+        {selectedTxn && (
+          <div className="space-y-4 pb-4">
+            <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">Date</span><span className="font-semibold text-slate-800">{fmtDate(selectedTxn.date)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Account</span><span className="font-semibold text-slate-800">{accounts.find(a => a.id === selectedTxn.accountId)?.name ?? '—'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Type</span><span className="font-semibold text-slate-800">{TXN_TYPE_LABEL[selectedTxn.type]}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Amount</span><span className="font-semibold text-slate-800">{fmtCurrency(selectedTxn.amount)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Payee/Payer</span><span className="font-semibold text-slate-800">{selectedTxn.payeePayer || '—'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Narration</span><span className="font-semibold text-slate-800 text-right">{selectedTxn.narration || '—'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Reference</span><span className="font-semibold text-slate-800">{selectedTxn.reference || '—'}</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-500">Status</span><span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${STATUS_TONE[selectedTxn.status]}`}>{STATUS_LABEL[selectedTxn.status]}</span></div>
+            </div>
+            {selectedTxn.status === 'pending' && (
+              <button onClick={() => handleSetStatus('cleared')}
+                className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold active:bg-slate-200">
+                Mark Cleared
+              </button>
+            )}
+            {selectedTxn.status === 'cleared' && (
+              <button onClick={() => handleSetStatus('reconciled')}
+                className="w-full py-2.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold active:bg-emerald-100">
+                Mark Reconciled
+              </button>
+            )}
+            {user?.role === 'owner' && (
+              <button onClick={() => setShowDeleteTxnDialog(true)}
+                className="w-full text-center text-xs font-semibold text-red-500 py-2">
+                Delete Transaction
+              </button>
+            )}
+          </div>
+        )}
+      </BottomSheet>
+
+      <Dialog
+        isOpen={showDeleteAccountDialog}
+        onClose={() => setShowDeleteAccountDialog(false)}
+        title="Delete Account"
+        message="Are you sure you want to delete this account? This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDeleteAccount}
+        variant="danger"
+      />
+
+      <Dialog
+        isOpen={showDeleteTxnDialog}
+        onClose={() => setShowDeleteTxnDialog(false)}
+        title="Delete Transaction"
+        message="Are you sure you want to delete this transaction? This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDeleteTxn}
+        variant="danger"
+      />
 
       <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
     </div>

@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
+import { Dialog } from '../../components/feedback/Dialog'
 import {
-  getAllCompanyAccounts, upsertCompanyAccount, getAllCompanyTransactions,
+  getAllCompanyAccounts, upsertCompanyAccount, deleteCompanyAccount, getAllCompanyTransactions,
 } from '../../services/companyAccountService'
 import { getAllPaymentMilestones, getAllPayables } from '../../services/financeService'
-import type { CompanyAccount, CompanyAccountType, CompanyTransaction, PaymentMilestone, Payable } from '../../types'
+import { addAuditLog } from '../../services/auditLogService'
+import type { CompanyAccount, CompanyAccountType, CompanyTransaction, PaymentMilestone, Payable, AuditLog } from '../../types'
 
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
@@ -45,6 +48,7 @@ const inp = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 tex
 const label = 'block text-xs font-semibold text-slate-500 mb-1'
 
 export default function CompanyAccountsScreen() {
+  const { user } = useAuth()
   const [accounts, setAccounts] = useState<CompanyAccount[]>([])
   const [transactions, setTransactions] = useState<CompanyTransaction[]>([])
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
@@ -54,6 +58,7 @@ export default function CompanyAccountsScreen() {
   const [selected, setSelected] = useState<CompanyAccount | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<CompanyAccount>(emptyAccount())
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   useEffect(() => {
@@ -83,11 +88,23 @@ export default function CompanyAccountsScreen() {
       setSnack({ open: true, msg: 'Account name is required.', type: 'error' })
       return
     }
+    const isNew = !accounts.some(a => a.id === form.id)
     const toSave: CompanyAccount = { ...form, updatedAt: new Date().toISOString() }
     const result = await upsertCompanyAccount(toSave)
     if (!result.ok) {
       setSnack({ open: true, msg: result.error ?? 'Failed to save account.', type: 'error' })
       return
+    }
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: isNew ? 'company_account_created' : 'company_account_updated',
+        description: `Company account "${toSave.name}" ${isNew ? 'created' : 'updated'}.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
     }
     setAccounts(prev => {
       const exists = prev.some(a => a.id === toSave.id)
@@ -95,6 +112,26 @@ export default function CompanyAccountsScreen() {
     })
     setShowForm(false)
     setSnack({ open: true, msg: 'Account saved.', type: 'success' })
+  }
+
+  async function confirmDelete() {
+    if (!selected) return
+    const result = await deleteCompanyAccount(selected.id)
+    setShowDeleteDialog(false)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete account.', type: 'error' }); return }
+    if (user) {
+      addAuditLog({
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: 'company_account_deleted',
+        description: `Company account "${selected.name}" deleted.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    setAccounts(prev => prev.filter(a => a.id !== selected.id))
+    setSelected(null)
+    setSnack({ open: true, msg: 'Account deleted.', type: 'success' })
   }
 
   const totalBalance = accounts.reduce((sum, a) => sum + accountBalance(a, transactions), 0)
@@ -196,6 +233,13 @@ export default function CompanyAccountsScreen() {
               <p className="text-[11px] text-slate-400 mt-1">Opening: {fmtCurrency(selected.openingBalance)}</p>
             </div>
 
+            <PermissionGate permission="manage_company_accounts">
+              <button onClick={() => setShowDeleteDialog(true)}
+                className="w-full text-center text-xs font-semibold text-red-500 py-2">
+                Delete Account
+              </button>
+            </PermissionGate>
+
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Transaction History</h3>
             <div className="space-y-2">
               {selTransactions.length === 0 && <p className="text-sm text-slate-400 text-center py-10">No transactions yet.</p>}
@@ -214,6 +258,16 @@ export default function CompanyAccountsScreen() {
           </div>
         )}
       </BottomSheet>
+
+      <Dialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        title="Delete Account"
+        message="Are you sure you want to delete this account? This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        variant="danger"
+      />
 
       <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
     </div>

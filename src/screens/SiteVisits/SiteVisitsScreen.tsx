@@ -5,11 +5,14 @@ import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllSiteVisits, upsertSiteVisit, deleteSiteVisit } from '../../services/siteVisitService'
-import type { SiteVisit, SiteVisitRoom, SiteVisitChecklistItem } from '../../types'
+import { getAllAppointments } from '../../services/appointmentService'
+import { addAuditLog } from '../../services/auditLogService'
+import type { SiteVisit, SiteVisitRoom, SiteVisitChecklistItem, Appointment, AuditLog } from '../../types'
 
 const DEFAULT_CHECKLIST_LABELS = [
   'Electrical points marked',
@@ -37,6 +40,7 @@ export default function SiteVisitsScreen() {
   const { leads } = useCRM()
 
   const [visits, setVisits] = useState<SiteVisit[]>([])
+  const [appointments, setAppointments] = useState<Appointment[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const [search, setSearch] = useState('')
@@ -47,6 +51,7 @@ export default function SiteVisitsScreen() {
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   const [leadId, setLeadId] = useState('')
+  const [appointmentId, setAppointmentId] = useState('')
   const [visitDate, setVisitDate] = useState('')
   const [rooms, setRooms] = useState<SiteVisitRoom[]>([newRoom()])
   const [checklist, setChecklist] = useState<SiteVisitChecklistItem[]>(defaultChecklist())
@@ -55,7 +60,9 @@ export default function SiteVisitsScreen() {
 
   async function refresh() {
     setIsLoading(true)
-    setVisits(await getAllSiteVisits())
+    const [v, a] = await Promise.all([getAllSiteVisits(), getAllAppointments()])
+    setVisits(v)
+    setAppointments(a)
     setIsLoading(false)
   }
 
@@ -66,7 +73,7 @@ export default function SiteVisitsScreen() {
   }
 
   function resetForm() {
-    setLeadId(''); setVisitDate(''); setRooms([newRoom()]); setChecklist(defaultChecklist())
+    setLeadId(''); setAppointmentId(''); setVisitDate(''); setRooms([newRoom()]); setChecklist(defaultChecklist())
     setNotes(''); setFormError('')
   }
 
@@ -76,12 +83,27 @@ export default function SiteVisitsScreen() {
   }
 
   function openEdit(visit: SiteVisit) {
-    setLeadId(visit.leadId); setVisitDate(visit.visitDate.slice(0, 10))
+    setLeadId(visit.leadId); setAppointmentId(visit.appointmentId ?? ''); setVisitDate(visit.visitDate.slice(0, 10))
     setRooms(visit.rooms.length ? visit.rooms : [newRoom()])
     setChecklist(visit.checklist.length ? visit.checklist : defaultChecklist())
     setNotes(visit.notes ?? '')
     setFormError('')
     setShowEdit(true)
+  }
+
+  function handleLeadChange(id: string) {
+    setLeadId(id)
+    setAppointmentId('')
+  }
+
+  function handleAppointmentPick(id: string) {
+    setAppointmentId(id)
+    const appt = appointments.find(a => a.id === id)
+    if (appt) setVisitDate(appt.scheduledAt.slice(0, 10))
+  }
+
+  function appointmentsForLead(id: string): Appointment[] {
+    return appointments.filter(a => a.leadId === id)
   }
 
   function updateRoom(id: string, patch: Partial<SiteVisitRoom>) {
@@ -105,7 +127,7 @@ export default function SiteVisitsScreen() {
     const now = new Date().toISOString()
     const visit: SiteVisit = {
       id: `sv_${Date.now()}`,
-      leadId, visitDate: new Date(visitDate).toISOString(),
+      leadId, appointmentId: appointmentId || undefined, visitDate: new Date(visitDate).toISOString(),
       rooms: validRooms, checklist, notes: notes.trim() || undefined,
       createdAt: now, updatedAt: now,
     }
@@ -124,7 +146,7 @@ export default function SiteVisitsScreen() {
       return
     }
     const updated: SiteVisit = {
-      ...selected, leadId, visitDate: new Date(visitDate).toISOString(),
+      ...selected, leadId, appointmentId: appointmentId || undefined, visitDate: new Date(visitDate).toISOString(),
       rooms: validRooms, checklist, notes: notes.trim() || undefined,
       updatedAt: new Date().toISOString(),
     }
@@ -141,6 +163,17 @@ export default function SiteVisitsScreen() {
     const result = await deleteSiteVisit(selected.id)
     setShowDeleteDialog(false)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete site visit.', type: 'error' }); return }
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: 'site_visit_deleted',
+        description: `Site visit for "${leadName(selected.leadId)}" on ${fmtDate(selected.visitDate)} deleted.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     setVisits(prev => prev.filter(v => v.id !== selected.id))
     setSelected(null)
     setSnack({ open: true, msg: 'Site visit deleted.', type: 'success' })
@@ -216,6 +249,9 @@ export default function SiteVisitsScreen() {
                     <p className="text-sm font-bold text-slate-800 mb-1">{room.name}</p>
                     {room.measurements && <p className="text-xs text-slate-600 mb-1">📏 {room.measurements}</p>}
                     {room.notes && <p className="text-xs text-slate-500">{room.notes}</p>}
+                    {room.photos && room.photos.length > 0 && (
+                      <MultiFileUploadField label="Room Photos" files={room.photos} onChange={() => {}} accept="image/*" uploadButtonLabel="Upload Photo" />
+                    )}
                   </div>
                 ))}
               </div>
@@ -261,12 +297,24 @@ export default function SiteVisitsScreen() {
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead *</label>
-            <select value={leadId} onChange={e => setLeadId(e.target.value)} disabled={showEdit}
+            <select value={leadId} onChange={e => handleLeadChange(e.target.value)} disabled={showEdit}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 disabled:opacity-60">
               <option value="">Select a lead…</option>
               {leads.map(l => <option key={l.id} value={l.id}>{l.name} — {l.city}</option>)}
             </select>
           </div>
+          {leadId && appointmentsForLead(leadId).length > 0 && (
+            <div>
+              <label className="text-xs font-semibold text-slate-500 mb-1 block">Linked Appointment</label>
+              <select value={appointmentId} onChange={e => handleAppointmentPick(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+                <option value="">None</option>
+                {appointmentsForLead(leadId).map(a => (
+                  <option key={a.id} value={a.id}>{fmtDate(a.scheduledAt)} — {a.status}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Visit Date *</label>
             <input type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)}
@@ -298,6 +346,7 @@ export default function SiteVisitsScreen() {
                   <input value={room.notes ?? ''} onChange={e => updateRoom(room.id, { notes: e.target.value })}
                     placeholder="Notes (optional)"
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                  <MultiFileUploadField label="Room Photos" files={room.photos ?? []} onChange={files => updateRoom(room.id, { photos: files })} accept="image/*" uploadButtonLabel="Upload Photo" />
                 </div>
               ))}
             </div>

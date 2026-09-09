@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Upload } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllCompanyAccounts, addCompanyTransaction, addTransactionAllocations } from '../../services/companyAccountService'
-import { getAllPersonalAccounts, addPersonalTransaction } from '../../services/personalFinanceService'
-import type { CompanyAccount, CompanyTransaction, CompanyTransactionType, TransactionAllocation, PersonalAccount, PersonalTransaction } from '../../types'
+import { getAllPersonalAccounts, addPersonalTransaction, getAllPersonalCategories, getAllPersonalSubcategories } from '../../services/personalFinanceService'
+import { addAuditLog } from '../../services/auditLogService'
+import type { CompanyAccount, CompanyTransaction, CompanyTransactionType, CompanyTransactionCategory, TransactionAllocation, PersonalAccount, PersonalTransaction, PersonalTransactionType, PersonalCategory, PersonalSubcategory, AuditLog } from '../../types'
 
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
@@ -19,8 +21,23 @@ interface ParsedRow {
   amount: number
   type: CompanyTransactionType
   category: string
+  companyCategory?: CompanyTransactionCategory
+  personalType: PersonalTransactionType
+  personalCategoryId?: string
+  personalSubcategoryId?: string
   include: boolean
 }
+
+const PERSONAL_TYPE_OPTIONS: { value: PersonalTransactionType; label: string }[] = [
+  { value: 'income',           label: 'Income' },
+  { value: 'expense',          label: 'Expense' },
+  { value: 'transfer',         label: 'Transfer' },
+  { value: 'investment',       label: 'Investment' },
+  { value: 'advance_received', label: 'Advance Received' },
+  { value: 'advance_paid',     label: 'Advance Paid' },
+  { value: 'loan_received',    label: 'Loan Received' },
+  { value: 'loan_paid',        label: 'Loan Paid' },
+]
 
 const CLASSIFY_RULES: { keyword: string; category: string }[] = [
   { keyword: 'salary', category: 'Salary' },
@@ -84,6 +101,7 @@ function parseCSV(text: string): ParsedRow[] {
       amount,
       type,
       category: classify(description),
+      personalType: type === 'credit' ? 'income' : 'expense',
       include: true,
     })
   }
@@ -96,9 +114,12 @@ const label = 'block text-xs font-semibold text-slate-500 mb-1'
 type ImportScope = 'company' | 'personal'
 
 export default function StatementImportScreen() {
+  const { user } = useAuth()
   const [scope, setScope] = useState<ImportScope>('company')
   const [accounts, setAccounts] = useState<CompanyAccount[]>([])
   const [personalAccounts, setPersonalAccounts] = useState<PersonalAccount[]>([])
+  const [personalCategories, setPersonalCategories] = useState<PersonalCategory[]>([])
+  const [personalSubcategories, setPersonalSubcategories] = useState<PersonalSubcategory[]>([])
   const [accountId, setAccountId] = useState('')
   const [rows, setRows] = useState<ParsedRow[]>([])
   const [fileName, setFileName] = useState('')
@@ -108,6 +129,8 @@ export default function StatementImportScreen() {
   useEffect(() => {
     getAllCompanyAccounts().then(setAccounts)
     getAllPersonalAccounts().then(setPersonalAccounts)
+    getAllPersonalCategories().then(setPersonalCategories)
+    getAllPersonalSubcategories().then(setPersonalSubcategories)
   }, [])
 
   function handleScopeChange(next: ImportScope) {
@@ -149,6 +172,7 @@ export default function StatementImportScreen() {
     }
     setIsPosting(true)
     let failed = 0
+    let allocationWarnings = 0
     for (const row of includedRows) {
       if (scope === 'personal') {
         const txn: PersonalTransaction = {
@@ -156,9 +180,12 @@ export default function StatementImportScreen() {
           accountId,
           date: new Date(row.date).toISOString() || new Date().toISOString(),
           amount: row.amount,
-          type: row.type === 'credit' ? 'income' : 'expense',
+          type: row.personalType,
+          categoryId: row.personalCategoryId,
+          subcategoryId: row.personalSubcategoryId,
           narration: `${row.category}: ${row.description}`,
           source: 'imported',
+          status: 'cleared',
           createdAt: new Date().toISOString(),
         }
         const result = await addPersonalTransaction(txn)
@@ -169,6 +196,7 @@ export default function StatementImportScreen() {
         id: `txn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         accountId,
         type: row.type,
+        category: row.companyCategory,
         amount: row.amount,
         description: `${row.category}: ${row.description}`,
         date: new Date(row.date).toISOString() || new Date().toISOString(),
@@ -186,12 +214,29 @@ export default function StatementImportScreen() {
         amount: row.amount,
         createdAt: new Date().toISOString(),
       }
-      await addTransactionAllocations([allocation])
+      const allocResult = await addTransactionAllocations([allocation])
+      if (!allocResult.ok) allocationWarnings++
     }
     setIsPosting(false)
     const destination = scope === 'personal' ? 'Personal Finance' : 'Company Accounts'
+    const postedCount = includedRows.length - failed
+    if (user && postedCount > 0) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: 'statement_import_posted',
+        description: `Imported statement "${fileName}": ${postedCount} transaction${postedCount > 1 ? 's' : ''} posted to ${destination}.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     if (failed > 0) {
       setSnack({ open: true, msg: `${includedRows.length - failed} of ${includedRows.length} rows posted. ${failed} failed.`, type: 'error' })
+    } else if (allocationWarnings > 0) {
+      setSnack({ open: true, msg: `${includedRows.length} transactions posted to ${destination}, but ${allocationWarnings} allocation${allocationWarnings > 1 ? 's' : ''} failed — contact an admin to allocate manually.`, type: 'error' })
+      setRows([])
+      setFileName('')
     } else {
       setSnack({ open: true, msg: `${includedRows.length} transactions posted to ${destination}.`, type: 'success' })
       setRows([])
@@ -262,8 +307,42 @@ export default function StatementImportScreen() {
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-400 mb-2">{row.date}</p>
-                        <input className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                          value={row.category} onChange={e => updateRow(row.key, { category: e.target.value })} placeholder="Category" />
+                        <div className="flex gap-1.5">
+                          <input className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                            value={row.category} onChange={e => updateRow(row.key, { category: e.target.value })} placeholder="Category" />
+                          {scope === 'company' && (
+                            <select className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-500"
+                              value={row.companyCategory ?? ''}
+                              onChange={e => updateRow(row.key, { companyCategory: (e.target.value || undefined) as CompanyTransactionCategory | undefined })}>
+                              <option value="">Income/Expense</option>
+                              <option value="transfer">Transfer</option>
+                              <option value="owner_funding">Owner Funding</option>
+                            </select>
+                          )}
+                        </div>
+                        {scope === 'personal' && (
+                          <div className="flex gap-1.5 mt-1.5">
+                            <select className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-500"
+                              value={row.personalType}
+                              onChange={e => updateRow(row.key, { personalType: e.target.value as PersonalTransactionType })}>
+                              {PERSONAL_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                            <select className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-500"
+                              value={row.personalCategoryId ?? ''}
+                              onChange={e => updateRow(row.key, { personalCategoryId: e.target.value || undefined, personalSubcategoryId: undefined })}>
+                              <option value="">No category</option>
+                              {personalCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            {row.personalCategoryId && personalSubcategories.some(s => s.categoryId === row.personalCategoryId) && (
+                              <select className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-500"
+                                value={row.personalSubcategoryId ?? ''}
+                                onChange={e => updateRow(row.key, { personalSubcategoryId: e.target.value || undefined })}>
+                                <option value="">No subcategory</option>
+                                {personalSubcategories.filter(s => s.categoryId === row.personalCategoryId).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                              </select>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

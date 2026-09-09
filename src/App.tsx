@@ -26,6 +26,7 @@ import DailyDiaryScreen from './screens/DailyDiary/DailyDiaryScreen'
 import TasksScreen from './screens/Tasks/TasksScreen'
 import GanttListScreen from './screens/Gantt/GanttListScreen'
 import VendorMasterScreen from './screens/Procurement/VendorMasterScreen'
+import ClientMasterScreen from './screens/Clients/ClientMasterScreen'
 import ProcurementScreen from './screens/Procurement/ProcurementScreen'
 import ExpenseRequestScreen from './screens/Expenses/ExpenseRequestScreen'
 import CompanyAccountsScreen from './screens/Finance/CompanyAccountsScreen'
@@ -37,6 +38,7 @@ import AuditLogScreen from './screens/Settings/AuditLogScreen'
 import PersonalFinanceScreen from './screens/PersonalFinance/PersonalFinanceScreen'
 import PersonalCategoriesScreen from './screens/PersonalFinance/PersonalCategoriesScreen'
 import PersonalCommitmentsScreen from './screens/PersonalFinance/PersonalCommitmentsScreen'
+import PersonalInvestmentsScreen from './screens/PersonalFinance/PersonalInvestmentsScreen'
 import PersonalPlansScreen from './screens/PersonalFinance/PersonalPlansScreen'
 import PersonalReportsScreen from './screens/PersonalFinance/PersonalReportsScreen'
 import PersonalCalendarScreen from './screens/PersonalFinance/PersonalCalendarScreen'
@@ -208,6 +210,14 @@ function AuthedRoutes() {
         }
       />
       <Route
+        path="/clients"
+        element={
+          <ProtectedRoute screenPath="clients">
+            <AppShell><ClientMasterScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/expenses"
         element={
           <ProtectedRoute screenPath="expenses">
@@ -316,6 +326,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="personal-commitments">
             <AppShell><PersonalCommitmentsScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/personal-investments"
+        element={
+          <ProtectedRoute screenPath="personal-investments">
+            <AppShell><PersonalInvestmentsScreen /></AppShell>
           </ProtectedRoute>
         }
       />

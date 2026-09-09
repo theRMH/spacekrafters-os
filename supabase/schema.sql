@@ -211,6 +211,28 @@ CREATE TABLE IF NOT EXISTS sks_vendors (
 );
 ALTER TABLE sks_vendors ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS sks_clients (
+  id         TEXT        PRIMARY KEY,
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE sks_clients ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE sks_projects ADD COLUMN IF NOT EXISTS client_id TEXT REFERENCES sks_clients(id);
+CREATE INDEX IF NOT EXISTS sks_projects_client_id_idx ON sks_projects(client_id);
+
+CREATE TABLE IF NOT EXISTS sks_punch_list_items (
+  id         TEXT        PRIMARY KEY,
+  project_id TEXT        NOT NULL REFERENCES sks_projects(id) ON DELETE CASCADE,
+  status     TEXT        NOT NULL DEFAULT 'open',
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS sks_punch_list_items_project_id_idx ON sks_punch_list_items(project_id);
+ALTER TABLE sks_punch_list_items ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS sks_purchase_requests (
   id         TEXT        PRIMARY KEY,
   project_id TEXT        REFERENCES sks_projects(id) ON DELETE CASCADE,
@@ -334,14 +356,17 @@ CREATE INDEX IF NOT EXISTS sks_receipts_project_id_idx ON sks_receipts(project_i
 ALTER TABLE sks_receipts ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS sks_payables (
-  id         TEXT        PRIMARY KEY,
-  vendor_id  TEXT        REFERENCES sks_vendors(id),
-  status     TEXT        NOT NULL DEFAULT '',
-  data       JSONB       NOT NULL DEFAULT '{}',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id             TEXT        PRIMARY KEY,
+  vendor_id      TEXT        REFERENCES sks_vendors(id),
+  vendor_bill_id TEXT        REFERENCES sks_vendor_bills(id),
+  status         TEXT        NOT NULL DEFAULT '',
+  data           JSONB       NOT NULL DEFAULT '{}',
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE sks_payables ADD COLUMN IF NOT EXISTS vendor_bill_id TEXT REFERENCES sks_vendor_bills(id);
 CREATE INDEX IF NOT EXISTS sks_payables_vendor_id_idx ON sks_payables(vendor_id);
+CREATE INDEX IF NOT EXISTS sks_payables_vendor_bill_id_idx ON sks_payables(vendor_bill_id);
 ALTER TABLE sks_payables ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS sks_payments (
@@ -485,3 +510,10 @@ CREATE TABLE IF NOT EXISTS sks_personal_plans (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE sks_personal_plans ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS sks_personal_investments (
+  id         TEXT        PRIMARY KEY,
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE sks_personal_investments ENABLE ROW LEVEL SECURITY;

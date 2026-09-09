@@ -1,4 +1,290 @@
+## 2026-09-09 (11)
+
+### Gap 5 — Personal Reports depth (6 tabs)
+**Commit:** Uncommitted
+- Context: last item in the confirmed Gap 9→8→7→4→2→6→3→5 sequence. `PersonalReportsScreen.tsx` was a single view (month picker + Income/Expense/Net + expense-by-category). PRD gave no tab-level spec, so asked the user; chose 6 tabs reusing data/computations already built in Gaps 2/4/6/7/8 rather than any new categorization scheme.
+
+- **Changed:** `src/screens/PersonalFinance/PersonalReportsScreen.tsx` — added a tab bar (Summary, Expenses, Income, Commitments, Investments, Plan Variance) above the existing month/year pickers, which stay shared across all tabs. Summary tab unchanged (income/expense/net + top-5 expense categories). Expenses/Income tabs are the full category breakdown (income breakdown mirrors the existing expense-by-category bar-chart pattern, generalized via a shared `categoryBreakdownFor(type)` helper). Commitments tab: due/overdue/upcoming/paid counts + amounts, list of due-and-overdue items (reuses `PersonalCommitment` status tones from `PersonalCalendarScreen.tsx`). Investments tab: invested/current/gain-loss totals + breakdown by investment type (reuses `PersonalInvestmentsScreen.tsx`'s totals logic). Plan Variance tab: year-level projected/actual/variance totals + per-month rows (reuses `PersonalPlansScreen.tsx`'s `PLAN_TYPE_BUCKET` bucketing exactly, since actuals still can't be split by personal/business or home/office at the transaction level). Loads `getAllPersonalCommitments`/`getAllPersonalInvestments`/`getAllPersonalPlans` alongside the existing transactions/categories fetch.
+
+- **Verified:** `tsc --noEmit` clean.
+- Nothing has been pushed or committed.
+
+This completes the full Gap 9→8→7→4→2→6→3→5 sequence.
+
+## 2026-09-09 (10)
+
+### Gap 3 — Personal Calendar grid rewrite
+**Commit:** Uncommitted
+- Context: next item in the confirmed Gap 9→8→7→4→2→6→3→5 sequence. `PersonalCalendarScreen.tsx` was a flat chronological list of "days that have a commitment due" — not a calendar grid at all (no day-of-week layout, no empty-day cells). Rewrote it into a true month grid.
+
+- **Changed:** `src/screens/PersonalFinance/PersonalCalendarScreen.tsx` — added a 7-column month grid (day-of-week headers, leading empty cells for the first week's offset, one cell per day of the month) with up to 3 status-colored dots per day indicating commitments due, today highlighted. Tapping a day with items opens a `BottomSheet` listing that day's commitments (name, amount, status). Kept the existing "This Month" flat list below the grid as a scannable summary. Data scope unchanged (Commitments only, via `getAllPersonalCommitments()`) — Investments/Plans don't have a natural per-day due date, so nothing to add there.
+
+- **Verified:** `tsc --noEmit` clean.
+- Nothing has been pushed or committed.
+
+## 2026-09-09 (9)
+
+### Gap 6 — Personal statement import: type + category + subcategory
+**Commit:** Uncommitted
+- Context: next item in the confirmed Gap 9→8→7→4→2→6→3→5 sequence. Imported personal rows were forced to `type: 'income'`/`'expense'` (from credit/debit) with no category/subcategory, unlike manual entry which offers the full `PersonalTransactionType` set plus category/subcategory pickers. Asked the user; chose full parity (type + category + subcategory pickers per row).
+
+- **Changed:** `src/screens/Finance/StatementImportScreen.tsx` — `ParsedRow` gained `personalType`, `personalCategoryId`, `personalSubcategoryId`; `parseCSV` defaults `personalType` from credit/debit (income/expense) same as before, now editable per row. Loads `getAllPersonalCategories`/`getAllPersonalSubcategories`. Row review UI shows Type/Category/Subcategory selects when `scope === 'personal'` (subcategory select filtered by chosen category, only shown when that category has subcategories — same conditional-render pattern as manual entry in `PersonalFinanceScreen.tsx`). `handleConfirm`'s personal branch now uses `row.personalType`/`row.personalCategoryId`/`row.personalSubcategoryId` instead of the old hardcoded income/expense mapping.
+
+- **Verified:** `tsc --noEmit` clean.
+- Nothing has been pushed or committed.
+
+## 2026-09-09 (8)
+
+### Gap 2 — Personal Plan variance (Actual vs Projected)
+**Commit:** Uncommitted
+- Context: next item in the confirmed Gap 9→8→7→4→2→6→3→5 sequence. `PersonalPlansScreen.tsx` only showed the projected amount, never what actually happened that month. `PersonalPlan` has 5 types (personal_income/business_income/home_expense/office_expense/investment) but `PersonalTransaction` has no personal-vs-business or home-vs-office split — asked the user how to bridge that; chose to collapse to 2 transaction-derived buckets (income, expense) plus investment, shared across the plan types that map to them.
+
+- **Changed:** `src/screens/PersonalFinance/PersonalPlansScreen.tsx` — loads `getAllPersonalTransactions()` alongside plans; computes Actual per month from transactions bucketed by type (`personal_income`+`business_income` → `income`; `home_expense`+`office_expense` → `expense`; `investment` → `investment`). Each plan row now shows Actual, Projected, and a signed Variance; each month's header shows total Projected and total Variance vs actual.
+
+- **Verified:** `tsc --noEmit` clean.
+- Nothing has been pushed or committed.
+
+## 2026-09-09 (7)
+
+### Gap 4 — new Personal Investments module
+**Commit:** Uncommitted
+- Context: next item in the confirmed Gap 9→8→7→4→2→6→3→5 sequence. PRD lists "Investments" as a nav-level module peer to Insurance/Utilities/Subscriptions/Commitments, but no such module existed in SKS at all — no type, no service, no screen, no route. PRD gives no field-level spec, so asked the user; chose "holdings with current value" (supports simple gain/loss).
+
+- **Added:** `src/types/index.ts` — `PersonalInvestmentType` (`mutual_fund | stock | fd | ppf | real_estate | gold | other`) and `PersonalInvestment` interface (`investmentType`, `name`, `investedAmount`, `currentValue?`, `units?`, `purchaseDate`, `linkedAccountId?`, `notes?`).
+- **Added:** `supabase/schema.sql` — `sks_personal_investments` table, same shape as other `sks_personal_*` tables (`id`, `data` JSONB, `created_at`). ⚠ DEPLOY — not yet applied to Supabase.
+- **Added:** `supabase/rls-policies.sql` — `"authenticated all personal investments owner only"` policy (`FOR ALL USING (sks_has_role('owner'))`), matching every other personal-finance table. ⚠ DEPLOY.
+- **Added:** `src/services/personalFinanceService.ts` — `getAllPersonalInvestments`, `upsertPersonalInvestment`, `deletePersonalInvestment`.
+- **Added:** `src/screens/PersonalFinance/PersonalInvestmentsScreen.tsx` — new screen modeled exactly on `PersonalCommitmentsScreen.tsx` (list + create/edit `BottomSheet` + delete `Dialog` + audit log), plus a summary card (Invested / Current Value / Gain-Loss) and a per-row gain/loss badge when `currentValue` is set.
+- **Changed:** `src/App.tsx` — added `/personal-investments` route (`screenPath="personal-investments"`).
+- **Changed:** `src/data/permissions.ts` — added `'personal-investments': 'view_personal_finance'` to `SCREEN_PERMISSIONS` (reuses the existing permission, no new one needed).
+- **Changed:** `src/components/navigation/navItems.ts` — added "Personal Investments" nav entry (new `LineChart` icon) to the Personal Finance section.
+- **Changed:** `src/screens/Settings/AuditLogScreen.tsx` — `ACTION_LABEL` extended with `personal_investment_deleted`.
+
+- **Verified:** `tsc --noEmit` clean.
+- Nothing has been pushed or committed.
+
+## 2026-09-09 (6)
+
+### Gap 7 — Personal Commitment type-specific fields
+**Commit:** Uncommitted
+- Context: next item in the confirmed Gap 9→8→7→4→2→6→3→5 sequence. `PersonalCommitment` had one generic field set for all 6 commitment types (insurance, utility, subscription, EMI, SIP, expected income), even though each type needs different details. PRD doesn't specify exact per-type schemas, so asked the user; chose a minimal per-type field set shown conditionally in the form based on `commitmentType`.
+
+- **Changed:** `src/types/index.ts` — added optional per-type fields to `PersonalCommitment`: insurance (`policyNumber`, `sumAssured`, `insurer`), utility (`consumerNumber`, `meterNumber`), subscription (`planTier`, `autoRenew`), EMI (`loanAmount`, `tenureMonths`, `interestRate`), SIP (`fundName`, `units`), expected income (`incomeSource`, `expectedDate`).
+- **Changed:** `src/screens/PersonalFinance/PersonalCommitmentsScreen.tsx` — form now shows the relevant field group conditionally based on the selected `commitmentType`.
+
+- **Verified:** `tsc --noEmit` clean.
+- Nothing has been pushed or committed.
+
+## 2026-09-09 (5)
+
+### Gap 8 — Personal Transaction reconciliation status
+**Commit:** Uncommitted
+- Context: next item in the confirmed Gap 9→8→7→4→2→6→3→5 sequence. "Transaction status workflow" scope wasn't specified in the PRD (checked `SpaceKrafters_Final_Master_PRD.md` — it only says to preserve the existing personal-finance-tracker module, no explicit status spec), so asked the user directly rather than guess. User chose reconciliation state: `pending → cleared/reconciled`, tracking whether a transaction has been verified against the bank statement.
+- No migration: `sks_personal_transactions` has no promoted `status` column and needs none — nothing filters on it at the SQL level, so status lives purely in the existing JSONB `data` column. RLS already covers UPDATE via the existing `FOR ALL USING (sks_has_role('owner'))` policy.
+
+- **Changed:** `src/types/index.ts` — added `PersonalTransactionStatus = 'pending' | 'cleared' | 'reconciled'`; added required `status` field to `PersonalTransaction`.
+- **Changed:** `src/services/personalFinanceService.ts` — added `updatePersonalTransactionStatus(txn, status)`.
+- **Changed:** `src/screens/Finance/StatementImportScreen.tsx` — imported personal transactions now default to `status: 'cleared'` (already verified against the source bank statement being imported), required for type correctness now that `status` is non-optional.
+- **Changed:** `src/screens/PersonalFinance/PersonalFinanceScreen.tsx` — new manual transactions default to `status: 'pending'`; added a status filter dropdown; each transaction row now shows a type badge + status badge; Transaction detail sheet shows status and adds a single forward-only advance action ("Mark Cleared" when pending, "Mark Reconciled" when cleared) via `handleSetStatus()`, consistent with the one-button "advance to next stage" pattern used elsewhere in the app rather than a free-form status picker.
+
+- **Verified:** `tsc --noEmit` clean.
+- Nothing has been pushed or committed.
+
+## 2026-09-09 (4)
+
+### Gap 9 — owner-only delete support across Personal Finance + Vendors/Clients/Company Accounts/Purchase Requests
+**Commit:** Uncommitted
+- Context: user asked whether deleted-in-error records could be removed by an admin; confirmed no delete capability existed anywhere in Personal Finance (6 tables) or Vendors/Clients/Company Accounts/Purchase Requests. User chose "add delete everywhere" — owner-only delete (service function + RLS policy + UI button/dialog), matching the existing Lead/Project/Task delete convention exactly (`deleteX(id)` service fn, `Dialog` confirm with `variant="danger"`, fire-and-forget audit log, local state filter).
+
+- **Changed:** `src/services/personalFinanceService.ts` — added `deletePersonalAccount`, `deletePersonalCategory`, `deletePersonalSubcategory`, `deletePersonalTransaction`, `deletePersonalCommitment`, `deletePersonalPlan`.
+- **Changed:** `supabase/rls-policies.sql` — added owner-only `FOR DELETE` policies for `sks_vendors`, `sks_clients`, `sks_purchase_requests`, `sks_company_accounts`. `sks_personal_*` tables needed no new RLS (already covered by an existing `FOR ALL USING (sks_has_role('owner'))` policy). ⚠ DEPLOY — not yet applied to Supabase.
+- **Changed:** `src/screens/Procurement/VendorMasterScreen.tsx` — added "Delete Vendor" button (owner-gated) + confirm dialog + audit log (`vendor_deleted`).
+- **Changed:** `src/screens/Clients/ClientMasterScreen.tsx` — added "Delete Client" button (owner-gated) + confirm dialog + audit log (`client_deleted`).
+- **Changed:** `src/screens/Finance/CompanyAccountsScreen.tsx` — added "Delete Account" button (gated via existing `manage_company_accounts` `PermissionGate`, matching this screen's convention) + confirm dialog + audit log (`company_account_deleted`).
+- **Changed:** `src/screens/Procurement/ProcurementScreen.tsx` — added "Delete Purchase Request" button (owner-gated) in the PR detail sheet + confirm dialog + audit log (`purchase_request_deleted`).
+- **Changed:** `src/screens/PersonalFinance/PersonalFinanceScreen.tsx` — Accounts: added "Delete Account" in account detail sheet. Transactions: rows are now clickable (previously inert), opening a new transaction-detail sheet with "Delete Transaction". Both owner-gated, both audit-logged (`personal_account_deleted`, `personal_transaction_deleted`).
+- **Changed:** `src/screens/PersonalFinance/PersonalCategoriesScreen.tsx` — added "Delete Category" in category detail sheet, and inline "Delete" on each subcategory row. Audit logs `personal_category_deleted`, `personal_subcategory_deleted`.
+- **Changed:** `src/screens/PersonalFinance/PersonalCommitmentsScreen.tsx` — commitment cards were previously inert (no edit at all); made them clickable to reopen the existing form as an edit, adding "Delete Commitment" inside it. Audit log `personal_commitment_deleted`.
+- **Changed:** `src/screens/PersonalFinance/PersonalPlansScreen.tsx` — same fix as Commitments: monthly plan rows were inert, now clickable to edit, with "Delete Projection" added. Audit log `personal_plan_deleted`.
+- **Changed:** `src/screens/Settings/AuditLogScreen.tsx` — `ACTION_LABEL` map extended with the 10 new delete actions above.
+
+- **Verified:** `tsc --noEmit` clean.
+- Nothing has been pushed or committed.
+
+## 2026-09-09 (3)
+
+### Follow-up fixes from a background QA/flowchart re-verification agent — 6 of 10 new gaps
+**Commit:** Uncommitted
+- Context: after the "QA re-verification pass #2" fixes above landed, a background agent independently re-verified the app against `QA-Production-Testing.md` and `SpaceKrafters-Flow-Chart.md` and surfaced 10 further gaps beyond the 12 already fixed. User said "fix all these." Two of the ten needed a product decision and were resolved via AskUserQuestion as documentation-only (see bottom); one (ProjectWorkspace Procurement tab placeholder) was already known/deferred and out of scope. The remaining 6 are mechanical fixes, all following existing conventions exactly — no new types beyond additive optional fields, no migrations.
+
+- **Changed:** `src/types/index.ts` — added `Requirement.files?: string[]`.
+- **Changed:** `src/screens/Requirements/RequirementsScreen.tsx` — added an "Attachments" `MultiFileUploadField` to the New/Edit form and a read-only one to the detail view (matching the Site Visit/Daily Diary convention), wired into `handleAddRequirement()`/`handleUpdateRequirement()`. Previously Requirements had zero attachment capability even though the upstream Site Visit does.
+
+- **Changed:** `src/screens/Finance/StatementImportScreen.tsx` — `handleConfirm()` now posts one summary `addAuditLog()` entry per import batch (`statement_import_posted`, count of rows posted + destination), not logged before.
+
+- **Changed:** `src/screens/Procurement/VendorMasterScreen.tsx`, `src/screens/Clients/ClientMasterScreen.tsx` — `handleSave()` in both now fires `addAuditLog()` (`vendor_created`/`vendor_updated`, `client_created`/`client_updated`) on create and edit; neither had any audit trail before.
+
+- **Changed:** `src/screens/Finance/CompanyAccountsScreen.tsx` — `handleSave()` now fires `addAuditLog()` (`company_account_created`/`company_account_updated`); previously company accounts could be created/edited with no audit trail at all.
+
+- **Changed:** `src/screens/Procurement/ProcurementScreen.tsx` — `handleSavePR()` and `handleApprove()` now fire `addAuditLog()` (`purchase_request_created`, `purchase_request_approved`). The later stages of the same flow (`po_raised`/`goods_received`/`vendor_bill_entered`) already had logging from a prior session; only PR creation/approval were missing.
+
+- **Changed:** `src/screens/Settings/AuditLogScreen.tsx` — `ACTION_LABEL` map extended from 5 to 30 entries, covering every `action` value now in use across the app (previously most actions fell back to the raw snake_case string). Purely cosmetic; the existing fallback (`ACTION_LABEL[log.action] ?? log.action`) meant nothing was ever hidden, just unpolished.
+
+- **Not changed (intentional, per user decision):** Quotation PDF export remains browser print-to-PDF only — user chose to leave this as-is rather than add a dedicated PDF-generation library.
+- **Not changed (intentional, per user decision):** Design Center status transitions remain permission-gated, not sequence-gated (a user with the right permission can jump stages out of order) — user chose to leave this as-is.
+- **Deferred, not in scope for this pass:** ProjectWorkspace's Procurement tab is still a "Coming soon" placeholder — already a known, separately-tracked gap.
+
+- **Verified:** `tsc --noEmit` clean after every fix in this pass.
+- Nothing has been pushed or committed.
+
+## 2026-09-09 (2)
+
+### QA re-verification pass #2 — 14 findings, 12 fixed
+**Commit:** Uncommitted
+- Context: a second QA re-verification pass (`QA-Production-Testing.md`) surfaced 14 findings. User confirmed "fix them" with two scope decisions up front: (1) ledger transaction types — include a `transfer`/`owner_funding` category now; (2) Project Closure/Handover completion soft-gates — leave as intentional warn-and-confirm, not a bug (see note at bottom).
+
+- **Changed:** `src/types/index.ts` — additive-only, no migration:
+  - Added `CompanyTransactionCategory = 'transfer' | 'owner_funding'` + `CompanyTransaction.category?` (orthogonal to `type`, which still drives all balance/cashflow math unchanged).
+  - Added `ExpenseRequest.paymentProofFiles?: string[]`.
+  - Added `DesignPackage.quotationId?: string`.
+  - Added `SiteVisit.appointmentId?: string`.
+  - Added `'awaiting_material'` to `TaskStatus`.
+
+- **Changed:** `src/screens/Finance/StatementImportScreen.tsx` — company-scoped rows get a new "Transfer / Owner Funding" category `<select>` alongside the existing free-text category input, written to `CompanyTransaction.category`. Balance/cashflow math in `CompanyAccountsScreen.tsx`/`ReportsScreen.tsx`/`CombinedFinanceScreen.tsx` deliberately untouched — confirmed by reading all three that they must keep reconciling against every real cash movement regardless of category.
+
+- **Changed:** `src/screens/Expenses/ExpenseRequestScreen.tsx` — partial payments: `handlePay()` now validates against the remaining balance, posts a transaction/allocation for only the entered amount, and keeps `status: 'approved'` until cumulative `paidAmount` reaches the full amount (only then flips to `'paid'`). Added a "Remaining: ₹X" label, a payment-amount input, and a receipt/proof `MultiFileUploadField` bound to the new `paymentProofFiles` field; "Paid So Far" now shows on any partial payment, not just full ones.
+
+- **Changed:** `src/screens/Design/DesignCenterScreen.tsx` — Version History file counts replaced with a read-only `MultiFileUploadField` (view/download affordance) using the pre-existing `onChange={() => {}}` convention already used elsewhere. `handleCreatePackage()` now derives `DesignPackage.quotationId` from the selected project's existing `Project.quotationId` (no new picker UI).
+
+- **Changed:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — Documents vault Version History gets the same read-only `MultiFileUploadField` treatment as Design Center.
+
+- **Removed:** `src/components/forms/FileUploadField.tsx` — dead component, zero imports anywhere (confirmed via grep; the actively-used `MultiFileUploadField` is a different, similarly-named component).
+
+- **Changed:** `src/screens/Requirements/RequirementsScreen.tsx` — best-effort write-time fix for `Requirement.projectId`: a new `resolveProjectId()` helper sets it whenever a matching Project already exists at the time a requirement is added/updated. The pre-existing read-time join fallback elsewhere is unchanged (a Project usually doesn't exist yet at capture time, per PRD flow order, so this is a supplement not a replacement).
+
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — `handleStatusChange()` now syncs `Project.contractValue` to the quotation's `netAmount` when a *later* revision of an already-linked project's quotation is approved (`status === 'client_approved'`). The initial-creation sync in `ProjectsScreen.tsx` only covered new projects, not later revisions on existing ones.
+
+- **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — added an Appointment→Site Visit link: `appointments` loaded alongside visits, a new "Linked Appointment" `<select>` (populated from appointments for the selected lead) appears in the New/Edit form, writes `SiteVisit.appointmentId`, and clears itself when the Lead selection changes.
+
+- **Changed:** `src/types/index.ts`, `src/screens/ProjectWorkspace/TaskDetailScreen.tsx`, `src/components/badges/StatusBadge.tsx` — added `awaiting_material` as a distinct `Task` status (flowchart node K/K1, "Production Admin checks material availability → follow up with supplier → recheck"), selectable from the Task Detail status picker with its own badge color. User explicitly chose this over documenting the existing `blocked`/PO-status states as sufficient, or linking Task→PurchaseOrder directly.
+
+- **Changed:** `supabase/rls-policies.sql` — tightened the `sks_quotations` UPDATE policy so the client-facing status transitions (`sent_to_client`, `client_approved`, `revision_requested`, `rejected`) require the `owner` role, matching the `send_quotation_client` permission the UI already gates those actions behind (currently owner-only per `src/data/permissions.ts`); `qs`/`project_coordinator` keep write access to all non-client-facing statuses (draft/internal_review/internally_approved), unchanged from before. Previously RLS allowed any of the three roles to push a quotation straight to any client-facing status via a direct API call, bypassing the UI gate entirely. ✅ DEPLOYED 2026-09-09 (dropped and recreated the policy directly against production via the established one-off `pg` script pattern; verified the live `pg_policy` definition matches `rls-policies.sql` exactly).
+
+- **Not changed (intentional, per user decision):** Project Closure and Handover completion remain soft gates (warn-and-confirm dialogs), not hard blocks — this is a confirmed product decision, not a bug. No code change made for this finding.
+
+- No other migrations needed — every other finding lives in existing JSONB `data` columns.
+- **Verified:** `tsc --noEmit` clean after every finding.
+- Nothing has been pushed or committed.
+
 ## 2026-09-09
+
+### Migration deploy — 4 pending migrations applied to production
+**Commit:** N/A (database only, no code change)
+- Deployed directly against the live Supabase database via a one-off Node script using `pg` and `SUPABASE_DB_URL` from `.env.local`, following the established deploy pattern (idempotent DDL, policy-existence check before each `CREATE POLICY` so the script is safely re-runnable).
+- `sks_payables.vendor_bill_id` + index (Slice 1b) — ✅ DEPLOYED, verified via `information_schema.columns`.
+- `sks_clients` table + `sks_projects.client_id` + index + 3 RLS policies (Slice 2b) — ✅ DEPLOYED, verified via `information_schema.tables` and `pg_policies`.
+- `sks_punch_list_items` table + index + 3 RLS policies (Slice 3a) — ✅ DEPLOYED, verified via `information_schema.tables` and `pg_policies`.
+- `sks_transaction_allocations` table + 2 indexes + 2 RLS policies (older Phase 4 migration, found still pending during this pass — not part of the 11-gap plan, but every `addTransactionAllocations()` call site across Payables/Receivables/Expenses/Statement Import had been silently writing nothing without it) — ✅ DEPLOYED, verified via `information_schema.tables` and `pg_policies`.
+- **Not included:** the Slice 2b one-time backfill script (dedupe existing `(clientName, clientPhone)` pairs into `sks_clients` rows and back-link `client_id`) — still deliberately deferred, requires separate explicit go-ahead since it writes to production data and is irreversible.
+- All 4 tables/columns and 8 new policies confirmed present in the live database after deploy.
+
+### QA re-verification pass — 3 missing delete audit logs
+**Commit:** Uncommitted
+- Context: re-ran `QA-Production-Testing.md` against the current code before deploying pending migrations. Every other mutation (create/update/status-change) in these three screens already fired an audit log from earlier Tier 4 work, but each screen's delete path was missed.
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — `handleDelete()` now fires a `project_deleted` audit log (`useAuth`/`addAuditLog`/`AuditLog` were already imported for the existing create/close logs).
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — `confirmDelete()` now fires a `quotation_deleted` audit log (imports already present from the existing `quotation_rejected` log).
+- **Changed:** `src/screens/Requirements/RequirementsScreen.tsx` — `confirmDelete()` now fires a `requirement_deleted` audit log; added `useAuth`/`addAuditLog`/`AuditLog` imports (this screen had none before).
+- No new types, no migration.
+- **Verified:** `tsc --noEmit` clean.
+
+### Production completeness plan — Tier 4 (audit logging coverage)
+**Commit:** Uncommitted
+- Context: final tier of the same plan. `expense_approved`/`expense_rejected`/`expense_paid`/`expense_closed` (Expenses) and `project_created`/`project_closed` (Projects) were already logged from earlier slices. This closes the remaining gaps: Payables, Receivables, and Procurement had no audit trail at all.
+- **Changed:** `src/screens/Finance/PayablesScreen.tsx` — `handleRecordPayment()` now fires a `payable_payment_recorded` audit log, with `projectId` resolved via the 1b join (`Payable.vendorBillId → VendorBill.purchaseOrderId → PurchaseOrder.projectId`, factored into a new `resolvedProjectId()` helper also reused by the Slice 3d split-allocation default). Added `useAuth`/`user` (not previously used in this screen) and `getAllPurchaseOrders`/`getAllProjects` to `reload()`.
+- **Changed:** `src/screens/Finance/ReceivablesScreen.tsx` — receipt handler now fires a `receipt_recorded` audit log with the milestone's `projectId` directly. Added `useAuth`/`user`.
+- **Changed:** `src/screens/Procurement/ProcurementScreen.tsx` — added `po_raised` (in `handleRaisePO`), `goods_received` (in `handleReceiveGoods`), and `vendor_bill_entered` (in `handleEnterBill`) audit logs, all using `po.projectId` and the already-present `user`.
+- All calls follow the existing fire-and-forget pattern (`addAuditLog(log)`, no `.ok` check), matching every other call site.
+- No new types, no migration — `sks_audit_log` already fully supports this.
+- **Verified:** `tsc --noEmit` clean.
+
+This closes out all 11 gaps from the original PRD/flowchart audit plan (`recursive-humming-popcorn.md`). Nothing has been pushed. All migrations (Slice 1b/2b/3a, plus the older Phase 4 `sks_transaction_allocations`) have since been deployed — see "Migration deploy" entry above.
+
+### Production completeness plan — Slice 3d (multi-project allocation UI in Payables)
+**Commit:** Uncommitted
+- Context: continuation of the same plan, closing out Tier 3. `addTransactionAllocations()` was already batch-capable but `PayablesScreen.tsx` only ever posted a single company-overhead allocation with no project link.
+- **Changed:** `src/screens/Finance/PayablesScreen.tsx` — `handleRecordPayment()`'s form gains an "+ Allocate to other projects" collapsible section with `+ Add Split` rows (project `<select>` + amount input per row). Validated so split amounts sum exactly to the payment total before submitting. Defaults to a single pre-filled row using the project resolved transitively via `Payable.vendorBillId → VendorBill.purchaseOrderId → PurchaseOrder.projectId` (the 1b join), editable/removable/addable from there. When no split is opened, behavior is unchanged (single company-overhead allocation, no `projectId`).
+- No new types, no migration — `TransactionAllocation.projectId` already existed and was already read elsewhere; this was the only screen not populating it.
+- **Verified:** `tsc --noEmit` clean.
+
+### Production completeness plan — Slice 3c (file upload fields: Site Visits, Expense Requests, Vendor Bills)
+**Commit:** Uncommitted
+- Context: continuation of the same plan. Three flows had photo/document fields in the data model (or an obvious need for one) but no upload UI anywhere — all three are additive JSONB-only changes, no migration.
+- **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — `SiteVisitRoom.photos?: string[]` (already existed, never rendered) is now editable via `MultiFileUploadField` in the New/Edit room form, and shown read-only in the detail view when present.
+- **Added:** `src/types/index.ts` — `ExpenseRequest.receiptFiles?: string[]`.
+- **Changed:** `src/screens/Expenses/ExpenseRequestScreen.tsx` — New Expense Request form gets a `MultiFileUploadField` for receipts, bound to `form.receiptFiles`. Deliberately not duplicated onto the payment-recording step.
+- **Added:** `src/types/index.ts` — `VendorBill.documentFiles?: string[]`.
+- **Changed:** `src/screens/Procurement/ProcurementScreen.tsx` — bill-entry form (`billForm`) gains a `MultiFileUploadField` for supporting documents, threaded into the `VendorBill` object created in `handleEnterBill()`.
+- **No migration** — all three fields live in existing JSONB columns.
+- **Verified:** `tsc --noEmit` clean.
+
+### Production completeness plan — Slice 3b (Documents tab)
+**Commit:** Uncommitted
+- Context: continuation of the same plan. `sks_documents`/`sks_document_versions` tables + RLS already existed in the schema, fully unused — no application code referenced them. Reused as-is, no migration needed.
+- **Added:** `src/types/index.ts` — `ProjectDocument` (`id, projectId?, name, notes?, createdBy, createdAt, updatedAt`) and `ProjectDocumentVersion` (`id, documentId, versionNumber, files, note?, createdBy, createdAt`), modeled directly on `DesignPackage`/`DesignVersion`.
+- **Added:** `src/services/documentService.ts` — `getAllDocuments`/`upsertDocument`/`getAllDocumentVersions`/`addDocumentVersion`, modeled on `designService.ts`.
+- **Changed:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — replaced the Documents tab's placeholder with a document list scoped to the project, each with a version-history detail sheet (`+ Add Version` → `MultiFileUploadField`), mirroring `DesignCenterScreen.tsx`'s version-upload UI shape.
+- **No migration** — reused the existing `sks_documents`/`sks_document_versions` tables and RLS as-is; nothing to deploy for this slice.
+- **Verified:** `tsc --noEmit` clean.
+
+### Production completeness plan — Slice 3a (Handover tab: punch list + client sign-off)
+**Commit:** Uncommitted
+- Context: continuation of the same plan, now in Tier 3 (new screens/features). The Handover tab previously rendered only "Coming soon." — no punch list or client sign-off existed anywhere in the app despite being in the PRD/flowchart.
+- **Added:** `src/types/index.ts` — `PunchListItemStatus = 'open' | 'resolved' | 'verified'`; `PunchListItem` interface (`id, projectId, description, location?, status, photos?, raisedBy, raisedByName, resolvedAt?, createdAt, updatedAt`). `Project` gains `handoverSignedAt?: string` / `handoverSignedBy?: string` (client sign-off modeled as fields on the existing Project record, no separate table).
+- **Added:** `src/services/punchListService.ts` — `getAllPunchListItems`/`upsertPunchListItem`, modeled on `requirementService.ts`, promoting a `project_id` column.
+- **Changed:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — replaced the Handover tab's placeholder with a real punch list (filtered by project, "+ Add Punch Item" `BottomSheet` with description/location/`MultiFileUploadField` for photos; each item can be progressed `open → resolved → verified`) and a "Mark Handover Complete" action (confirm `Dialog`, warns if punch items are still open but doesn't hard-block) that stamps `Project.handoverSignedAt`/`handoverSignedBy` via `upsertProject`.
+- **Changed:** `supabase/schema.sql` — new `sks_punch_list_items` table (project-scoped pattern matching `sks_tasks`: `project_id` FK with `ON DELETE CASCADE`, promoted `status` column) + index. ✅ DEPLOYED 2026-09-09 (table + index verified in `information_schema.tables`)
+- **Changed:** `supabase/rls-policies.sql` — `sks_punch_list_items` gets SELECT/INSERT/UPDATE policies gated by `sks_can_see_project(project_id)`, matching `sks_tasks`. No DELETE policy. ✅ DEPLOYED 2026-09-09 (all 3 policies verified in `pg_policies`)
+- **Verified:** `tsc --noEmit` clean.
+
+### Production completeness plan — Tier 1 (money/duplication bugs) + Slice 2a (quotation → project automation)
+**Commit:** Uncommitted
+- Context: PRD-vs-implementation audit found 11 concrete gaps (money silently vanishing on failed allocation writes, disconnected Vendor Bill/Payable records, project closure with no financial gating, dead `Quotation.projectId`/`Requirement.projectId` FKs, no real `Client` entity, 3 placeholder tabs). User decided to close the gaps ("make it a complete production app"), sequenced by risk: money bugs first, then automation, then new screens, then audit logging. Plan approved via Plan Mode (`recursive-humming-popcorn.md`). This entry covers Tier 1 + Slice 2a; Tier 2b/2c, Tier 3, and Tier 4 remain outstanding (see Pending / Backlog below).
+- **Changed:** `src/screens/Expenses/ExpenseRequestScreen.tsx` — `handlePay()` now checks the `addTransactionAllocations()` result; on failure shows a distinct warning snackbar ("payment recorded, but project allocation failed — contact an admin") instead of silently dropping the error. Added `expense_paid` and `expense_closed` audit log entries (pulled forward from Tier 4 since already touching these functions).
+- **Changed:** `src/screens/Finance/PayablesScreen.tsx` — `handleRecordPayment()` now checks the previously-uncaptured `addCompanyTransaction()` result as a hard failure (stops before allocating) and the `addTransactionAllocations()` result as a soft warning (money already moved). Also syncs the linked `VendorBill.paidAmount`/`status` when a Payable has a `vendorBillId` (Slice 1b).
+- **Changed:** `src/screens/Finance/ReceivablesScreen.tsx` — same result-checking pattern applied to the receipt-recording handler.
+- **Changed:** `src/screens/Finance/StatementImportScreen.tsx` — per-row import loop now tracks allocation failures in a separate `allocationWarnings` counter instead of conflating them with rows that failed to post at all.
+- **Changed:** `src/types/index.ts` — added `Payable.vendorBillId?: string`.
+- **Changed:** `src/services/financeService.ts` — `upsertPayable()` now persists a promoted `vendor_bill_id` column.
+- **Changed:** `src/screens/Procurement/ProcurementScreen.tsx` — `handleEnterBill()` now auto-creates a linked `Payable` (`vendorBillId`, `amount`, `status: 'pending'`) after a vendor bill is entered.
+- **Changed:** `supabase/schema.sql` — `sks_payables` gains `vendor_bill_id TEXT REFERENCES sks_vendor_bills(id)` + index. ✅ DEPLOYED 2026-09-09 (column verified in `information_schema.columns`)
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — (Slice 1c) `handleSave()` now computes outstanding items (unpaid milestones, unpaid payables reachable via the Payable→VendorBill→PurchaseOrder join, approved-but-unpaid expense requests) when a project transitions to `closed`, and shows a warn-and-confirm `Dialog` listing them before proceeding — closing with no outstanding items proceeds silently. (Slice 2a) `onLeadChange()` now auto-fills `contractValue`/`quotationId` from any `client_approved` quotation tied to the selected lead; on first save of a new project with a `quotationId`, backfills `Quotation.projectId` and auto-creates one starter `PaymentMilestone` for the full contract value. Also added `project_created`/`project_closed` audit log entries.
+- **Verified:** `tsc --noEmit` clean across all changes.
+
+### Production completeness plan — Slice 2b (real Client entity + Lead→Project conversion)
+**Commit:** Uncommitted
+- Context: continuation of the same plan. Projects previously only stored denormalized `clientName`/`clientPhone` strings with no real Client entity, so there was no way to see all projects for a repeat client. Built the full fix per the confirmed UX decision (explicit picker, not silent auto-create).
+- **Added:** `src/types/index.ts` — `Client` interface (`id, name, phone, email?, address?, city?, notes?, createdAt, updatedAt`); `Project.clientId?: string` added additively (`clientName`/`clientPhone` untouched, still the display strings used everywhere else).
+- **Added:** `src/services/clientService.ts` — `getAllClients`/`upsertClient`, modeled on `vendorService.ts` (no delete).
+- **Added:** `src/screens/Clients/ClientMasterScreen.tsx` — list/search/create/edit; detail sheet with Profile + Projects tabs (Projects tab filters `projects.filter(p => p.clientId === client.id)`).
+- **Changed:** `src/App.tsx` — new `/clients` route behind `<ProtectedRoute screenPath="clients">`.
+- **Changed:** `src/components/navigation/navItems.ts` — added "Clients" to the main nav (reuses `view_projects` permission).
+- **Changed:** `src/data/permissions.ts` — `SCREEN_PERMISSIONS['clients'] = 'view_projects'`.
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — New Project form gets a Client `<select>` (auto-matched by phone off the selected lead) with a "+ New Client" option revealing inline name/phone/email fields; the client is created via `upsertClient` at save time, before the project itself is saved. `?leadId=` query param support added so `/projects?leadId=<id>` opens the New Project form pre-selected with that lead (used by the new "Convert to Project" button).
+- **Changed:** `src/screens/Leads/LeadDetailScreen.tsx` — added a "Convert to Project" button, gated by the existing (previously unused) `convert_lead` permission, visible when `lead.status === 'won'`, navigating to `/projects?leadId=<id>`.
+- **Changed:** `supabase/schema.sql` — new `sks_clients` table (shared-master pattern, matching `sks_vendors`: no `owner_id`, no promoted columns beyond `id`/`data`); `sks_projects` gains `client_id TEXT REFERENCES sks_clients(id)` + index. ✅ DEPLOYED 2026-09-09 (table + column verified in `information_schema`)
+- **Changed:** `supabase/rls-policies.sql` — `sks_clients` gets `SELECT USING (true)`, INSERT/UPDATE `WITH CHECK` gated to `owner`/`project_coordinator` roles (same roles that can already create/edit Projects). No DELETE policy (matches vendor pattern). ✅ DEPLOYED 2026-09-09 (both policies verified in `pg_policies`)
+- **Not done in this slice:** the one-time backfill script to dedupe existing `(clientName, clientPhone)` pairs across `sks_projects` into `sks_clients` rows and back-link `client_id` has NOT been written or run yet — existing projects will show no linked Client until that backfill runs. Flagged in Pending / Backlog below; deliberately deferred as a separate, reviewable step since it writes to production data and is irreversible.
+- **Verified:** `tsc --noEmit` clean.
+
+### Production completeness plan — Slice 2c (Requirement → Project read-time join fix)
+**Commit:** Uncommitted
+- Context: `RequirementsScreen.tsx` never sets `Requirement.projectId` — by PRD flow order a Project usually doesn't exist yet when a Requirement is captured, so it structurally can't be set at creation time. Fixed as a read-time join instead of a write-time change.
+- **Changed:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — loads `getAllSiteVisits()` alongside the screen's other data fetches; the Requirements tab's filter now falls back to `Requirement.siteVisitId → SiteVisit.leadId → Project.leadId` when `Requirement.projectId` is unset, instead of only matching on the (usually empty) direct `projectId` field.
+- **Verified:** `tsc --noEmit` clean.
+
+### Pending / Backlog
+
+- **Project Workspace placeholder tab** — `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx`: `Procurement` tab is wired into the tab bar but renders only "Coming soon." — no screen built yet. `Handover` (Slice 3a) and `Documents` (Slice 3b) were built (see above). Surfaced during a PRD/flowchart-vs-app comparison audit (`SpaceKrafters_Final_Master_PRD.md` Sections 16/21). Deferred — the Procurement tab placeholder is out of scope for the 11 named gaps in this plan.
 
 ### Production readiness: dead link, router CVE fix, smoke tests
 **Commit:** Uncommitted
@@ -85,8 +371,8 @@
 **Commit:** Uncommitted
 - Finance Rule 3 ("one cash movement never appears as more than one transaction row even when split across projects") required a new table — confirmed via grep that no `transaction_allocations`/allocation mechanism existed anywhere in `schema.sql`. Per user decision, built it now rather than deferring.
 - Scope decision (per user): no new standalone "Finance Dashboard" screen/nav item — added rollup stat cards to the existing `CompanyAccountsScreen.tsx` instead, since Company Accounts/Receivables/Payables/Expenses each already own their own screen and a dedicated Reports screen is a later, separate item.
-- **Added:** `supabase/schema.sql` — new `sks_transaction_allocations` table (`id`, `transaction_id` FK→`sks_company_transactions` CASCADE, `project_id` FK→`sks_projects` nullable, `amount`, `data JSONB`, `created_at`), append-only, with indexes on `transaction_id`/`project_id`. ⚠ DEPLOY
-- **Added:** `supabase/rls-policies.sql` — SELECT/INSERT policies for `sks_transaction_allocations`, restricted to `owner`/`accounts` (matching `sks_company_transactions`). ⚠ DEPLOY
+- **Added:** `supabase/schema.sql` — new `sks_transaction_allocations` table (`id`, `transaction_id` FK→`sks_company_transactions` CASCADE, `project_id` FK→`sks_projects` nullable, `amount`, `data JSONB`, `created_at`), append-only, with indexes on `transaction_id`/`project_id`. ✅ DEPLOYED 2026-09-09 (table verified in `information_schema.tables` — found still pending during the Tier 1-4 migration deploy and closed out in the same pass, since every `addTransactionAllocations()` call site had been silently writing nothing without it)
+- **Added:** `supabase/rls-policies.sql` — SELECT/INSERT policies for `sks_transaction_allocations`, restricted to `owner`/`accounts` (matching `sks_company_transactions`). ✅ DEPLOYED 2026-09-09 (both policies verified in `pg_policies`)
 - **Added:** `src/types/index.ts` — `TransactionAllocation` interface.
 - **Added:** `src/services/companyAccountService.ts` — `getAllTransactionAllocations()`/`addTransactionAllocations()`.
 - **Changed:** `src/screens/Expenses/ExpenseRequestScreen.tsx` (`handlePay`), `src/screens/Finance/ReceivablesScreen.tsx` (`handleRecordReceipt`), `src/screens/Finance/PayablesScreen.tsx` (`handleRecordPayment`) — each now writes one `TransactionAllocation` row per recorded transaction, linked to the source record's project where one exists (expense's `projectId`, milestone's `projectId`; payables have no project link yet so their allocation has no `projectId`, i.e. company overhead). This keeps every cash movement as exactly one `CompanyTransaction` row.

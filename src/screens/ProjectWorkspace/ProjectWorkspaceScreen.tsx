@@ -8,18 +8,22 @@ import { StatusBadge } from '../../components/badges/StatusBadge'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
-import { getAllProjects } from '../../services/projectService'
+import { getAllProjects, upsertProject } from '../../services/projectService'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getAllRequirements } from '../../services/requirementService'
+import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllQuotations } from '../../services/quotationService'
 import { getAllDesignPackages, getAllDesignVersions } from '../../services/designService'
 import { getAllTasks, upsertTask, getAllTaskDependencies } from '../../services/taskService'
 import { getAllDiaryEntries, upsertDiaryEntry } from '../../services/dailyDiaryService'
 import { getAllExpenseRequests } from '../../services/expenseService'
 import { getAllPaymentMilestones, getAllReceipts } from '../../services/financeService'
+import { getAllPunchListItems, upsertPunchListItem } from '../../services/punchListService'
+import { getAllDocuments, upsertDocument, getAllDocumentVersions, addDocumentVersion } from '../../services/documentService'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
+import { Dialog } from '../../components/feedback/Dialog'
 import { GanttChart } from './GanttChart'
-import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task, TaskDependency, DailyDiaryEntry, ExpenseRequest, PaymentMilestone, Receipt } from '../../types'
+import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task, TaskDependency, DailyDiaryEntry, ExpenseRequest, PaymentMilestone, Receipt, SiteVisit, PunchListItem, ProjectDocument, ProjectDocumentVersion } from '../../types'
 
 type Tab = 'overview' | 'gantt' | 'team' | 'tasks' | 'requirements' | 'boq' | 'design' | 'diary' | 'finance' | 'procurement' | 'documents' | 'handover'
 
@@ -34,8 +38,8 @@ const TABS: { value: Tab; label: string; placeholder?: boolean }[] = [
   { value: 'diary',        label: 'Diary' },
   { value: 'finance',      label: 'Finance' },
   { value: 'procurement',  label: 'Procurement', placeholder: true },
-  { value: 'documents',    label: 'Documents', placeholder: true },
-  { value: 'handover',     label: 'Handover', placeholder: true },
+  { value: 'documents',    label: 'Documents' },
+  { value: 'handover',     label: 'Handover' },
 ]
 
 function todayISO(): string {
@@ -84,6 +88,21 @@ export default function ProjectWorkspaceScreen() {
   const [expenseRequests, setExpenseRequests] = useState<ExpenseRequest[]>([])
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
   const [receipts, setReceipts] = useState<Receipt[]>([])
+  const [siteVisits, setSiteVisits] = useState<SiteVisit[]>([])
+  const [punchListItems, setPunchListItems] = useState<PunchListItem[]>([])
+  const [showNewPunchItem, setShowNewPunchItem] = useState(false)
+  const [punchDescription, setPunchDescription] = useState('')
+  const [punchLocation, setPunchLocation] = useState('')
+  const [punchPhotos, setPunchPhotos] = useState<string[]>([])
+  const [showHandoverConfirm, setShowHandoverConfirm] = useState(false)
+  const [documents, setDocuments] = useState<ProjectDocument[]>([])
+  const [documentVersions, setDocumentVersions] = useState<ProjectDocumentVersion[]>([])
+  const [selectedDocument, setSelectedDocument] = useState<ProjectDocument | null>(null)
+  const [showNewDocument, setShowNewDocument] = useState(false)
+  const [showNewDocVersion, setShowNewDocVersion] = useState(false)
+  const [newDocName, setNewDocName] = useState('')
+  const [docVersionFiles, setDocVersionFiles] = useState<string[]>([])
+  const [docVersionNote, setDocVersionNote] = useState('')
   const [showNewTask, setShowNewTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [showNewDiary, setShowNewDiary] = useState(false)
@@ -96,7 +115,7 @@ export default function ProjectWorkspaceScreen() {
   useEffect(() => {
     async function load() {
       setIsLoading(true)
-      const [projects, dirUsers, reqs, quotes, pkgs, versions, allTasks, allDeps, allDiary, allExpenses, allMilestones, allReceipts] = await Promise.all([
+      const [projects, dirUsers, reqs, quotes, pkgs, versions, allTasks, allDeps, allDiary, allExpenses, allMilestones, allReceipts, allSiteVisits, allPunchItems, allDocuments, allDocumentVersions] = await Promise.all([
         getAllProjects(),
         getManagedUsersDirectory(),
         getAllRequirements(),
@@ -109,6 +128,10 @@ export default function ProjectWorkspaceScreen() {
         getAllExpenseRequests(),
         getAllPaymentMilestones(),
         getAllReceipts(),
+        getAllSiteVisits(),
+        getAllPunchListItems(),
+        getAllDocuments(),
+        getAllDocumentVersions(),
       ])
       setProject(projects.find(p => p.id === id) ?? null)
       setUsers(dirUsers)
@@ -122,6 +145,10 @@ export default function ProjectWorkspaceScreen() {
       setExpenseRequests(allExpenses)
       setMilestones(allMilestones)
       setReceipts(allReceipts)
+      setSiteVisits(allSiteVisits)
+      setPunchListItems(allPunchItems)
+      setDocuments(allDocuments)
+      setDocumentVersions(allDocumentVersions)
       setIsLoading(false)
     }
     load()
@@ -145,7 +172,11 @@ export default function ProjectWorkspaceScreen() {
     )
   }
 
-  const projectRequirements = requirements.filter(r => r.projectId === project.id)
+  const projectRequirements = requirements.filter(r => {
+    if (r.projectId) return r.projectId === project.id
+    const visit = siteVisits.find(v => v.id === r.siteVisitId)
+    return visit?.leadId != null && visit.leadId === project.leadId
+  })
   const projectQuotation = quotations.find(q => q.projectId === project.id)
   const projectDesignPackages = designPackages.filter(p => p.projectId === project.id)
   const projectTasks = tasks.filter(t => t.projectId === project.id)
@@ -155,6 +186,12 @@ export default function ProjectWorkspaceScreen() {
   const projectExpenses = expenseRequests.filter(e => e.projectId === project.id && e.status === 'paid')
   const projectMilestones = milestones.filter(m => m.projectId === project.id)
   const projectReceipts = receipts.filter(r => r.projectId === project.id)
+  const projectPunchItems = punchListItems.filter(p => p.projectId === project.id)
+  const unresolvedPunchItems = projectPunchItems.filter(p => p.status === 'open').length
+  const projectDocuments = documents.filter(d => d.projectId === project.id)
+  function docVersionsFor(documentId: string): ProjectDocumentVersion[] {
+    return documentVersions.filter(v => v.documentId === documentId).sort((a, b) => b.versionNumber - a.versionNumber)
+  }
   const actualSpend = projectExpenses.reduce((sum, e) => sum + (e.paidAmount ?? e.amount), 0)
   const totalCollected = projectReceipts.reduce((sum, r) => sum + r.amount, 0)
   const contractValue = project.contractValue ?? 0
@@ -200,6 +237,92 @@ export default function ProjectWorkspaceScreen() {
     setDiaryPhotos([])
     setShowNewDiary(false)
     setSnack({ open: true, msg: 'Diary entry saved.', type: 'success' })
+  }
+
+  async function handleAddPunchItem() {
+    if (!project || !user || !punchDescription.trim()) return
+    const now = new Date().toISOString()
+    const item: PunchListItem = {
+      id: `punch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      projectId: project.id,
+      description: punchDescription.trim(),
+      location: punchLocation.trim() || undefined,
+      status: 'open',
+      photos: punchPhotos,
+      raisedBy: user.id,
+      raisedByName: user.name,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const result = await upsertPunchListItem(item)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to add punch item.', type: 'error' }); return }
+    setPunchListItems(prev => [item, ...prev])
+    setPunchDescription('')
+    setPunchLocation('')
+    setPunchPhotos([])
+    setShowNewPunchItem(false)
+    setSnack({ open: true, msg: 'Punch item added.', type: 'success' })
+  }
+
+  async function handleSetPunchItemStatus(item: PunchListItem, status: PunchListItem['status']) {
+    const updated: PunchListItem = { ...item, status, resolvedAt: status === 'open' ? undefined : new Date().toISOString(), updatedAt: new Date().toISOString() }
+    const result = await upsertPunchListItem(updated)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to update punch item.', type: 'error' }); return }
+    setPunchListItems(prev => prev.map(p => (p.id === item.id ? updated : p)))
+  }
+
+  async function handleAddDocument() {
+    if (!project || !user || !newDocName.trim()) return
+    const now = new Date().toISOString()
+    const doc: ProjectDocument = {
+      id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      projectId: project.id,
+      name: newDocName.trim(),
+      createdBy: user.name,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const result = await upsertDocument(doc)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to create document.', type: 'error' }); return }
+    setDocuments(prev => [doc, ...prev])
+    setNewDocName('')
+    setShowNewDocument(false)
+    setSnack({ open: true, msg: 'Document created.', type: 'success' })
+  }
+
+  function openDocVersionUpload() {
+    setDocVersionFiles([])
+    setDocVersionNote('')
+    setShowNewDocVersion(true)
+  }
+
+  async function handleAddDocVersion() {
+    if (!user || !selectedDocument || docVersionFiles.length === 0) return
+    const nextVersionNumber = docVersionsFor(selectedDocument.id).length + 1
+    const version: ProjectDocumentVersion = {
+      id: `docver_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      documentId: selectedDocument.id,
+      versionNumber: nextVersionNumber,
+      files: docVersionFiles,
+      note: docVersionNote.trim() || undefined,
+      createdBy: user.name,
+      createdAt: new Date().toISOString(),
+    }
+    const result = await addDocumentVersion(version)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to add version.', type: 'error' }); return }
+    setDocumentVersions(prev => [version, ...prev])
+    setShowNewDocVersion(false)
+    setSnack({ open: true, msg: 'Version added.', type: 'success' })
+  }
+
+  async function handleConfirmHandover() {
+    if (!project || !user) return
+    const updated: Project = { ...project, handoverSignedAt: new Date().toISOString(), handoverSignedBy: user.name, updatedAt: new Date().toISOString() }
+    const result = await upsertProject(updated)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to record handover.', type: 'error' }); return }
+    setProject(updated)
+    setShowHandoverConfirm(false)
+    setSnack({ open: true, msg: 'Handover marked complete.', type: 'success' })
   }
 
   return (
@@ -465,9 +588,87 @@ export default function ProjectWorkspaceScreen() {
           </div>
         )}
 
-        {(tab === 'procurement' || tab === 'documents' || tab === 'handover') && (
+        {tab === 'procurement' && (
           <div className="text-center py-16 text-slate-400">
             <p className="text-sm">Coming soon.</p>
+          </div>
+        )}
+
+        {tab === 'documents' && (
+          <div className="space-y-2.5">
+            <PermissionGate permission="add_task">
+              <button onClick={() => setShowNewDocument(true)}
+                className="w-full py-2.5 rounded-xl border border-dashed border-slate-300 text-slate-500 text-xs font-semibold active:bg-slate-50 flex items-center justify-center gap-1">
+                <Plus size={14} /> Add Document
+              </button>
+            </PermissionGate>
+            {projectDocuments.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-10">No documents yet.</p>
+            ) : (
+              projectDocuments.map(doc => (
+                <button key={doc.id} onClick={() => setSelectedDocument(doc)}
+                  className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50">
+                  <span className="text-sm font-bold text-slate-800">{doc.name}</span>
+                  <p className="text-xs text-slate-400 mt-1">{docVersionsFor(doc.id).length} version{docVersionsFor(doc.id).length !== 1 ? 's' : ''}</p>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {tab === 'handover' && (
+          <div className="space-y-2.5">
+            {project.handoverSignedAt ? (
+              <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
+                <p className="text-sm font-bold text-emerald-700">Handover complete</p>
+                <p className="text-xs text-emerald-600 mt-0.5">Signed off by {project.handoverSignedBy} on {fmtDate(project.handoverSignedAt)}</p>
+              </div>
+            ) : (
+              <PermissionGate permission="add_task">
+                <button onClick={() => setShowHandoverConfirm(true)}
+                  className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold active:bg-indigo-700">
+                  Mark Handover Complete
+                </button>
+              </PermissionGate>
+            )}
+
+            <PermissionGate permission="add_task">
+              <button onClick={() => setShowNewPunchItem(true)}
+                className="w-full py-2.5 rounded-xl border border-dashed border-slate-300 text-slate-500 text-xs font-semibold active:bg-slate-50 flex items-center justify-center gap-1">
+                <Plus size={14} /> Add Punch Item
+              </button>
+            </PermissionGate>
+
+            {projectPunchItems.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-10">No punch list items yet.</p>
+            ) : (
+              projectPunchItems.map(item => (
+                <div key={item.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <span className="text-sm font-bold text-slate-800">{item.description}</span>
+                    <StatusBadge status={item.status} />
+                  </div>
+                  {item.location && <p className="text-xs text-slate-500">{item.location}</p>}
+                  <p className="text-xs text-slate-400 mt-1">Raised by {item.raisedByName}</p>
+                  {item.status !== 'verified' && (
+                    <div className="flex gap-2 mt-2">
+                      {item.status === 'open' && (
+                        <button onClick={() => handleSetPunchItemStatus(item, 'resolved')}
+                          className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold active:bg-slate-200">
+                          Mark Resolved
+                        </button>
+                      )}
+                      {item.status === 'resolved' && (
+                        <button onClick={() => handleSetPunchItemStatus(item, 'verified')}
+                          className="flex-1 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold active:bg-emerald-100">
+                          Mark Verified
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>
@@ -509,6 +710,99 @@ export default function ProjectWorkspaceScreen() {
           </button>
         </div>
       </BottomSheet>
+
+      <BottomSheet isOpen={!!selectedDocument && !showNewDocVersion} onClose={() => setSelectedDocument(null)} title={selectedDocument?.name ?? ''} height="full">
+        {selectedDocument && (
+          <div className="space-y-4">
+            <PermissionGate permission="add_task">
+              <button onClick={openDocVersionUpload}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
+                + Add Version
+              </button>
+            </PermissionGate>
+            <div>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Version History</p>
+              <div className="space-y-2.5">
+                {docVersionsFor(selectedDocument.id).map(v => (
+                  <div key={v.id} className="bg-white border border-slate-100 rounded-2xl p-3.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">Version {v.versionNumber}</span>
+                      <span className="text-[11px] text-slate-400">{fmtDate(v.createdAt)}</span>
+                    </div>
+                    {v.note && <p className="text-[11px] text-slate-500 mt-1">{v.note}</p>}
+                    <p className="text-[11px] text-slate-400 mt-1 mb-1.5">by {v.createdBy}</p>
+                    <MultiFileUploadField label="" files={v.files} onChange={() => {}} />
+                  </div>
+                ))}
+                {docVersionsFor(selectedDocument.id).length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-6">No versions uploaded yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </BottomSheet>
+
+      <BottomSheet isOpen={showNewDocument} onClose={() => setShowNewDocument(false)} title="Add Document">
+        <div className="space-y-4 pb-4">
+          <input
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400"
+            value={newDocName} onChange={e => setNewDocName(e.target.value)} placeholder="Document name" autoFocus
+          />
+          <button onClick={handleAddDocument} disabled={!newDocName.trim()}
+            className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700 disabled:opacity-40">
+            Create Document
+          </button>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet isOpen={showNewDocVersion} onClose={() => setShowNewDocVersion(false)} title="Add Document Version" height="full">
+        <div className="space-y-3">
+          <MultiFileUploadField label="Files" files={docVersionFiles} onChange={setDocVersionFiles} required uploadButtonLabel="Upload Files" />
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Note</label>
+            <textarea value={docVersionNote} onChange={e => setDocVersionNote(e.target.value)} rows={3}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+          </div>
+          <button onClick={handleAddDocVersion} disabled={docVersionFiles.length === 0}
+            className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700 disabled:opacity-40">
+            Add Version
+          </button>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet isOpen={showNewPunchItem} onClose={() => setShowNewPunchItem(false)} title="Add Punch Item">
+        <div className="space-y-3 pb-4">
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Description *</label>
+            <textarea value={punchDescription} onChange={e => setPunchDescription(e.target.value)} rows={3} autoFocus
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Location</label>
+            <input value={punchLocation} onChange={e => setPunchLocation(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+          </div>
+          <MultiFileUploadField label="Photos" files={punchPhotos} onChange={setPunchPhotos} accept="image/*" uploadButtonLabel="Upload Photo" />
+          <button onClick={handleAddPunchItem} disabled={!punchDescription.trim()}
+            className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700 disabled:opacity-40">
+            Add Item
+          </button>
+        </div>
+      </BottomSheet>
+
+      <Dialog
+        isOpen={showHandoverConfirm}
+        onClose={() => setShowHandoverConfirm(false)}
+        title="Mark Handover Complete?"
+        message={unresolvedPunchItems > 0
+          ? `${unresolvedPunchItems} punch list item${unresolvedPunchItems > 1 ? 's are' : ' is'} still open.`
+          : 'All punch list items are resolved.'}
+        variant={unresolvedPunchItems > 0 ? 'danger' : 'default'}
+        confirmLabel="Mark Complete"
+        cancelLabel="Cancel"
+        onConfirm={handleConfirmHandover}
+      />
 
       <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
     </div>

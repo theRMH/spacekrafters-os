@@ -4,6 +4,7 @@ const LABELS: Record<string, string> = {
   scheduled: 'Scheduled', completed: 'Completed', rescheduled: 'Rescheduled', cancelled: 'Cancelled',
   pending: 'Pending', done: 'Done', overdue: 'Overdue',
   approved: 'Approved', rejected: 'Rejected',
+  awaiting_material: 'Awaiting Material',
 }
 
 const COLORS: Record<string, { bg: string; text: string }> = {
@@ -23,6 +24,7 @@ const COLORS: Record<string, { bg: string; text: string }> = {
   overdue:                { bg: 'bg-red-50',      text: 'text-red-700'     },
   approved:               { bg: 'bg-emerald-50',  text: 'text-emerald-700' },
   rejected:               { bg: 'bg-red-50',      text: 'text-red-700'     },
+  awaiting_material:      { bg: 'bg-amber-50',    text: 'text-amber-700'   },
 }
 
 interface Props {

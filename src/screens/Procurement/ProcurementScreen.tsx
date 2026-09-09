@@ -4,20 +4,24 @@ import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
+import { Dialog } from '../../components/feedback/Dialog'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllProjects } from '../../services/projectService'
 import { getAllVendors } from '../../services/vendorService'
 import {
-  getAllPurchaseRequests, upsertPurchaseRequest,
+  getAllPurchaseRequests, upsertPurchaseRequest, deletePurchaseRequest,
   getAllVendorQuotes, addVendorQuote,
   getAllPurchaseOrders, upsertPurchaseOrder,
   getAllGoodsReceipts, addGoodsReceipt,
   getAllVendorBills, upsertVendorBill,
 } from '../../services/procurementService'
+import { upsertPayable } from '../../services/financeService'
+import { addAuditLog } from '../../services/auditLogService'
 import type {
-  Project, Vendor, PurchaseRequest, VendorQuote, PurchaseOrder, GoodsReceipt, VendorBill,
+  Project, Vendor, PurchaseRequest, VendorQuote, PurchaseOrder, GoodsReceipt, VendorBill, Payable, AuditLog,
 } from '../../types'
 
 function fmtCurrency(n?: number): string {
@@ -64,11 +68,12 @@ export default function ProcurementScreen() {
   const [selected, setSelected] = useState<PurchaseRequest | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<PurchaseRequest>(emptyPR())
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   const [quoteForm, setQuoteForm] = useState({ vendorId: '', amount: '', notes: '' })
   const [poVendorId, setPoVendorId] = useState('')
-  const [billForm, setBillForm] = useState({ billNumber: '', amount: '' })
+  const [billForm, setBillForm] = useState({ billNumber: '', amount: '', documentFiles: [] as string[] })
 
   async function reload() {
     setIsLoading(true)
@@ -99,11 +104,24 @@ export default function ProcurementScreen() {
       setSnack({ open: true, msg: 'Description and unit are required.', type: 'error' })
       return
     }
+    const isNew = !prs.some(p => p.id === form.id)
     const toSave: PurchaseRequest = { ...form, createdBy: form.createdBy || user?.id || '', updatedAt: new Date().toISOString() }
     const result = await upsertPurchaseRequest(toSave)
     if (!result.ok) {
       setSnack({ open: true, msg: result.error ?? 'Failed to save purchase request.', type: 'error' })
       return
+    }
+    if (user && isNew) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: toSave.projectId,
+        action: 'purchase_request_created',
+        description: `Purchase request "${toSave.description}" (${toSave.quantity} ${toSave.unit}) raised.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
     }
     setPrs(prev => {
       const exists = prev.some(p => p.id === toSave.id)
@@ -119,7 +137,40 @@ export default function ProcurementScreen() {
     const result = await upsertPurchaseRequest(toSave)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to approve.', type: 'error' }); return }
     setPrs(prev => prev.map(p => (p.id === toSave.id ? toSave : p)))
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: toSave.projectId,
+        action: 'purchase_request_approved',
+        description: `Purchase request "${toSave.description}" approved.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     setSnack({ open: true, msg: 'Purchase request approved.', type: 'success' })
+  }
+
+  async function confirmDelete() {
+    if (!selected) return
+    const result = await deletePurchaseRequest(selected.id)
+    setShowDeleteDialog(false)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete purchase request.', type: 'error' }); return }
+    if (user) {
+      addAuditLog({
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: selected.projectId,
+        action: 'purchase_request_deleted',
+        description: `Purchase request "${selected.description}" deleted.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    setPrs(prev => prev.filter(p => p.id !== selected.id))
+    setSelected(null)
+    setSnack({ open: true, msg: 'Purchase request deleted.', type: 'success' })
   }
 
   async function handleAddQuote() {
@@ -165,6 +216,18 @@ export default function ProcurementScreen() {
     const toSave: PurchaseRequest = { ...selected, status: 'po_raised', updatedAt: new Date().toISOString() }
     await upsertPurchaseRequest(toSave)
     setPrs(prev => prev.map(p => (p.id === toSave.id ? toSave : p)))
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: po.projectId,
+        action: 'po_raised',
+        description: `Purchase order raised for "${selected.description}" (${fmtCurrency(po.amount)}).`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     setSnack({ open: true, msg: 'Purchase order raised.', type: 'success' })
   }
 
@@ -186,6 +249,18 @@ export default function ProcurementScreen() {
     const toSave: PurchaseRequest = { ...selected, status: 'received', updatedAt: new Date().toISOString() }
     await upsertPurchaseRequest(toSave)
     setPrs(prev => prev.map(p => (p.id === toSave.id ? toSave : p)))
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: po.projectId,
+        action: 'goods_received',
+        description: `Goods receipt recorded for PO against "${selected.description}".`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     setSnack({ open: true, msg: 'Goods receipt recorded.', type: 'success' })
   }
 
@@ -203,20 +278,51 @@ export default function ProcurementScreen() {
       paidAmount: 0,
       status: 'unpaid',
       billDate: new Date().toISOString(),
+      documentFiles: billForm.documentFiles,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
     const result = await upsertVendorBill(bill)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to enter vendor bill.', type: 'error' }); return }
     setBills(prev => [bill, ...prev])
+
+    const payable: Payable = {
+      id: `pay_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      vendorId: bill.vendorId,
+      vendorBillId: bill.id,
+      description: `Vendor bill ${bill.billNumber}`,
+      amount: bill.amount,
+      paidAmount: 0,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    const payableResult = await upsertPayable(payable)
+
     const updatedPO: PurchaseOrder = { ...po, status: 'billed', updatedAt: new Date().toISOString() }
     await upsertPurchaseOrder(updatedPO)
     setPos(prev => prev.map(p => (p.id === updatedPO.id ? updatedPO : p)))
     const toSave: PurchaseRequest = { ...selected, status: 'billed', updatedAt: new Date().toISOString() }
     await upsertPurchaseRequest(toSave)
     setPrs(prev => prev.map(p => (p.id === toSave.id ? toSave : p)))
-    setBillForm({ billNumber: '', amount: '' })
-    setSnack({ open: true, msg: 'Vendor bill entered — outstanding balance updated.', type: 'success' })
+    setBillForm({ billNumber: '', amount: '', documentFiles: [] })
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: po.projectId,
+        action: 'vendor_bill_entered',
+        description: `Vendor bill "${bill.billNumber}" (${fmtCurrency(bill.amount)}) entered against "${selected.description}".`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
+    if (!payableResult.ok) {
+      setSnack({ open: true, msg: `Vendor bill entered, but creating the payable failed (${payableResult.error ?? 'unknown error'}). Add it manually in Payables.`, type: 'error' })
+    } else {
+      setSnack({ open: true, msg: 'Vendor bill entered — outstanding balance updated.', type: 'success' })
+    }
   }
 
   const filtered = prs.filter(p => !search || p.description.toLowerCase().includes(search.toLowerCase()))
@@ -311,6 +417,13 @@ export default function ProcurementScreen() {
               <StatusBadge status={selected.status} />
             </div>
 
+            {user?.role === 'owner' && (
+              <button onClick={() => setShowDeleteDialog(true)}
+                className="w-full text-center text-xs font-semibold text-red-500 py-2">
+                Delete Purchase Request
+              </button>
+            )}
+
             {/* Stage: Approval */}
             {selected.status === 'draft' && (
               <PermissionGate permission="approve_purchase_request">
@@ -392,6 +505,7 @@ export default function ProcurementScreen() {
                             <div className="space-y-2 pt-1">
                               <input className={inp} placeholder="Bill number" value={billForm.billNumber} onChange={e => setBillForm(f => ({ ...f, billNumber: e.target.value }))} />
                               <input type="number" className={inp} placeholder="Bill amount" value={billForm.amount} onChange={e => setBillForm(f => ({ ...f, amount: e.target.value }))} />
+                              <MultiFileUploadField label="Bill Documents" files={billForm.documentFiles} onChange={files => setBillForm(f => ({ ...f, documentFiles: files }))} uploadButtonLabel="Upload Document" />
                               <button onClick={() => handleEnterBill(po)} className="w-full py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold active:bg-indigo-700">
                                 Enter Vendor Bill
                               </button>

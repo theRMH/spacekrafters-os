@@ -55,11 +55,12 @@ export async function getAllPayables(): Promise<Payable[]> {
 export async function upsertPayable(payable: Payable): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: 'Not configured.' }
   const { error } = await supabase.from(PAYABLE_TABLE).upsert({
-    id:         payable.id,
-    vendor_id:  payable.vendorId ?? null,
-    status:     payable.status,
-    data:       payable,
-    updated_at: new Date().toISOString(),
+    id:              payable.id,
+    vendor_id:       payable.vendorId ?? null,
+    vendor_bill_id:  payable.vendorBillId ?? null,
+    status:          payable.status,
+    data:            payable,
+    updated_at:      new Date().toISOString(),
   }, { onConflict: 'id' })
   if (error) return { ok: false, error: error.message }
   return { ok: true }

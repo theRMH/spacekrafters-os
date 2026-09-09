@@ -21,3 +21,10 @@ export async function upsertVendor(vendor: Vendor): Promise<{ ok: boolean; error
   if (error) return { ok: false, error: error.message }
   return { ok: true }
 }
+
+export async function deleteVendor(id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Not configured.' }
+  const { error } = await supabase.from(TABLE).delete().eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}

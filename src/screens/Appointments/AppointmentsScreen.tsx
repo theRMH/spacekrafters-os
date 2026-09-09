@@ -11,7 +11,8 @@ import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllAppointments, upsertAppointment, deleteAppointment } from '../../services/appointmentService'
-import type { Appointment, AppointmentStatus } from '../../types'
+import { addAuditLog } from '../../services/auditLogService'
+import type { Appointment, AppointmentStatus, AuditLog } from '../../types'
 
 type Filter = 'all' | AppointmentStatus
 
@@ -138,6 +139,17 @@ export default function AppointmentsScreen() {
     const result = await deleteAppointment(selected.id)
     setShowDeleteDialog(false)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete appointment.', type: 'error' }); return }
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: 'appointment_deleted',
+        description: `Appointment with "${selected.clientName}" on ${fmtDateTime(selected.scheduledAt)} deleted.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     setAppointments(prev => prev.filter(a => a.id !== selected.id))
     setSelected(null)
     setSnack({ open: true, msg: 'Appointment deleted.', type: 'success' })

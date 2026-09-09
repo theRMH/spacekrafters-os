@@ -12,9 +12,10 @@ import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllRequirements } from '../../services/requirementService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllQuotations, upsertQuotation, deleteQuotation } from '../../services/quotationService'
+import { getAllProjects, upsertProject } from '../../services/projectService'
 import { addAuditLog } from '../../services/auditLogService'
 import { downloadQuotationExcel } from '../../utils/quotationExport'
-import type { Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem, AuditLog } from '../../types'
+import type { Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem, Project, AuditLog } from '../../types'
 
 const UNIT_OPTIONS = ['sqft', 'nos', 'rft', 'sft', 'lot', 'set']
 
@@ -75,6 +76,7 @@ export default function QuotationsScreen() {
   const [requirements, setRequirements] = useState<Requirement[]>([])
   const [siteVisits, setSiteVisits] = useState<SiteVisit[]>([])
   const [quotations, setQuotations] = useState<Quotation[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const [search, setSearch] = useState('')
@@ -95,10 +97,11 @@ export default function QuotationsScreen() {
 
   async function refresh() {
     setIsLoading(true)
-    const [reqs, visits, quotes] = await Promise.all([getAllRequirements(), getAllSiteVisits(), getAllQuotations()])
+    const [reqs, visits, quotes, projs] = await Promise.all([getAllRequirements(), getAllSiteVisits(), getAllQuotations(), getAllProjects()])
     setRequirements(reqs)
     setSiteVisits(visits)
     setQuotations(quotes)
+    setProjects(projs)
     setIsLoading(false)
   }
 
@@ -233,6 +236,18 @@ export default function QuotationsScreen() {
     setQuotations(prev => prev.map(x => (x.id === updated.id ? updated : x)))
     setSelected(updated)
     setSnack({ open: true, msg: 'Status updated.', type: 'success' })
+
+    // Project already exists (this is a later revision, not the initial project-creation flow
+    // in ProjectsScreen) — sync its contract value to the newly approved amount.
+    if (status === 'client_approved' && updated.projectId) {
+      const project = projects.find(p => p.id === updated.projectId)
+      if (project && project.contractValue !== updated.netAmount) {
+        const savedProject = { ...project, contractValue: updated.netAmount, updatedAt: new Date().toISOString() }
+        const projResult = await upsertProject(savedProject)
+        if (projResult.ok) setProjects(prev => prev.map(p => (p.id === savedProject.id ? savedProject : p)))
+      }
+    }
+
     if (user && status === 'rejected') {
       const log: AuditLog = {
         id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -252,6 +267,18 @@ export default function QuotationsScreen() {
     const result = await deleteQuotation(selected.id)
     setShowDeleteDialog(false)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete quotation.', type: 'error' }); return }
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: selected.projectId,
+        action: 'quotation_deleted',
+        description: `Quotation v${selected.version} (${fmtCurrency(selected.netAmount)}) deleted.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     setQuotations(prev => prev.filter(q => q.id !== selected.id))
     setSelected(null)
     setSnack({ open: true, msg: 'Quotation deleted.', type: 'success' })

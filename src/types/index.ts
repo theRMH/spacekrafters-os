@@ -156,6 +156,7 @@ export interface SiteVisit {
   id: string
   leadId: string
   projectId?: string
+  appointmentId?: string
   visitDate: string
   rooms: SiteVisitRoom[]
   checklist: SiteVisitChecklistItem[]
@@ -178,6 +179,7 @@ export interface Requirement {
   projectId?: string
   lineItems: RequirementLineItem[]
   notes?: string
+  files?: string[]
   createdAt: string
   updatedAt: string
 }
@@ -245,11 +247,24 @@ export type ProjectStage =
   | 'reconciliation'
   | 'closed'
 
+export interface Client {
+  id: string
+  name: string
+  phone: string
+  email?: string
+  address?: string
+  city?: string
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Project {
   id: string
   name: string
   leadId?: string
   quotationId?: string
+  clientId?: string
   coordinatorId: string
   clientName: string
   clientPhone: string
@@ -262,12 +277,30 @@ export interface Project {
   status: 'active' | 'on_hold' | 'closed' | 'cancelled'
   startDate?: string
   expectedHandoverDate?: string
+  handoverSignedAt?: string
+  handoverSignedBy?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type PunchListItemStatus = 'open' | 'resolved' | 'verified'
+
+export interface PunchListItem {
+  id: string
+  projectId: string
+  description: string
+  location?: string
+  status: PunchListItemStatus
+  photos?: string[]
+  raisedBy: string
+  raisedByName: string
+  resolvedAt?: string
   createdAt: string
   updatedAt: string
 }
 
 // ─── Tasks ───────────────────────────────────────────────────────────────────
-export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'blocked'
+export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'blocked' | 'awaiting_material'
 
 export interface Task {
   id: string
@@ -300,6 +333,7 @@ export type DesignPackageStatus = 'in_progress' | 'client_review' | 'client_appr
 export interface DesignPackage {
   id: string
   projectId: string
+  quotationId?: string
   name: string
   status: DesignPackageStatus
   notes?: string
@@ -311,6 +345,27 @@ export interface DesignPackage {
 export interface DesignVersion {
   id: string
   designPackageId: string
+  versionNumber: number
+  files: string[]
+  note?: string
+  createdBy: string
+  createdAt: string
+}
+
+// ─── Project Documents ───────────────────────────────────────────────────────
+export interface ProjectDocument {
+  id: string
+  projectId?: string
+  name: string
+  notes?: string
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProjectDocumentVersion {
+  id: string
+  documentId: string
   versionNumber: number
   files: string[]
   note?: string
@@ -437,6 +492,7 @@ export interface VendorBill {
   paidAmount: number
   status: VendorBillStatus
   billDate: string
+  documentFiles?: string[]
   createdAt: string
   updatedAt: string
 }
@@ -453,6 +509,7 @@ export interface ExpenseRequest {
   amount: number
   vendorPayee?: string
   neededBy?: string
+  receiptFiles?: string[]
   requestedBy: string
   requestedByName: string
   status: ExpenseRequestStatus
@@ -463,6 +520,7 @@ export interface ExpenseRequest {
   paidAt?: string
   paymentAccount?: string
   paymentRef?: string
+  paymentProofFiles?: string[]
   createdAt: string
   updatedAt: string
 }
@@ -480,10 +538,15 @@ export interface CompanyAccount {
 
 export type CompanyTransactionType = 'credit' | 'debit'
 
+// Orthogonal to `type` (cash direction): flags a transaction as a transfer between
+// accounts or owner funding movement so reports can distinguish it from real income/expense.
+export type CompanyTransactionCategory = 'transfer' | 'owner_funding'
+
 export interface CompanyTransaction {
   id: string
   accountId: string
   type: CompanyTransactionType
+  category?: CompanyTransactionCategory
   amount: number
   description: string
   reference?: string
@@ -536,6 +599,7 @@ export type PayableStatus = 'pending' | 'partial' | 'paid'
 export interface Payable {
   id: string
   vendorId?: string
+  vendorBillId?: string
   payeeName?: string
   description: string
   amount: number
@@ -601,6 +665,8 @@ export type PersonalTransactionType =
   | 'income' | 'expense' | 'transfer' | 'investment'
   | 'advance_received' | 'advance_paid' | 'loan_received' | 'loan_paid'
 
+export type PersonalTransactionStatus = 'pending' | 'cleared' | 'reconciled'
+
 export interface PersonalTransaction {
   id: string
   accountId: string
@@ -614,6 +680,7 @@ export interface PersonalTransaction {
   narration?: string
   source: 'manual' | 'imported'
   transferPairId?: string
+  status: PersonalTransactionStatus
   createdAt: string
 }
 
@@ -633,6 +700,26 @@ export interface PersonalCommitment {
   status: PersonalCommitmentStatus
   linkedTransactionId?: string
   createdAt: string
+  // insurance
+  policyNumber?: string
+  sumAssured?: number
+  insurer?: string
+  // utility
+  consumerNumber?: string
+  meterNumber?: string
+  // subscription
+  planTier?: string
+  autoRenew?: boolean
+  // emi
+  loanAmount?: number
+  tenureMonths?: number
+  interestRate?: number
+  // sip
+  fundName?: string
+  units?: number
+  // expected_income
+  incomeSource?: string
+  expectedDate?: string
 }
 
 export type PersonalPlanType = 'personal_income' | 'business_income' | 'home_expense' | 'office_expense' | 'investment'
@@ -643,5 +730,20 @@ export interface PersonalPlan {
   month: number
   planType: PersonalPlanType
   projectedAmount: number
+  createdAt: string
+}
+
+export type PersonalInvestmentType = 'mutual_fund' | 'stock' | 'fd' | 'ppf' | 'real_estate' | 'gold' | 'other'
+
+export interface PersonalInvestment {
+  id: string
+  investmentType: PersonalInvestmentType
+  name: string
+  investedAmount: number
+  currentValue?: number
+  units?: number
+  purchaseDate: string
+  linkedAccountId?: string
+  notes?: string
   createdAt: string
 }

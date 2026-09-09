@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
@@ -12,7 +12,13 @@ import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getAllProjects, upsertProject, deleteProject } from '../../services/projectService'
-import type { ManagedUser, Project, ProjectStage } from '../../types'
+import { getAllQuotations, upsertQuotation } from '../../services/quotationService'
+import { getAllPaymentMilestones, upsertPaymentMilestone, getAllPayables } from '../../services/financeService'
+import { getAllVendorBills, getAllPurchaseOrders } from '../../services/procurementService'
+import { getAllExpenseRequests } from '../../services/expenseService'
+import { addAuditLog } from '../../services/auditLogService'
+import { getAllClients, upsertClient } from '../../services/clientService'
+import type { ManagedUser, Project, ProjectStage, Quotation, PaymentMilestone, Payable, VendorBill, PurchaseOrder, ExpenseRequest, AuditLog, Client } from '../../types'
 
 const STAGE_OPTIONS: { value: ProjectStage; label: string }[] = [
   { value: 'lead_converted',   label: 'Lead Converted' },
@@ -72,9 +78,13 @@ const label = 'block text-xs font-semibold text-slate-500 mb-1'
 
 export default function ProjectsScreen() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
   const { leads } = useCRM()
   const [projects, setProjects] = useState<Project[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [showNewClient, setShowNewClient] = useState(false)
+  const [newClient, setNewClient] = useState({ name: '', phone: '', email: '' })
   const [coordinators, setCoordinators] = useState<ManagedUser[]>([])
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -82,26 +92,57 @@ export default function ProjectsScreen() {
   const [selected, setSelected] = useState<Project | null>(null)
   const [showDelete, setShowDelete] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
+  const [quotations, setQuotations] = useState<Quotation[]>([])
+  const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
+  const [payables, setPayables] = useState<Payable[]>([])
+  const [vendorBills, setVendorBills] = useState<VendorBill[]>([])
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
+  const [expenseRequests, setExpenseRequests] = useState<ExpenseRequest[]>([])
+  const [closeConfirm, setCloseConfirm] = useState<{ show: boolean; toSave: Project | null; items: string[] }>({ show: false, toSave: null, items: [] })
 
   useEffect(() => {
     getAllProjects().then(setProjects)
     getManagedUsersDirectory().then(setCoordinators)
+    getAllQuotations().then(setQuotations)
+    getAllPaymentMilestones().then(setMilestones)
+    getAllPayables().then(setPayables)
+    getAllVendorBills().then(setVendorBills)
+    getAllPurchaseOrders().then(setPurchaseOrders)
+    getAllExpenseRequests().then(setExpenseRequests)
+    getAllClients().then(setClients)
   }, [])
+
+  useEffect(() => {
+    const leadId = searchParams.get('leadId')
+    if (leadId) {
+      setForm(emptyProject())
+      onLeadChange(leadId)
+      setShowForm(true)
+      setSearchParams(params => { params.delete('leadId'); return params }, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   const eligibleLeads = leads.filter(l => l.status === 'won')
 
   function openCreate() {
     setForm(emptyProject())
+    setShowNewClient(false)
     setShowForm(true)
   }
 
   function onLeadChange(leadId: string) {
     const lead = leads.find(l => l.id === leadId)
+    const approvedQuotation = quotations.find(q => q.leadId === leadId && q.status === 'client_approved')
+    const matchedClient = lead ? clients.find(c => c.phone === lead.phone) : undefined
     setForm(f => ({
       ...f,
       leadId: leadId || undefined,
       clientName: lead?.name ?? f.clientName,
       clientPhone: lead?.phone ?? f.clientPhone,
+      clientId: matchedClient?.id ?? f.clientId,
+      quotationId: approvedQuotation && !f.contractValue ? approvedQuotation.id : f.quotationId,
+      contractValue: approvedQuotation && !f.contractValue ? approvedQuotation.netAmount : f.contractValue,
     }))
   }
 
@@ -110,12 +151,65 @@ export default function ProjectsScreen() {
     setForm(f => ({ ...f, coordinatorId, coordinatorName: coordinator?.fullName ?? '' }))
   }
 
+  function outstandingItemsFor(projectId: string): string[] {
+    const unpaidMilestones = milestones.filter(m => m.projectId === projectId && m.status !== 'received').length
+    const projectPoIds = new Set(purchaseOrders.filter(po => po.projectId === projectId).map(po => po.id))
+    const projectBillIds = new Set(vendorBills.filter(b => b.purchaseOrderId && projectPoIds.has(b.purchaseOrderId)).map(b => b.id))
+    const unpaidPayables = payables.filter(p => p.vendorBillId && projectBillIds.has(p.vendorBillId) && p.status !== 'paid').length
+    const unpaidExpenses = expenseRequests.filter(e => e.projectId === projectId && e.status === 'approved').length
+    const items: string[] = []
+    if (unpaidMilestones > 0) items.push(`${unpaidMilestones} unpaid milestone${unpaidMilestones > 1 ? 's' : ''}`)
+    if (unpaidPayables > 0) items.push(`${unpaidPayables} unpaid payable${unpaidPayables > 1 ? 's' : ''}`)
+    if (unpaidExpenses > 0) items.push(`${unpaidExpenses} approved-but-unpaid expense request${unpaidExpenses > 1 ? 's' : ''}`)
+    return items
+  }
+
   async function handleSave() {
     if (!form.name.trim() || !form.clientName.trim() || !form.coordinatorId) {
       setSnack({ open: true, msg: 'Name, client name, and coordinator are required.', type: 'error' })
       return
     }
-    const toSave: Project = { ...form, updatedAt: new Date().toISOString() }
+    if (showNewClient && (!newClient.name.trim() || !newClient.phone.trim())) {
+      setSnack({ open: true, msg: 'New client name and phone are required.', type: 'error' })
+      return
+    }
+    let clientId = form.clientId
+    let clientName = form.clientName
+    let clientPhone = form.clientPhone
+    if (showNewClient) {
+      const client: Client = {
+        id: `client_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        name: newClient.name.trim(),
+        phone: newClient.phone.trim(),
+        email: newClient.email.trim() || undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      const clientResult = await upsertClient(client)
+      if (!clientResult.ok) {
+        setSnack({ open: true, msg: clientResult.error ?? 'Failed to create client.', type: 'error' })
+        return
+      }
+      setClients(prev => [client, ...prev])
+      clientId = client.id
+      clientName = client.name
+      clientPhone = client.phone
+    }
+    const formToSave: Project = { ...form, clientId, clientName, clientPhone }
+    const existing = projects.find(p => p.id === form.id)
+    const closingNow = formToSave.status === 'closed' && existing?.status !== 'closed'
+    if (closingNow) {
+      const items = outstandingItemsFor(formToSave.id)
+      if (items.length > 0) {
+        setCloseConfirm({ show: true, toSave: { ...formToSave, updatedAt: new Date().toISOString() }, items })
+        return
+      }
+    }
+    await commitSave({ ...formToSave, updatedAt: new Date().toISOString() }, !existing, closingNow)
+    setShowNewClient(false)
+  }
+
+  async function commitSave(toSave: Project, isNew: boolean, closingNow: boolean) {
     const result = await upsertProject(toSave)
     if (!result.ok) {
       setSnack({ open: true, msg: result.error ?? 'Failed to save project.', type: 'error' })
@@ -127,6 +221,45 @@ export default function ProjectsScreen() {
     })
     setShowForm(false)
     setSnack({ open: true, msg: 'Project saved.', type: 'success' })
+
+    if (isNew && toSave.quotationId) {
+      const quotation = quotations.find(q => q.id === toSave.quotationId)
+      if (quotation) {
+        await upsertQuotation({ ...quotation, projectId: toSave.id })
+        const milestone: PaymentMilestone = {
+          id: `mst_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          projectId: toSave.id,
+          title: 'Full Contract Value',
+          amount: quotation.netAmount,
+          status: 'pending',
+          receivedAmount: 0,
+          receivedDates: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+        await upsertPaymentMilestone(milestone)
+      }
+    }
+
+    if (user && (isNew || closingNow)) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: toSave.id,
+        action: isNew ? 'project_created' : 'project_closed',
+        description: isNew ? `Project "${toSave.name}" created.` : `Project "${toSave.name}" closed.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
+  }
+
+  async function handleConfirmClose() {
+    if (!closeConfirm.toSave) return
+    const existing = projects.find(p => p.id === closeConfirm.toSave!.id)
+    await commitSave(closeConfirm.toSave, !existing, true)
+    setCloseConfirm({ show: false, toSave: null, items: [] })
   }
 
   async function handleDelete() {
@@ -135,6 +268,18 @@ export default function ProjectsScreen() {
     if (!result.ok) {
       setSnack({ open: true, msg: result.error ?? 'Failed to delete project.', type: 'error' })
       return
+    }
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: selected.id,
+        action: 'project_deleted',
+        description: `Project "${selected.name}" deleted.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
     }
     setProjects(prev => prev.filter(p => p.id !== selected.id))
     setShowDelete(false)
@@ -203,13 +348,49 @@ export default function ProjectsScreen() {
             </select>
           </div>
           <div>
-            <label className={label}>Client Name *</label>
-            <input className={inp} value={form.clientName} onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))} />
+            <label className={label}>Client</label>
+            <select className={inp} value={showNewClient ? '__new__' : form.clientId ?? ''} onChange={e => {
+              if (e.target.value === '__new__') {
+                setShowNewClient(true)
+                setNewClient({ name: form.clientName, phone: form.clientPhone, email: '' })
+              } else {
+                setShowNewClient(false)
+                const client = clients.find(c => c.id === e.target.value)
+                setForm(f => ({ ...f, clientId: client?.id, clientName: client?.name ?? f.clientName, clientPhone: client?.phone ?? f.clientPhone }))
+              }
+            }}>
+              <option value="">— Select —</option>
+              {clients.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
+              <option value="__new__">+ New Client</option>
+            </select>
           </div>
-          <div>
-            <label className={label}>Client Phone</label>
-            <input className={inp} value={form.clientPhone} onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))} />
-          </div>
+          {showNewClient ? (
+            <>
+              <div>
+                <label className={label}>New Client Name *</label>
+                <input className={inp} value={newClient.name} onChange={e => setNewClient(nc => ({ ...nc, name: e.target.value }))} />
+              </div>
+              <div>
+                <label className={label}>New Client Phone *</label>
+                <input className={inp} value={newClient.phone} onChange={e => setNewClient(nc => ({ ...nc, phone: e.target.value }))} />
+              </div>
+              <div>
+                <label className={label}>New Client Email</label>
+                <input className={inp} value={newClient.email} onChange={e => setNewClient(nc => ({ ...nc, email: e.target.value }))} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className={label}>Client Name *</label>
+                <input className={inp} value={form.clientName} onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))} />
+              </div>
+              <div>
+                <label className={label}>Client Phone</label>
+                <input className={inp} value={form.clientPhone} onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))} />
+              </div>
+            </>
+          )}
           <div>
             <label className={label}>Coordinator *</label>
             <select className={inp} value={form.coordinatorId} onChange={e => onCoordinatorChange(e.target.value)}>
@@ -282,7 +463,7 @@ export default function ProjectsScreen() {
               Open Project Workspace
             </button>
             <PermissionGate permission="edit_project">
-              <button onClick={() => { setForm(selected); setSelected(null); setShowForm(true) }}
+              <button onClick={() => { setForm(selected); setShowNewClient(false); setSelected(null); setShowForm(true) }}
                 className="w-full py-3 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold active:bg-slate-50">
                 Edit
               </button>
@@ -306,6 +487,20 @@ export default function ProjectsScreen() {
         confirmLabel="Delete"
         cancelLabel="Cancel"
         onConfirm={handleDelete}>
+      </Dialog>
+
+      <Dialog
+        isOpen={closeConfirm.show}
+        onClose={() => setCloseConfirm({ show: false, toSave: null, items: [] })}
+        title="Close Project With Outstanding Items?"
+        message="This project has unresolved financial items:"
+        variant="danger"
+        confirmLabel="Close Anyway"
+        cancelLabel="Cancel"
+        onConfirm={handleConfirmClose}>
+        <ul className="list-disc list-inside text-sm text-slate-600 mt-2">
+          {closeConfirm.items.map((item, i) => <li key={i}>{item}</li>)}
+        </ul>
       </Dialog>
 
       <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />

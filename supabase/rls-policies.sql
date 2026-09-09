@@ -236,10 +236,20 @@ CREATE POLICY "authenticated select quotations" ON sks_quotations
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY "authenticated write quotations" ON sks_quotations
   FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner') OR sks_has_role('qs') OR sks_has_role('project_coordinator'));
+-- Client-facing transitions (send_to_client / client_approved / revision_requested /
+-- rejected) require the send_quotation_client permission, which only 'owner' holds
+-- (see src/data/permissions.ts) — the UI hides those actions from qs/project_coordinator,
+-- so RLS must enforce the same boundary rather than trusting the client.
 CREATE POLICY "authenticated update quotations" ON sks_quotations
   FOR UPDATE TO authenticated
   USING (sks_has_role('owner') OR sks_has_role('qs') OR sks_has_role('project_coordinator'))
-  WITH CHECK (sks_has_role('owner') OR sks_has_role('qs') OR sks_has_role('project_coordinator'));
+  WITH CHECK (
+    sks_has_role('owner')
+    OR (
+      (sks_has_role('qs') OR sks_has_role('project_coordinator'))
+      AND status NOT IN ('sent_to_client', 'client_approved', 'revision_requested', 'rejected')
+    )
+  );
 CREATE POLICY "authenticated delete quotations owner only" ON sks_quotations
   FOR DELETE TO authenticated USING (sks_has_role('owner'));
 
@@ -277,6 +287,28 @@ CREATE POLICY "authenticated write vendors" ON sks_vendors
   FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner') OR sks_has_role('purchase'));
 CREATE POLICY "authenticated update vendors" ON sks_vendors
   FOR UPDATE TO authenticated USING (sks_has_role('owner') OR sks_has_role('purchase')) WITH CHECK (sks_has_role('owner') OR sks_has_role('purchase'));
+CREATE POLICY "authenticated delete vendors" ON sks_vendors
+  FOR DELETE TO authenticated USING (sks_has_role('owner'));
+
+-- ─── sks_clients ─────────────────────────────────────────────────────────────
+CREATE POLICY "authenticated select clients" ON sks_clients
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated write clients" ON sks_clients
+  FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner') OR sks_has_role('project_coordinator'));
+CREATE POLICY "authenticated update clients" ON sks_clients
+  FOR UPDATE TO authenticated
+  USING (sks_has_role('owner') OR sks_has_role('project_coordinator'))
+  WITH CHECK (sks_has_role('owner') OR sks_has_role('project_coordinator'));
+CREATE POLICY "authenticated delete clients" ON sks_clients
+  FOR DELETE TO authenticated USING (sks_has_role('owner'));
+
+-- ─── sks_punch_list_items ────────────────────────────────────────────────────
+CREATE POLICY "authenticated select punch list on visible projects" ON sks_punch_list_items
+  FOR SELECT TO authenticated USING (sks_can_see_project(project_id));
+CREATE POLICY "authenticated insert punch list on visible projects" ON sks_punch_list_items
+  FOR INSERT TO authenticated WITH CHECK (sks_can_see_project(project_id));
+CREATE POLICY "authenticated update punch list on visible projects" ON sks_punch_list_items
+  FOR UPDATE TO authenticated USING (sks_can_see_project(project_id)) WITH CHECK (sks_can_see_project(project_id));
 
 CREATE POLICY "authenticated select purchase requests on visible projects" ON sks_purchase_requests
   FOR SELECT TO authenticated USING (sks_can_see_project(project_id));
@@ -284,6 +316,8 @@ CREATE POLICY "authenticated write purchase requests on visible projects" ON sks
   FOR INSERT TO authenticated WITH CHECK (sks_can_see_project(project_id));
 CREATE POLICY "authenticated update purchase requests on visible projects" ON sks_purchase_requests
   FOR UPDATE TO authenticated USING (sks_can_see_project(project_id)) WITH CHECK (sks_can_see_project(project_id));
+CREATE POLICY "authenticated delete purchase requests" ON sks_purchase_requests
+  FOR DELETE TO authenticated USING (sks_has_role('owner'));
 
 CREATE POLICY "authenticated select vendor quotes" ON sks_vendor_quotes
   FOR SELECT TO authenticated USING (true);
@@ -333,6 +367,8 @@ CREATE POLICY "authenticated update company accounts" ON sks_company_accounts
   FOR UPDATE TO authenticated
   USING (sks_has_role('owner') OR sks_has_role('accounts'))
   WITH CHECK (sks_has_role('owner') OR sks_has_role('accounts'));
+CREATE POLICY "authenticated delete company accounts" ON sks_company_accounts
+  FOR DELETE TO authenticated USING (sks_has_role('owner'));
 
 CREATE POLICY "authenticated select company transactions" ON sks_company_transactions
   FOR SELECT TO authenticated USING (sks_has_role('owner') OR sks_has_role('accounts'));
@@ -455,4 +491,7 @@ CREATE POLICY "authenticated all personal commitments owner only" ON sks_persona
   FOR ALL TO authenticated USING (sks_has_role('owner')) WITH CHECK (sks_has_role('owner'));
 
 CREATE POLICY "authenticated all personal plans owner only" ON sks_personal_plans
+  FOR ALL TO authenticated USING (sks_has_role('owner')) WITH CHECK (sks_has_role('owner'));
+
+CREATE POLICY "authenticated all personal investments owner only" ON sks_personal_investments
   FOR ALL TO authenticated USING (sks_has_role('owner')) WITH CHECK (sks_has_role('owner'));

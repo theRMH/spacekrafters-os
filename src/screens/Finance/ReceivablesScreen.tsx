@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
@@ -9,7 +10,8 @@ import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllProjects } from '../../services/projectService'
 import { getAllCompanyAccounts, addCompanyTransaction, addTransactionAllocations } from '../../services/companyAccountService'
 import { getAllPaymentMilestones, upsertPaymentMilestone, getAllReceipts, addReceipt } from '../../services/financeService'
-import type { Project, CompanyAccount, PaymentMilestone, Receipt, TransactionAllocation } from '../../types'
+import { addAuditLog } from '../../services/auditLogService'
+import type { Project, CompanyAccount, PaymentMilestone, Receipt, TransactionAllocation, AuditLog } from '../../types'
 
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
@@ -50,6 +52,7 @@ const inp = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 tex
 const label = 'block text-xs font-semibold text-slate-500 mb-1'
 
 export default function ReceivablesScreen() {
+  const { user } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
   const [accounts, setAccounts] = useState<CompanyAccount[]>([])
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
@@ -141,7 +144,7 @@ export default function ReceivablesScreen() {
     if (!msResult.ok) { setSnack({ open: true, msg: msResult.error ?? 'Receipt recorded but failed to update milestone.', type: 'error' }); return }
 
     const txnId = `txn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-    await addCompanyTransaction({
+    const txnResult = await addCompanyTransaction({
       id: txnId,
       accountId: receiptAccountId,
       type: 'credit',
@@ -151,6 +154,7 @@ export default function ReceivablesScreen() {
       date: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     })
+    if (!txnResult.ok) { setSnack({ open: true, msg: txnResult.error ?? 'Receipt recorded on milestone but failed to post to Company Accounts.', type: 'error' }); return }
 
     // One transaction row, allocated to the milestone's project (Finance Rule 3).
     const allocation: TransactionAllocation = {
@@ -160,12 +164,29 @@ export default function ReceivablesScreen() {
       amount,
       createdAt: new Date().toISOString(),
     }
-    await addTransactionAllocations([allocation])
+    const allocResult = await addTransactionAllocations([allocation])
+
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: selected.projectId,
+        action: 'receipt_recorded',
+        description: `Receipt of ${fmtCurrency(amount)} recorded against milestone "${selected.title}".`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
 
     setReceipts(prev => [receipt, ...prev])
     setMilestones(prev => prev.map(m => (m.id === toSave.id ? toSave : m)))
     setReceiptAmount(''); setReceiptAccountId(''); setReceiptRef('')
-    setSnack({ open: true, msg: newStatus === 'received' ? 'Milestone fully received.' : 'Partial receipt recorded.', type: 'success' })
+    if (!allocResult.ok) {
+      setSnack({ open: true, msg: `Receipt recorded, but project allocation failed (${allocResult.error ?? 'unknown error'}). The transaction exists in Company Accounts — contact an admin to allocate it manually.`, type: 'error' })
+    } else {
+      setSnack({ open: true, msg: newStatus === 'received' ? 'Milestone fully received.' : 'Partial receipt recorded.', type: 'success' })
+    }
   }
 
   const filtered = milestones.filter(m => !search || m.title.toLowerCase().includes(search.toLowerCase()))

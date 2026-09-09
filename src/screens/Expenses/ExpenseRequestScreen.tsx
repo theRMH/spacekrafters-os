@@ -7,6 +7,7 @@ import { SearchBar } from '../../components/forms/SearchBar'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
+import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { getAllProjects } from '../../services/projectService'
 import { getAllExpenseRequests, upsertExpenseRequest } from '../../services/expenseService'
 import { getAllCompanyAccounts, addCompanyTransaction, addTransactionAllocations } from '../../services/companyAccountService'
@@ -58,6 +59,8 @@ export default function ExpenseRequestScreen() {
   const [showReject, setShowReject] = useState(false)
   const [payAccountId, setPayAccountId] = useState('')
   const [payRef, setPayRef] = useState('')
+  const [payAmount, setPayAmount] = useState(0)
+  const [payProofFiles, setPayProofFiles] = useState<string[]>([])
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   useEffect(() => {
@@ -76,6 +79,13 @@ export default function ExpenseRequestScreen() {
       if (fresh) setSelected(fresh)
     }
   }, [requests])
+
+  useEffect(() => {
+    if (selected?.status === 'approved') {
+      setPayAmount(selected.amount - (selected.paidAmount ?? 0))
+      setPayProofFiles([])
+    }
+  }, [selected?.id])
 
   function openCreate() {
     setForm(emptyRequest(user?.id ?? '', user?.name ?? ''))
@@ -151,16 +161,22 @@ export default function ExpenseRequestScreen() {
   }
 
   // Only this action creates a cashflow entry (Finance Rule 4: Approval != Payment).
+  // Supports partial payment: status stays "approved" until the paid total reaches the full amount.
   async function handlePay() {
     if (!selected || !payAccountId) {
       setSnack({ open: true, msg: 'Select a payment account.', type: 'error' })
+      return
+    }
+    const remaining = selected.amount - (selected.paidAmount ?? 0)
+    if (!payAmount || payAmount <= 0 || payAmount > remaining) {
+      setSnack({ open: true, msg: `Enter a payment amount up to the remaining balance (${fmtCurrency(remaining)}).`, type: 'error' })
       return
     }
     const txn: CompanyTransaction = {
       id: `txn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       accountId: payAccountId,
       type: 'debit',
-      amount: selected.amount,
+      amount: payAmount,
       description: `Expense: ${selected.purpose}`,
       reference: payRef || undefined,
       date: new Date().toISOString(),
@@ -174,20 +190,45 @@ export default function ExpenseRequestScreen() {
       id: `alloc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       transactionId: txn.id,
       projectId: selected.projectId,
-      amount: selected.amount,
+      amount: payAmount,
       createdAt: new Date().toISOString(),
     }
-    await addTransactionAllocations([allocation])
+    const allocResult = await addTransactionAllocations([allocation])
 
+    const newPaidAmount = (selected.paidAmount ?? 0) + payAmount
+    const isFullyPaid = newPaidAmount >= selected.amount
     const toSave: ExpenseRequest = {
-      ...selected, status: 'paid', paidAmount: selected.amount, paidAt: new Date().toISOString(),
-      paymentAccount: payAccountId, paymentRef: payRef || undefined, updatedAt: new Date().toISOString(),
+      ...selected,
+      status: isFullyPaid ? 'paid' : 'approved',
+      paidAmount: newPaidAmount,
+      paidAt: isFullyPaid ? new Date().toISOString() : selected.paidAt,
+      paymentAccount: payAccountId,
+      paymentRef: payRef || undefined,
+      paymentProofFiles: [...(selected.paymentProofFiles ?? []), ...payProofFiles],
+      updatedAt: new Date().toISOString(),
     }
     const result = await upsertExpenseRequest(toSave)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Payment recorded but failed to update request.', type: 'error' }); return }
     setRequests(prev => prev.map(r => (r.id === toSave.id ? toSave : r)))
-    setPayAccountId(''); setPayRef('')
-    setSnack({ open: true, msg: 'Payment recorded — cashflow updated.', type: 'success' })
+    setPayAccountId(''); setPayRef(''); setPayProofFiles([])
+    setPayAmount(isFullyPaid ? 0 : selected.amount - newPaidAmount)
+    if (!allocResult.ok) {
+      setSnack({ open: true, msg: `Payment recorded, but project allocation failed (${allocResult.error ?? 'unknown error'}). The transaction exists in Company Accounts — contact an admin to allocate it manually.`, type: 'error' })
+    } else {
+      setSnack({ open: true, msg: isFullyPaid ? 'Payment recorded — cashflow updated.' : `Partial payment of ${fmtCurrency(payAmount)} recorded.`, type: 'success' })
+    }
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: toSave.projectId,
+        action: 'expense_paid',
+        description: `Expense request "${toSave.purpose}" — ${fmtCurrency(payAmount)} paid${isFullyPaid ? ' (fully paid)' : ` (partial, ${fmtCurrency(newPaidAmount)} of ${fmtCurrency(toSave.amount)} total)`}.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
   }
 
   async function handleClose() {
@@ -197,6 +238,18 @@ export default function ExpenseRequestScreen() {
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to close.', type: 'error' }); return }
     setRequests(prev => prev.map(r => (r.id === toSave.id ? toSave : r)))
     setSnack({ open: true, msg: 'Expense request closed.', type: 'success' })
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: toSave.projectId,
+        action: 'expense_closed',
+        description: `Expense request "${toSave.purpose}" (${fmtCurrency(toSave.amount)}) closed.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
   }
 
   const filtered = requests.filter(r => !search || r.purpose.toLowerCase().includes(search.toLowerCase()) || r.category.toLowerCase().includes(search.toLowerCase()))
@@ -271,6 +324,7 @@ export default function ExpenseRequestScreen() {
             <label className={label}>Vendor / Payee</label>
             <input className={inp} value={form.vendorPayee ?? ''} onChange={e => setForm(f => ({ ...f, vendorPayee: e.target.value }))} />
           </div>
+          <MultiFileUploadField label="Receipts" files={form.receiptFiles ?? []} onChange={files => setForm(f => ({ ...f, receiptFiles: files }))} uploadButtonLabel="Upload Receipt" />
           <button onClick={handleSave} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
             Submit Request
           </button>
@@ -293,13 +347,18 @@ export default function ExpenseRequestScreen() {
                   <span className="text-red-600 text-xs font-semibold">Rejected: {selected.rejectionReason}</span>
                 </div>
               )}
-              {selected.status === 'paid' && (
+              {(selected.status === 'paid' || (selected.paidAmount ?? 0) > 0) && (
                 <>
-                  <div className="flex justify-between"><span className="text-slate-500">Paid</span><span className="font-semibold text-slate-800">{fmtDate(selected.paidAt)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Paid So Far</span><span className="font-semibold text-slate-800">{fmtCurrency(selected.paidAmount ?? 0)}</span></div>
+                  {selected.status === 'paid' && <div className="flex justify-between"><span className="text-slate-500">Paid</span><span className="font-semibold text-slate-800">{fmtDate(selected.paidAt)}</span></div>}
                   {selected.paymentRef && <div className="flex justify-between"><span className="text-slate-500">Reference</span><span className="font-semibold text-slate-800">{selected.paymentRef}</span></div>}
                 </>
               )}
             </div>
+
+            {(selected.paymentProofFiles?.length ?? 0) > 0 && (
+              <MultiFileUploadField label="Proof of Payment" files={selected.paymentProofFiles ?? []} onChange={() => {}} />
+            )}
 
             {selected.status === 'requested' && (
               <div className="flex gap-2">
@@ -319,14 +378,17 @@ export default function ExpenseRequestScreen() {
             {selected.status === 'approved' && (
               <PermissionGate permission="record_payment">
                 <div className="bg-slate-50 rounded-xl p-3 space-y-2">
-                  <label className={label}>Record Payment</label>
+                  <label className={label}>Record Payment{(selected.paidAmount ?? 0) > 0 ? ` (Remaining: ${fmtCurrency(selected.amount - (selected.paidAmount ?? 0))})` : ''}</label>
                   <select className={inp} value={payAccountId} onChange={e => setPayAccountId(e.target.value)}>
                     <option value="">Select payment account…</option>
                     {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
+                  <input type="number" className={inp} placeholder="Amount to pay" value={payAmount || ''}
+                    onChange={e => setPayAmount(Number(e.target.value))} />
                   <input className={inp} placeholder="Reference (optional)" value={payRef} onChange={e => setPayRef(e.target.value)} />
+                  <MultiFileUploadField label="Proof of Payment" files={payProofFiles} onChange={setPayProofFiles} uploadButtonLabel="Upload Proof" />
                   <button onClick={handlePay} className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
-                    Mark as Paid
+                    {payAmount >= selected.amount - (selected.paidAmount ?? 0) ? 'Mark as Paid' : 'Record Partial Payment'}
                   </button>
                 </div>
               </PermissionGate>

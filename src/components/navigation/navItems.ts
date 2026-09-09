@@ -5,7 +5,7 @@ import {
   FolderOpen, CheckSquare, GanttChartSquare, BookOpen, ShoppingCart,
   Truck, Wallet, Landmark, Receipt, CreditCard, BarChart2, ClipboardCheck,
   CalendarOff, UserCog, File, Settings, UploadCloud, History,
-  PiggyBank, Tags, BellRing, TrendingUp, PieChart, CalendarDays, Scale,
+  PiggyBank, Tags, BellRing, TrendingUp, PieChart, CalendarDays, Scale, LineChart,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -20,6 +20,7 @@ export function getMainItems(): NavItem[] {
   return [
     { icon: Home,       label: 'Home',     path: '/home',     permission: 'view_home'     },
     { icon: FolderOpen, label: 'Projects', path: '/projects', permission: 'view_projects' },
+    { icon: Users,      label: 'Clients',  path: '/clients',  permission: 'view_projects' },
   ]
 }
 
@@ -71,6 +72,7 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { icon: PiggyBank,     label: 'Personal Finance',     path: '/personal-finance',     permission: 'view_personal_finance' },
       { icon: Tags,          label: 'Personal Categories',  path: '/personal-categories',  permission: 'view_personal_finance' },
       { icon: BellRing,      label: 'Personal Commitments', path: '/personal-commitments', permission: 'view_personal_finance' },
+      { icon: LineChart,     label: 'Personal Investments', path: '/personal-investments', permission: 'view_personal_finance' },
       { icon: TrendingUp,    label: 'Personal Plans',       path: '/personal-plans',       permission: 'view_personal_finance' },
       { icon: PieChart,      label: 'Personal Reports',     path: '/personal-reports',     permission: 'view_personal_finance' },
       { icon: CalendarDays,  label: 'Personal Calendar',    path: '/personal-calendar',    permission: 'view_personal_finance' },

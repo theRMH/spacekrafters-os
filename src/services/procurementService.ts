@@ -27,6 +27,13 @@ export async function upsertPurchaseRequest(pr: PurchaseRequest): Promise<{ ok: 
   return { ok: true }
 }
 
+export async function deletePurchaseRequest(id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Not configured.' }
+  const { error } = await supabase.from(PR_TABLE).delete().eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 export async function getAllVendorQuotes(): Promise<VendorQuote[]> {
   if (!supabase) return []
   const { data, error } = await supabase.from(QUOTE_TABLE).select('data').order('created_at', { ascending: false })

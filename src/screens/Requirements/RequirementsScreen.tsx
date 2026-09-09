@@ -8,9 +8,12 @@ import { SearchBar } from '../../components/forms/SearchBar'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
+import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllRequirements, upsertRequirement, deleteRequirement } from '../../services/requirementService'
-import type { SiteVisit, Requirement, RequirementLineItem } from '../../types'
+import { getAllProjects } from '../../services/projectService'
+import { addAuditLog } from '../../services/auditLogService'
+import type { SiteVisit, Requirement, RequirementLineItem, Project, AuditLog } from '../../types'
 
 const UNIT_OPTIONS = ['sqft', 'nos', 'rft', 'sft', 'lot', 'set']
 
@@ -40,6 +43,7 @@ export default function RequirementsScreen() {
 
   const [siteVisits, setSiteVisits] = useState<SiteVisit[]>([])
   const [requirements, setRequirements] = useState<Requirement[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const [search, setSearch] = useState('')
@@ -52,14 +56,25 @@ export default function RequirementsScreen() {
   const [siteVisitId, setSiteVisitId] = useState('')
   const [lineItems, setLineItems] = useState<RequirementLineItem[]>([newLineItem()])
   const [notes, setNotes] = useState('')
+  const [files, setFiles] = useState<string[]>([])
   const [formError, setFormError] = useState('')
 
   async function refresh() {
     setIsLoading(true)
-    const [visits, reqs] = await Promise.all([getAllSiteVisits(), getAllRequirements()])
+    const [visits, reqs, projs] = await Promise.all([getAllSiteVisits(), getAllRequirements(), getAllProjects()])
     setSiteVisits(visits)
     setRequirements(reqs)
+    setProjects(projs)
     setIsLoading(false)
+  }
+
+  // Best-effort: a Project usually doesn't exist yet when a Requirement is captured
+  // (see ProjectWorkspaceScreen's read-time siteVisit->lead join for the common case).
+  // When one already does, set projectId directly so the FK is correct going forward.
+  function resolveProjectId(visitId: string): string | undefined {
+    const visit = siteVisits.find(v => v.id === visitId)
+    if (!visit) return undefined
+    return projects.find(p => p.leadId === visit.leadId)?.id
   }
 
   useEffect(() => { refresh() }, [])
@@ -76,7 +91,7 @@ export default function RequirementsScreen() {
   }
 
   function resetForm() {
-    setSiteVisitId(''); setLineItems([newLineItem()]); setNotes(''); setFormError('')
+    setSiteVisitId(''); setLineItems([newLineItem()]); setNotes(''); setFiles([]); setFormError('')
   }
 
   function openNew() {
@@ -88,6 +103,7 @@ export default function RequirementsScreen() {
     setSiteVisitId(req.siteVisitId)
     setLineItems(req.lineItems.length ? req.lineItems : [newLineItem()])
     setNotes(req.notes ?? '')
+    setFiles(req.files ?? [])
     setFormError('')
     setShowEdit(true)
   }
@@ -115,7 +131,8 @@ export default function RequirementsScreen() {
     const now = new Date().toISOString()
     const req: Requirement = {
       id: `req_${Date.now()}`,
-      siteVisitId, lineItems: validItems, notes: notes.trim() || undefined,
+      siteVisitId, projectId: resolveProjectId(siteVisitId), lineItems: validItems, notes: notes.trim() || undefined,
+      files: files.length ? files : undefined,
       createdAt: now, updatedAt: now,
     }
     const result = await upsertRequirement(req)
@@ -133,7 +150,8 @@ export default function RequirementsScreen() {
       return
     }
     const updated: Requirement = {
-      ...selected, siteVisitId, lineItems: validItems, notes: notes.trim() || undefined,
+      ...selected, siteVisitId, projectId: selected.projectId ?? resolveProjectId(siteVisitId), lineItems: validItems, notes: notes.trim() || undefined,
+      files: files.length ? files : undefined,
       updatedAt: new Date().toISOString(),
     }
     const result = await upsertRequirement(updated)
@@ -149,6 +167,18 @@ export default function RequirementsScreen() {
     const result = await deleteRequirement(selected.id)
     setShowDeleteDialog(false)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete requirement.', type: 'error' }); return }
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: selected.projectId,
+        action: 'requirement_deleted',
+        description: `Requirement for "${requirementLeadName(selected)}" deleted.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     setRequirements(prev => prev.filter(r => r.id !== selected.id))
     setSelected(null)
     setSnack({ open: true, msg: 'Requirement deleted.', type: 'success' })
@@ -229,6 +259,13 @@ export default function RequirementsScreen() {
               </div>
             )}
 
+            {selected.files && selected.files.length > 0 && (
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Attachments</p>
+                <MultiFileUploadField label="" files={selected.files} onChange={() => {}} />
+              </div>
+            )}
+
             {user?.role === 'owner' && (
               <button onClick={() => setShowDeleteDialog(true)}
                 className="w-full text-center text-xs font-semibold text-red-500 py-2">
@@ -298,6 +335,9 @@ export default function RequirementsScreen() {
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
           </div>
+
+          <MultiFileUploadField label="Attachments" files={files} onChange={setFiles} uploadButtonLabel="Upload Photo/File" />
+
           <button
             onClick={showEdit ? handleUpdateRequirement : handleAddRequirement}
             className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"

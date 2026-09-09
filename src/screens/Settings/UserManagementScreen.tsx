@@ -9,9 +9,11 @@ import { NoPermission } from '../../components/layout/NoPermission'
 import type { ManagedUser, UserRole } from '../../types'
 import { loadManagedUsers, saveManagedUsers } from '../../utils/userStorage'
 import { getAllManagedUsers, syncManagedUserAuth, deleteManagedUser } from '../../services/userService'
+import { addAuditLog } from '../../services/auditLogService'
 import { isSupabaseConfigured } from '../../lib/supabase'
 import { syntheticEmailFromMobile } from '../../utils/authIdentity'
 import { ROLE_LABELS, getRoleDisplayLabel } from '../../data/permissions'
+import type { AuditLog } from '../../types'
 
 type Tab = 'all' | 'active' | 'inactive'
 
@@ -198,13 +200,23 @@ export default function UserManagementScreen() {
 
   function toggleStatus(u: ManagedUser) {
     const now = new Date().toISOString()
+    const newStatus = (u.status === 'active' ? 'inactive' : 'active') as ManagedUser['status']
     const updated = users.map(x =>
-      x.id === u.id
-        ? { ...x, status: (x.status === 'active' ? 'inactive' : 'active') as ManagedUser['status'], updatedAt: now }
-        : x
+      x.id === u.id ? { ...x, status: newStatus, updatedAt: now } : x
     )
     saveManagedUsers(updated)
     setUsers(updated)
+    if (authUser) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: newStatus === 'active' ? 'user_activated' : 'user_deactivated',
+        description: `User "${u.fullName}" ${newStatus === 'active' ? 'activated' : 'deactivated'}.`,
+        createdBy: authUser.name,
+        createdByRole: authUser.role,
+        createdAt: now,
+      }
+      addAuditLog(log)
+    }
     setSnack({ open: true, msg: u.status === 'active' ? 'User deactivated' : 'User activated', type: 'success' })
   }
 
@@ -219,6 +231,17 @@ export default function UserManagementScreen() {
     const updated = users.filter(x => x.id !== target.id)
     saveManagedUsers(updated)
     setUsers(updated)
+    if (authUser) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: 'user_deleted',
+        description: `User "${target.fullName}" deleted.`,
+        createdBy: authUser.name,
+        createdByRole: authUser.role,
+        createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
     setSnack({ open: true, msg: 'User deleted', type: 'success' })
   }
 

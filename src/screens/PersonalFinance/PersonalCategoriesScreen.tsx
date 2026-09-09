@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
+import { Dialog } from '../../components/feedback/Dialog'
 import {
-  getAllPersonalCategories, upsertPersonalCategory,
-  getAllPersonalSubcategories, upsertPersonalSubcategory,
+  getAllPersonalCategories, upsertPersonalCategory, deletePersonalCategory,
+  getAllPersonalSubcategories, upsertPersonalSubcategory, deletePersonalSubcategory,
 } from '../../services/personalFinanceService'
+import { addAuditLog } from '../../services/auditLogService'
 import type { PersonalCategory, PersonalSubcategory } from '../../types'
 
 function emptyCategory(): PersonalCategory {
@@ -21,6 +24,7 @@ const inp = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 tex
 const label = 'block text-xs font-semibold text-slate-500 mb-1'
 
 export default function PersonalCategoriesScreen() {
+  const { user } = useAuth()
   const [categories, setCategories] = useState<PersonalCategory[]>([])
   const [subcategories, setSubcategories] = useState<PersonalSubcategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -30,6 +34,8 @@ export default function PersonalCategoriesScreen() {
   const [categoryForm, setCategoryForm] = useState<PersonalCategory>(emptyCategory())
   const [showSubForm, setShowSubForm] = useState(false)
   const [subForm, setSubForm] = useState<PersonalSubcategory>(emptySubcategory(''))
+  const [showDeleteCategoryDialog, setShowDeleteCategoryDialog] = useState(false)
+  const [deleteSubTarget, setDeleteSubTarget] = useState<PersonalSubcategory | null>(null)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   useEffect(() => {
@@ -94,6 +100,45 @@ export default function PersonalCategoriesScreen() {
     })
     setShowSubForm(false)
     setSnack({ open: true, msg: 'Subcategory saved.', type: 'success' })
+  }
+
+  async function confirmDeleteCategory() {
+    if (!selected) return
+    const result = await deletePersonalCategory(selected.id)
+    setShowDeleteCategoryDialog(false)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete category.', type: 'error' }); return }
+    if (user) {
+      addAuditLog({
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: 'personal_category_deleted',
+        description: `Personal category "${selected.name}" deleted.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    setCategories(prev => prev.filter(c => c.id !== selected.id))
+    setSelected(null)
+    setSnack({ open: true, msg: 'Category deleted.', type: 'success' })
+  }
+
+  async function confirmDeleteSubcategory() {
+    if (!deleteSubTarget) return
+    const result = await deletePersonalSubcategory(deleteSubTarget.id)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete subcategory.', type: 'error' }); setDeleteSubTarget(null); return }
+    if (user) {
+      addAuditLog({
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        action: 'personal_subcategory_deleted',
+        description: `Personal subcategory "${deleteSubTarget.name}" deleted.`,
+        createdBy: user.name,
+        createdByRole: user.role,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    setSubcategories(prev => prev.filter(s => s.id !== deleteSubTarget.id))
+    setDeleteSubTarget(null)
+    setSnack({ open: true, msg: 'Subcategory deleted.', type: 'success' })
   }
 
   const selSubcategories = selected ? subcategories.filter(s => s.categoryId === selected.id) : []
@@ -161,11 +206,20 @@ export default function PersonalCategoriesScreen() {
             <div className="space-y-2">
               {selSubcategories.length === 0 && <p className="text-sm text-slate-400 text-center py-10">No subcategories yet.</p>}
               {selSubcategories.map(s => (
-                <div key={s.id} className="bg-white rounded-xl p-3 border border-slate-100">
+                <div key={s.id} className="bg-white rounded-xl p-3 border border-slate-100 flex items-center justify-between">
                   <p className="text-sm font-semibold text-slate-800">{s.name}</p>
+                  {user?.role === 'owner' && (
+                    <button onClick={() => setDeleteSubTarget(s)} className="text-xs font-semibold text-red-500">Delete</button>
+                  )}
                 </div>
               ))}
             </div>
+            {user?.role === 'owner' && (
+              <button onClick={() => setShowDeleteCategoryDialog(true)}
+                className="w-full text-center text-xs font-semibold text-red-500 py-2">
+                Delete Category
+              </button>
+            )}
           </div>
         )}
       </BottomSheet>
@@ -182,6 +236,26 @@ export default function PersonalCategoriesScreen() {
           </button>
         </div>
       </BottomSheet>
+
+      <Dialog
+        isOpen={showDeleteCategoryDialog}
+        onClose={() => setShowDeleteCategoryDialog(false)}
+        title="Delete Category"
+        message="Are you sure you want to delete this category? This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDeleteCategory}
+        variant="danger"
+      />
+
+      <Dialog
+        isOpen={!!deleteSubTarget}
+        onClose={() => setDeleteSubTarget(null)}
+        title="Delete Subcategory"
+        message="Are you sure you want to delete this subcategory? This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDeleteSubcategory}
+        variant="danger"
+      />
 
       <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
     </div>

@@ -23,6 +23,13 @@ export async function upsertCompanyAccount(account: CompanyAccount): Promise<{ o
   return { ok: true }
 }
 
+export async function deleteCompanyAccount(id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Not configured.' }
+  const { error } = await supabase.from(ACCOUNTS_TABLE).delete().eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 export async function getAllCompanyTransactions(): Promise<CompanyTransaction[]> {
   if (!supabase) return []
   const { data, error } = await supabase.from(TRANSACTIONS_TABLE).select('data').order('created_at', { ascending: false })
