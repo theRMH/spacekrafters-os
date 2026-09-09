@@ -1,0 +1,30 @@
+create table if not exists projects (
+  id uuid primary key default gen_random_uuid(),
+  lead_id uuid references leads(id) on delete set null,
+  client_name text not null,
+  phone text not null,
+  email text,
+  address text,
+  project_name text not null,
+  product_type text,
+  profile_brand text,
+  current_stage text not null default 'lead_created',
+  progress_percent int not null default 5,
+  order_value numeric(12,2) default 0,
+  total_sqft numeric(10,2),
+  advance_paid numeric(12,2) default 0,
+  balance_amount numeric(12,2) default 0,
+  payment_status text default 'pending',
+  installation_status text default 'pending',
+  promised_delivery_date date,
+  order_confirmed_at timestamptz,
+  order_confirmed_by uuid references users(id),
+  completed_at timestamptz,
+  is_imported boolean default false,
+  owner_id uuid references users(id),
+  created_by uuid references users(id),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+alter table projects enable row level security;
+create policy "projects_authenticated" on projects for all using (auth.uid() is not null);
