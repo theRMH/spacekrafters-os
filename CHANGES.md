@@ -1,3 +1,17 @@
+## 2026-09-09 (20)
+
+### Update Status Engine — fix missing new/contacted/qualified transitions
+**Commit:** Uncommitted
+- Context: user reported "Update Status" showing no option at all for a lead. Root cause: `LeadStatusSheet.tsx`'s `switch (lead.status)` only had cases from `site_visit_scheduled` onward — `new`, `contacted`, and `qualified` (the actual status of any freshly-created lead) fell through to the `default: "No action available at this stage."` case. This was a real gap against the plan doc's own stated scope (`UPDATE-STATUS-ENGINE-PLAN.md` line 180: "walk a lead through every stage from `new` to `client_approved`"; line 148: `submitSiteVisitScheduled` was specced to "confirm an Appointment/SiteVisit exists"), not something introduced by this fix.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx`:
+  - `ROLE_FOR_LEAD_STATUS` — added `new`/`contacted`/`qualified` → `project_coordinator` (matching the map's existing default for coordination-only steps).
+  - Added `submitContacted` (`new`→`contacted`), `submitQualified` (`contacted`→`qualified`), `submitSiteVisitScheduling` (`qualified`→`site_visit_scheduled`, gated on `hasAppointment` — a scheduled `Appointment` existing for the lead, checked via a new `getAllAppointments()` call in the existing data-fetch `useEffect`, mirroring the `hasSiteVisit`/`hasRequirement` gating pattern already used for later stages).
+  - Added three new `switch` cases (`new`, `contacted`, `qualified`) with the same visual shape as the existing cases (info text + single confirm button, `qualified`'s button disabled until an appointment exists and linking to the Appointments tab rather than duplicating appointment-scheduling UI).
+- No new types, no migration.
+
+- **Verified:** `tsc --noEmit` clean. Dev server serves HTTP 200.
+- Nothing has been pushed or committed.
+
 ## 2026-09-09 (19)
 
 ### Update Status Engine — fix missing trigger on Leads list popup

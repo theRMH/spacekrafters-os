@@ -8,9 +8,13 @@ import { getAllQuotations } from '../../services/quotationService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllRequirements } from '../../services/requirementService'
 import { getAllDesignPackages } from '../../services/designService'
+import { getAllAppointments } from '../../services/appointmentService'
 import type { Lead, LeadStatus, ManagedUser, UserRole } from '../../types'
 
 export const ROLE_FOR_LEAD_STATUS: Partial<Record<LeadStatus, UserRole>> = {
+  new:                    'project_coordinator',
+  contacted:              'project_coordinator',
+  qualified:              'project_coordinator',
   site_visit_scheduled:  'site_engineer',
   site_visit_done:       'project_coordinator',
   requirements_captured: 'project_coordinator',
@@ -54,6 +58,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   const navigate = useNavigate()
 
   const [users, setUsers] = useState<ManagedUser[]>([])
+  const [hasAppointment, setHasAppointment] = useState(false)
   const [hasSiteVisit, setHasSiteVisit] = useState(false)
   const [hasRequirement, setHasRequirement] = useState(false)
   const [hasApprovedQuotation, setHasApprovedQuotation] = useState(false)
@@ -70,6 +75,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   useEffect(() => {
     if (!isOpen) return
     getManagedUsersDirectory().then(setUsers)
+    getAllAppointments().then(a => setHasAppointment(a.some(appt => appt.leadId === lead.id && appt.status === 'scheduled')))
     getAllSiteVisits().then(v => setHasSiteVisit(v.some(sv => sv.leadId === lead.id)))
     getAllRequirements().then(async reqs => {
       const visits = await getAllSiteVisits()
@@ -104,6 +110,18 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     } else {
       onDone(result.error ?? 'Could not update status.')
     }
+  }
+
+  async function submitContacted() {
+    await save('contacted', 'Lead contacted')
+  }
+
+  async function submitQualified() {
+    await save('qualified', 'Lead qualified')
+  }
+
+  async function submitSiteVisitScheduling() {
+    await save('site_visit_scheduled', 'Site visit scheduled')
   }
 
   async function submitSiteVisitScheduled() {
@@ -182,6 +200,33 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     }
 
     switch (lead.status) {
+      case 'new':
+        return (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">Confirm this lead has been contacted.</p>
+            <button disabled={saving} onClick={submitContacted} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+              Mark Contacted
+            </button>
+          </div>
+        )
+      case 'contacted':
+        return (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">Confirm this lead is qualified and worth pursuing.</p>
+            <button disabled={saving} onClick={submitQualified} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+              Mark Qualified
+            </button>
+          </div>
+        )
+      case 'qualified':
+        return (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">{hasAppointment ? 'A site visit appointment is scheduled.' : 'No appointment scheduled yet — schedule one in the Appointments tab first.'}</p>
+            <button disabled={!hasAppointment || saving} onClick={submitSiteVisitScheduling} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+              Confirm Site Visit Scheduled
+            </button>
+          </div>
+        )
       case 'site_visit_scheduled':
         return (
           <div className="space-y-3">
