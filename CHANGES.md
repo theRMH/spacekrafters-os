@@ -1,3 +1,107 @@
+## 2026-09-09 (18)
+
+### Update Status Engine — Phase 7: Project-side UI placement
+**Commit:** Uncommitted
+- Context: final phase of Part B and of the overall Update Status Engine plan (`UPDATE-STATUS-ENGINE-PLAN.md`). Replaces Phase 6's temporary dev-only trigger with the real status banner/button, mirroring the Lead-side pattern from Phase 3.
+- **Changed:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — removed the `[TEMP] Update Status` amber button; added a "Current Stage" banner (stage label + responsible person, falling back to the role from `ROLE_FOR_PROJECT_STAGE` via `ROLE_LABELS` when unassigned) with an "Update Status →" button, shown above the Project Details accordion in the Overview tab whenever `project.status !== 'closed'`. Imports `ROLE_FOR_PROJECT_STAGE`/`PROJECT_STAGE_LABEL` from `ProjectStatusSheet.tsx` and `ROLE_LABELS` from `data/permissions`.
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — added the same status banner + "Update Status →" button to the Project Detail `BottomSheet`, above the existing "Open Project Workspace"/Edit/Delete buttons. Added `showStatusSheet` state and a `ProjectStatusSheet` render wired to `selected`; `onDone` refetches `getAllProjects()`, updates `projects` and `selected` state, and shows the success Snackbar. Imports `ProjectStatusSheet`/`ROLE_FOR_PROJECT_STAGE`/`PROJECT_STAGE_LABEL` from `../ProjectWorkspace/ProjectStatusSheet` and `ROLE_LABELS` from `../../data/permissions`.
+- No new types, no migration — purely UI wiring against Phase 5/6's existing types and logic.
+
+- **Verified:** `tsc --noEmit` clean. Dev server serves HTTP 200.
+- Nothing has been pushed or committed.
+
+This completes Part B (Phases 5–7) and the full Update Status Engine plan (Parts A + B). Both Lead and Project now drive their status/assignment forward exclusively through the "Update Status" button pattern, with Lead handing off to Project at the Won/Advance-Payment boundary (Phase 4). Recommend the user manually walk a lead through to a closed project via the UI before considering this fully verified in real use.
+
+## 2026-09-09 (17)
+
+### Update Status Engine — Phase 6: Project-side role lookup + ProjectStatusSheet
+**Commit:** Uncommitted
+- Context: second phase of Part B (`UPDATE-STATUS-ENGINE-PLAN.md`), building the Project-side equivalent of Phase 2's `LeadStatusSheet.tsx`.
+- **Added:** `src/screens/ProjectWorkspace/ProjectStatusSheet.tsx` — exports `ROLE_FOR_PROJECT_STAGE` (`Partial<Record<ProjectStage, UserRole>>`, covering all 14 stages) and `PROJECT_STAGE_LABEL`. Component `ProjectStatusSheet({isOpen, onClose, project, onDone})`, gated by `project.stage` + `user.role` (same `canAct` pattern as `LeadStatusSheet.tsx`: unset role, matching role, or `owner` can act). Shared `save(stage, note, extra?)` appends a `StatusHistoryItem` to `project.statusHistory`, sets `assignedRole`/`assignedToId`/`assignedToName` via `getManagedUsersDirectory()` lookup, and calls `upsertProject`.
+- One `submitXxx()` per actionable transition: `advance_payment→execution`, `execution→procurement`, `procurement→handover_prep` (gated on `procurementComplete`, computed by joining `PurchaseOrder`→`VendorBill`→`Payable` for the project, same join shape as `ProjectsScreen.tsx`'s `outstandingItemsFor`), `handover_prep→final_payment` (surfaces open `PunchListItem` count as an informational warning, not a hard gate — links to the existing Handover tab rather than duplicating punch-list UI), `final_payment→reconciliation` (gated on `PaymentMilestone`s with `status !== 'received'` reaching zero), `reconciliation→closed` (sets `Project.status: 'closed'` too). Earlier/unlisted stages fall through to a generic "confirm complete, advance to next stage in `STAGE_ORDER`" handler.
+- Deliberately does not reimplement Procurement, Tasks/Diary, Punch List, or Finance UI — each stage's body links to the relevant existing tab in `ProjectWorkspaceScreen.tsx` by name rather than duplicating their logic, per the plan's "reuse/link to existing screens" instruction.
+- **Changed:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — added a temporary dev-only `[TEMP] Update Status` button (amber, marked with a `// TEMP Phase 6 trigger` comment) above the Overview tab's Project Details accordion, wired to a new `showStatusSheet` state and a `ProjectStatusSheet` render near the `Snackbar` at the bottom. On `onDone`, refetches `getAllProjects()` and updates local `project` state so the Overview tab reflects the new stage/assignee immediately. This mirrors Phase 2's temp trigger pattern in `LeadDetailScreen.tsx` — will be replaced by the real banner in Phase 7.
+- No new types beyond Phase 5's `StatusHistoryItem` (already added). No migration.
+
+- **Verified:** `tsc --noEmit` clean. Dev server serves HTTP 200.
+- Nothing has been pushed or committed.
+
+Next: Phase 7 (real status banner + button in `ProjectsScreen.tsx`'s Project Detail sheet and `ProjectWorkspaceScreen.tsx`'s Overview tab; remove the Phase 6 temp trigger).
+
+## 2026-09-09 (16)
+
+### Update Status Engine — Phase 5: Project-side type changes
+**Commit:** Uncommitted
+- Context: first phase of Part B (`UPDATE-STATUS-ENGINE-PLAN.md`), applying the same pattern used for Lead (Part A) to Project. Types only, no behavior change.
+- **Changed:** `src/types/index.ts` — added `Project.assignedRole?: UserRole`, `assignedToId?: string`, `assignedToName?: string`, `statusHistory?: StatusHistoryItem[]`. Added new shared type `StatusHistoryItem { stage, note?, files?, updatedBy, updatedRole, updatedAt }` — Project has no activity trail today (unlike Lead's existing `LeadActivityItem`), so this is new.
+- Confirmed the existing 14-value `ProjectStage` enum (`lead_converted` … `closed`) already covers flow-chart steps 12–18 (procurement, execution, handover, final payment, reconciliation, closure) — no new stage values added, per the plan's "confirm mapping, don't invent speculatively" instruction.
+- All new fields are additive and optional — no migration needed (existing JSONB `data` column on `sks_projects`).
+
+- **Verified:** `tsc --noEmit` clean (no call sites reference the new fields yet).
+- Nothing has been pushed or committed.
+
+Next: Phase 6 (`ROLE_FOR_PROJECT_STAGE` map + `ProjectStatusSheet.tsx` logic, exercised via a temporary dev-only trigger).
+
+## 2026-09-09 (15)
+
+### Update Status Engine — Phase 4: Lead → Project handoff (step 10 → 11)
+**Commit:** Uncommitted
+- Context: fourth and final phase of Part A (`UPDATE-STATUS-ENGINE-PLAN.md`). This is the checkpoint where the carrier switches from Lead to Project — the Lead's `advancePaymentAmount`/`advancePaymentRef` (captured in Phase 2's `submitAdvancePayment`) becomes a real, visible `Receipt` once the Project + starter milestone exist. No new conversion machinery was built — this phase reuses the existing lead-to-project flow already present in `ProjectsScreen.tsx` (from the earlier, separate "11 gaps" plan): the `?leadId=` query param handling, client auto-match, and starter `PaymentMilestone` auto-creation in `commitSave()`.
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — in `commitSave()`, when a new project is created from a quotation and the source Lead (`toSave.leadId`) has `advancePaymentAmount` set: the starter `PaymentMilestone` is created already partially/fully received (`receivedAmount`, `receivedDates`, `status: 'partial'|'received'` set up front instead of `0`/`[]`/`'pending'`); a real `Receipt` is created via `addReceipt` (linked to that milestone, carrying the Lead's `advancePaymentRef` as `reference` and a note that it was carried over from the Lead); and `Project.advanceReceived` is bumped and persisted via a follow-up `upsertProject`, with local `projects` state updated to match. This is what makes the advance payment appear in `ReceivablesScreen.tsx`, which only lists receipts scoped to a milestone.
+- Deliberately did not replicate `ReceivablesScreen.tsx`'s manual-receipt-entry flow (Company Accounts transaction + `TransactionAllocation`) — the plan's Phase 4 scope is limited to the `Receipt`+`PaymentMilestone` pair; the manual receipt UI's ledger-posting behavior is a separate concern not exercised by this automatic carry-over.
+
+- **Verified:** `tsc --noEmit` clean. Dev server serves HTTP 200.
+- Nothing has been pushed or committed.
+
+This completes Part A (Phases 1–4) of the Update Status Engine plan. Per the plan, this is the checkpoint before Part B (Project side, Phases 5–7) begins — Lead side should be fully working in real use here.
+
+## 2026-09-09 (14)
+
+### Update Status Engine — Phase 3: Lead-side UI placement
+**Commit:** Uncommitted
+- Context: third phase of `UPDATE-STATUS-ENGINE-PLAN.md`. Replaces the temp trigger and the legacy `NEXT_STATUS` "Status Actions" card from `LeadDetailScreen.tsx` with the real "Current Action Needed" banner, per the plan's Phase 3 spec.
+
+- **Changed:** `src/screens/Leads/LeadDetailScreen.tsx`:
+  - Removed the stale `NEXT_STATUS` map (only covered `new → contacted → qualified → site_visit_scheduled → requirements_captured → won`, predating the 15-value `LeadStatus` extension) and its `handleAdvanceStatus` handler.
+  - Removed the temporary amber `[TEMP] Open Update Status` button from Phase 2.
+  - Added a "Current Action Needed" banner card (shown whenever `can('edit_lead')` and the lead isn't `won`/`lost`): current stage via `LEAD_STATUS_LABEL[lead.status]`, responsible person/role via `lead.assignedToName` falling back to `ROLE_LABELS[ROLE_FOR_LEAD_STATUS[lead.status]]`, a full-width bold "Update Status →" button (same visual weight as the existing `Call {name}` button) opening `LeadStatusSheet` (unchanged from Phase 2 — only its trigger moved), and a "Mark Lost" button carried over from the old card.
+  - Imported `ROLE_LABELS` from `data/permissions.ts` (existing role-label convention, already used by `UserManagementScreen.tsx`) and `LEAD_STATUS_LABEL`/`ROLE_FOR_LEAD_STATUS` from `LeadStatusSheet.tsx`.
+
+- **Verified:** `tsc --noEmit` clean. Dev server serves HTTP 200.
+- Nothing has been pushed or committed.
+
+Next: Phase 4 (Lead → Project handoff on `submitAdvancePayment` — reuse existing lead-to-project conversion logic in `ProjectsScreen.tsx`, plus create a real `Receipt` against the auto-generated starter milestone using the Lead's captured `advancePaymentAmount`/`advancePaymentRef`). This is the checkpoint after which the Lead side should be fully working in real use, before Part B (Project side) begins.
+
+## 2026-09-09 (13)
+
+### Update Status Engine — Phase 2: Lead-side role lookup + LeadStatusSheet logic
+**Commit:** Uncommitted
+- Context: second phase of `UPDATE-STATUS-ENGINE-PLAN.md`, depends on Phase 1's type changes. Builds the actual stage-transition logic as one self-contained sheet, matching Fenster's `DemoFlowSheet.tsx` pattern (one `submitXxx()` per transition ending in a shared `save()`), sized to sks's Lead entity. Exercised via a temporary dev-only trigger — real UI placement is Phase 3.
+- Decision made with the user mid-phase: `submitAdvancePayment` (step 10) happens on the Lead, before any Project/PaymentMilestone exists, so it can't record a real `Receipt` yet (would be orphaned/invisible — `ReceivablesScreen.tsx` only lists receipts scoped to a milestone). It now captures `advancePaymentAmount`/`advancePaymentRef` on the Lead itself; Phase 4 (Lead→Project handoff) is where the real `Receipt` gets created against the auto-generated starter milestone, making it visible in Receivables at the correct point.
+
+- **Added:** `src/screens/Leads/LeadStatusSheet.tsx` — new component. Exports `ROLE_FOR_LEAD_STATUS` (stage → responsible `UserRole` map) and `LEAD_STATUS_LABEL`. Gated by `lead.status` + `user.role` (falls back to a "waiting on {role}" message if the current user isn't responsible; owner can always act). One `submitXxx()` per transition (site visit → requirements → quotation draft → internal approve/reject → design in-progress/approved/revision → send to client → client decision (approved/negotiating/lost) → advance payment), each ending in a shared `save()` that appends a `LeadActivityItem`, sets `assignedRole/assignedToId/assignedToName` via a `getManagedUsersDirectory()` lookup, and calls `updateLead()`. Steps that already have dedicated capture screens (Site Visits, Requirements, Quotations, Design Center) link to/confirm those records rather than duplicating capture inline.
+- **Changed:** `src/types/index.ts` — added `Lead.advancePaymentAmount?: number` and `Lead.advancePaymentRef?: string` (follow-up to Phase 1, decided during Phase 2 once the advance-payment capture shape was worked out).
+- **Changed:** `src/screens/Leads/LeadDetailScreen.tsx` — added a temporary `[TEMP] Open Update Status` button (visible whenever the lead isn't `won`/`lost`) that opens `LeadStatusSheet`, plus its `Snackbar` wiring. Marked TEMP in-code; removed in Phase 3 once the real banner replaces it.
+
+- **Verified:** `tsc --noEmit` clean. Dev server starts and serves HTTP 200 with the new component wired in.
+- Nothing has been pushed or committed.
+
+Next: Phase 3 (real "Current Action Needed" banner in `LeadDetailScreen.tsx`, replacing both the temp trigger and the old `NEXT_STATUS` "Status Actions" card).
+
+## 2026-09-09 (12)
+
+### Update Status Engine — Phase 1: Lead-side type changes
+**Commit:** Uncommitted
+- Context: first phase of `UPDATE-STATUS-ENGINE-PLAN.md` (Fenster-style "Update Status" button — stage+role-gated form that advances a record's status and reassignment together). Lead is the pre-project carrier (flow-chart steps 3-10); Project will be the post-project carrier (steps 11-18, later phases). Types-only phase, no behavior change.
+
+- **Changed:** `src/types/index.ts` — extended `LeadStatus` from 7 to 15 values (`new, contacted, qualified, site_visit_scheduled, site_visit_done, requirements_captured, quotation_drafted, internally_approved, design_in_progress, design_approved, sent_to_client, negotiating, client_approved, won, lost`) to cover the full flow-chart chain. Added `Lead.assignedRole?`, `Lead.assignedToId?`, `Lead.assignedToName?` (existing `ownerId`/`ownerName` stay as the original owner, a separate concept). Made `DesignPackage.projectId` optional and added `DesignPackage.leadId?`, since the flow chart's Design stage (step 7) happens before Project creation (step 11) — mirrors the existing optional-`projectId` pattern already used by `Requirement`/`Quotation`.
+- **Changed:** `src/screens/Design/DesignCenterScreen.tsx` — `projectName()` helper now accepts `string | undefined` (falls back to `'Unassigned'`), required because `DesignPackage.projectId` is no longer guaranteed. Only change needed to keep the build green after the type edit.
+
+- **Verified:** `tsc --noEmit` clean. Audited all `LeadStatus`/`NEXT_STATUS` call sites first (`LeadsScreen.tsx`, `LeadDetailScreen.tsx`, `leadService.ts`, `ReportsScreen.tsx`, `ProjectsScreen.tsx`) — none needed changes beyond the one above; `NEXT_STATUS` in `LeadDetailScreen.tsx` will be fully replaced in Phase 3.
+- Nothing has been pushed or committed.
+
+Next: Phase 2 (`ROLE_FOR_LEAD_STATUS` map + `LeadStatusSheet.tsx`).
+
 ## 2026-09-09 (11)
 
 ### Gap 5 — Personal Reports depth (6 tabs)

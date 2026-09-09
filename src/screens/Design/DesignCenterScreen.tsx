@@ -59,7 +59,8 @@ export default function DesignCenterScreen() {
 
   useEffect(() => { refresh() }, [])
 
-  function projectName(id: string): string {
+  function projectName(id: string | undefined): string {
+    if (!id) return 'Unassigned'
     return projects.find(p => p.id === id)?.name ?? id
   }
 

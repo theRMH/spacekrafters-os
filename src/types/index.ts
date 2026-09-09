@@ -74,7 +74,22 @@ export interface ManagedUser {
 }
 
 // ─── CRM & Field Operations ──────────────────────────────────────────────────
-export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'site_visit_scheduled' | 'requirements_captured' | 'won' | 'lost'
+export type LeadStatus =
+  | 'new'
+  | 'contacted'
+  | 'qualified'
+  | 'site_visit_scheduled'
+  | 'site_visit_done'
+  | 'requirements_captured'
+  | 'quotation_drafted'
+  | 'internally_approved'
+  | 'design_in_progress'
+  | 'design_approved'
+  | 'sent_to_client'
+  | 'negotiating'
+  | 'client_approved'
+  | 'won'
+  | 'lost'
 export type LeadSource = 'referral' | 'walk_in' | 'website' | 'social_media' | 'cold_call' | 'exhibition' | 'other'
 export type LeadInterest = 'hot' | 'medium' | 'cold'
 
@@ -99,10 +114,15 @@ export interface Lead {
   status: LeadStatus
   ownerId?: string
   ownerName: string
+  assignedRole?: UserRole
+  assignedToId?: string
+  assignedToName?: string
   // SLA: first-contact deadline from creation — used to flag overdue leads
   // that haven't moved past 'new' yet.
   slaDueAt: string
   lostReason?: string
+  advancePaymentAmount?: number
+  advancePaymentRef?: string
   activity: LeadActivityItem[]
   createdAt: string
   updatedAt: string
@@ -259,6 +279,15 @@ export interface Client {
   updatedAt: string
 }
 
+export interface StatusHistoryItem {
+  stage: string
+  note?: string
+  files?: string[]
+  updatedBy: string
+  updatedRole: UserRole
+  updatedAt: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -279,6 +308,10 @@ export interface Project {
   expectedHandoverDate?: string
   handoverSignedAt?: string
   handoverSignedBy?: string
+  assignedRole?: UserRole
+  assignedToId?: string
+  assignedToName?: string
+  statusHistory?: StatusHistoryItem[]
   createdAt: string
   updatedAt: string
 }
@@ -332,7 +365,8 @@ export type DesignPackageStatus = 'in_progress' | 'client_review' | 'client_appr
 
 export interface DesignPackage {
   id: string
-  projectId: string
+  projectId?: string
+  leadId?: string
   quotationId?: string
   name: string
   status: DesignPackageStatus

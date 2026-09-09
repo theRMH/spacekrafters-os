@@ -23,6 +23,8 @@ import { getAllDocuments, upsertDocument, getAllDocumentVersions, addDocumentVer
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { Dialog } from '../../components/feedback/Dialog'
 import { GanttChart } from './GanttChart'
+import { ProjectStatusSheet, ROLE_FOR_PROJECT_STAGE, PROJECT_STAGE_LABEL } from './ProjectStatusSheet'
+import { ROLE_LABELS } from '../../data/permissions'
 import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task, TaskDependency, DailyDiaryEntry, ExpenseRequest, PaymentMilestone, Receipt, SiteVisit, PunchListItem, ProjectDocument, ProjectDocumentVersion } from '../../types'
 
 type Tab = 'overview' | 'gantt' | 'team' | 'tasks' | 'requirements' | 'boq' | 'design' | 'diary' | 'finance' | 'procurement' | 'documents' | 'handover'
@@ -95,6 +97,7 @@ export default function ProjectWorkspaceScreen() {
   const [punchLocation, setPunchLocation] = useState('')
   const [punchPhotos, setPunchPhotos] = useState<string[]>([])
   const [showHandoverConfirm, setShowHandoverConfirm] = useState(false)
+  const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [documents, setDocuments] = useState<ProjectDocument[]>([])
   const [documentVersions, setDocumentVersions] = useState<ProjectDocumentVersion[]>([])
   const [selectedDocument, setSelectedDocument] = useState<ProjectDocument | null>(null)
@@ -355,6 +358,23 @@ export default function ProjectWorkspaceScreen() {
 
       <div className="px-4 pt-4">
         {tab === 'overview' && (
+          <>
+            {project.status !== 'closed' && (
+              <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3 mb-4">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
+                  <p className="text-sm font-bold text-slate-800 mt-1">{PROJECT_STAGE_LABEL[project.stage]}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Responsible: {project.assignedToName ?? (ROLE_FOR_PROJECT_STAGE[project.stage] ? ROLE_LABELS[ROLE_FOR_PROJECT_STAGE[project.stage]!] : '—')}
+                  </p>
+                </div>
+                <button onClick={() => setShowStatusSheet(true)}
+                  className="w-full py-3.5 rounded-xl text-white text-sm font-bold active:opacity-90"
+                  style={{ background: '#0F2A4A' }}>
+                  Update Status →
+                </button>
+              </div>
+            )}
           <Accordion
             defaultOpen="details"
             items={[
@@ -384,6 +404,7 @@ export default function ProjectWorkspaceScreen() {
               },
             ]}
           />
+          </>
         )}
 
         {tab === 'team' && (
@@ -803,6 +824,19 @@ export default function ProjectWorkspaceScreen() {
         cancelLabel="Cancel"
         onConfirm={handleConfirmHandover}
       />
+
+      {project && (
+        <ProjectStatusSheet
+          isOpen={showStatusSheet}
+          onClose={() => setShowStatusSheet(false)}
+          project={project}
+          onDone={async (msg) => {
+            const projects = await getAllProjects()
+            setProject(projects.find(p => p.id === id) ?? null)
+            setSnack({ open: true, msg, type: 'success' })
+          }}
+        />
+      )}
 
       <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
     </div>

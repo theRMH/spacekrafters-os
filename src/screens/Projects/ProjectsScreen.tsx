@@ -13,12 +13,14 @@ import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getAllProjects, upsertProject, deleteProject } from '../../services/projectService'
 import { getAllQuotations, upsertQuotation } from '../../services/quotationService'
-import { getAllPaymentMilestones, upsertPaymentMilestone, getAllPayables } from '../../services/financeService'
+import { getAllPaymentMilestones, upsertPaymentMilestone, getAllPayables, addReceipt } from '../../services/financeService'
 import { getAllVendorBills, getAllPurchaseOrders } from '../../services/procurementService'
 import { getAllExpenseRequests } from '../../services/expenseService'
 import { addAuditLog } from '../../services/auditLogService'
 import { getAllClients, upsertClient } from '../../services/clientService'
-import type { ManagedUser, Project, ProjectStage, Quotation, PaymentMilestone, Payable, VendorBill, PurchaseOrder, ExpenseRequest, AuditLog, Client } from '../../types'
+import { ROLE_LABELS } from '../../data/permissions'
+import { ProjectStatusSheet, ROLE_FOR_PROJECT_STAGE, PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
+import type { ManagedUser, Project, ProjectStage, Quotation, PaymentMilestone, Payable, VendorBill, PurchaseOrder, ExpenseRequest, AuditLog, Client, Receipt } from '../../types'
 
 const STAGE_OPTIONS: { value: ProjectStage; label: string }[] = [
   { value: 'lead_converted',   label: 'Lead Converted' },
@@ -92,6 +94,7 @@ export default function ProjectsScreen() {
   const [selected, setSelected] = useState<Project | null>(null)
   const [showDelete, setShowDelete] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
+  const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
   const [payables, setPayables] = useState<Payable[]>([])
@@ -237,7 +240,31 @@ export default function ProjectsScreen() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         }
+
+        const lead = toSave.leadId ? leads.find(l => l.id === toSave.leadId) : undefined
+        if (lead?.advancePaymentAmount) {
+          milestone.receivedAmount = lead.advancePaymentAmount
+          milestone.receivedDates = [new Date().toISOString()]
+          milestone.status = lead.advancePaymentAmount >= milestone.amount ? 'received' : 'partial'
+        }
         await upsertPaymentMilestone(milestone)
+
+        if (lead?.advancePaymentAmount) {
+          const receipt: Receipt = {
+            id: `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            projectId: toSave.id,
+            milestoneId: milestone.id,
+            amount: lead.advancePaymentAmount,
+            receivedDate: new Date().toISOString(),
+            reference: lead.advancePaymentRef,
+            notes: 'Advance payment carried over from Lead.',
+            createdAt: new Date().toISOString(),
+          }
+          await addReceipt(receipt)
+          const projectWithAdvance = { ...toSave, advanceReceived: (toSave.advanceReceived ?? 0) + lead.advancePaymentAmount }
+          await upsertProject(projectWithAdvance)
+          setProjects(prev => prev.map(p => (p.id === toSave.id ? projectWithAdvance : p)))
+        }
       }
     }
 
@@ -458,6 +485,22 @@ export default function ProjectsScreen() {
               <div className="flex justify-between"><span className="text-slate-500">Start Date</span><span className="font-semibold text-slate-800">{fmtDate(selected.startDate)}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Expected Handover</span><span className="font-semibold text-slate-800">{fmtDate(selected.expectedHandoverDate)}</span></div>
             </div>
+            {selected.status !== 'closed' && (
+              <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
+                  <p className="text-sm font-bold text-slate-800 mt-1">{PROJECT_STAGE_LABEL[selected.stage]}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Responsible: {selected.assignedToName ?? (ROLE_FOR_PROJECT_STAGE[selected.stage] ? ROLE_LABELS[ROLE_FOR_PROJECT_STAGE[selected.stage]!] : '—')}
+                  </p>
+                </div>
+                <button onClick={() => setShowStatusSheet(true)}
+                  className="w-full py-3.5 rounded-xl text-white text-sm font-bold active:opacity-90"
+                  style={{ background: '#0F2A4A' }}>
+                  Update Status →
+                </button>
+              </div>
+            )}
             <button onClick={() => navigate(`/projects/${selected.id}`)}
               className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
               Open Project Workspace
@@ -477,6 +520,20 @@ export default function ProjectsScreen() {
           </div>
         )}
       </BottomSheet>
+
+      {selected && (
+        <ProjectStatusSheet
+          isOpen={showStatusSheet}
+          onClose={() => setShowStatusSheet(false)}
+          project={selected}
+          onDone={async (msg) => {
+            const updated = await getAllProjects()
+            setProjects(updated)
+            setSelected(updated.find(p => p.id === selected.id) ?? null)
+            setSnack({ open: true, msg, type: 'success' })
+          }}
+        />
+      )}
 
       <Dialog
         isOpen={showDelete}

@@ -10,15 +10,9 @@ import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllAppointments } from '../../services/appointmentService'
 import { getAllFollowUps } from '../../services/followUpService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
-import type { Appointment, FollowUp, SiteVisit, LeadStatus } from '../../types'
-
-const NEXT_STATUS: Partial<Record<LeadStatus, { value: LeadStatus; label: string }>> = {
-  new:                    { value: 'contacted',             label: 'Mark Contacted' },
-  contacted:              { value: 'qualified',             label: 'Mark Qualified' },
-  qualified:              { value: 'site_visit_scheduled',  label: 'Site Visit Scheduled' },
-  site_visit_scheduled:   { value: 'requirements_captured', label: 'Requirements Captured' },
-  requirements_captured:  { value: 'won',                   label: 'Mark Won' },
-}
+import { ROLE_LABELS } from '../../data/permissions'
+import type { Appointment, FollowUp, SiteVisit } from '../../types'
+import { LeadStatusSheet, LEAD_STATUS_LABEL, ROLE_FOR_LEAD_STATUS } from './LeadStatusSheet'
 
 type Tab = 'overview' | 'appointments' | 'follow-ups' | 'site-visits' | 'activity'
 
@@ -55,6 +49,7 @@ export default function LeadDetailScreen() {
   const [siteVisits, setSiteVisits] = useState<SiteVisit[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showLostDialog, setShowLostDialog] = useState(false)
+  const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [lostReason, setLostReason] = useState('')
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
@@ -69,14 +64,6 @@ export default function LeadDetailScreen() {
     }
     if (id) load()
   }, [id])
-
-  async function handleAdvanceStatus(status: LeadStatus, note: string) {
-    if (!lead) return
-    const result = await updateLead(lead.id, { status }, note)
-    setSnack(result.ok
-      ? { open: true, msg: 'Lead status updated.', type: 'success' }
-      : { open: true, msg: result.error ?? 'Could not update status.', type: 'error' })
-  }
 
   async function handleMarkLost() {
     if (!lead || !lostReason.trim()) return
@@ -158,20 +145,23 @@ export default function LeadDetailScreen() {
             )}
 
             {can('edit_lead') && lead.status !== 'won' && lead.status !== 'lost' && (
-              <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-2.5">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status Actions</p>
-                <div className="flex flex-wrap gap-2">
-                  {NEXT_STATUS[lead.status] && (
-                    <button onClick={() => handleAdvanceStatus(NEXT_STATUS[lead.status]!.value, NEXT_STATUS[lead.status]!.label)}
-                      className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
-                      {NEXT_STATUS[lead.status]!.label}
-                    </button>
-                  )}
-                  <button onClick={() => setShowLostDialog(true)}
-                    className="px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-xs font-semibold text-red-700 active:bg-red-100">
-                    Mark Lost
-                  </button>
+              <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>
+                  <p className="text-sm font-bold text-slate-800 mt-1">{LEAD_STATUS_LABEL[lead.status]}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Responsible: {lead.assignedToName ?? (ROLE_FOR_LEAD_STATUS[lead.status] ? ROLE_LABELS[ROLE_FOR_LEAD_STATUS[lead.status]!] : '—')}
+                  </p>
                 </div>
+                <button onClick={() => setShowStatusSheet(true)}
+                  className="w-full py-3.5 rounded-xl text-white text-sm font-bold active:opacity-90"
+                  style={{ background: '#0F2A4A' }}>
+                  Update Status →
+                </button>
+                <button onClick={() => setShowLostDialog(true)}
+                  className="w-full py-2 rounded-xl border border-red-200 bg-red-50 text-xs font-semibold text-red-700 active:bg-red-100">
+                  Mark Lost
+                </button>
               </div>
             )}
             {lead.status === 'lost' && lead.lostReason && (
@@ -275,6 +265,13 @@ export default function LeadDetailScreen() {
           placeholder="Reason for losing this lead…" rows={3}
           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-400" />
       </Dialog>
+
+      <LeadStatusSheet
+        isOpen={showStatusSheet}
+        onClose={() => setShowStatusSheet(false)}
+        lead={lead}
+        onDone={msg => setSnack({ open: true, msg, type: msg.toLowerCase().includes('could not') || msg.toLowerCase().includes('enter a valid') ? 'error' : 'success' })}
+      />
 
       <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
     </div>
