@@ -1,3 +1,15 @@
+## 2026-09-09 (19)
+
+### Update Status Engine — fix missing trigger on Leads list popup
+**Commit:** Uncommitted
+- Context: Phase 3 only wired the "Update Status" banner/button into `LeadDetailScreen.tsx` (the `/leads/:id` full-page route). The Leads list screen (`LeadsScreen.tsx`) has its own separate lead-detail `BottomSheet` popup that was never touched, so leads opened from the list had no visible status action — only a "View Full Details →" link to the full page.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — added the same "Current Action Needed" banner + "Update Status →" button (shown when `edit_lead` is allowed and the lead isn't `won`/`lost`) to the list popup, above "View Full Details →". Wired a `LeadStatusSheet` render and `showStatusSheet` state. Added `liveSelected` (derived by re-finding `selected.id` in the `useCRM()` `leads` array) so the popup reflects the new status/assignee immediately after `LeadStatusSheet` saves via `updateLead`, without a manual refetch. Imports `LeadStatusSheet`/`LEAD_STATUS_LABEL`/`ROLE_FOR_LEAD_STATUS` from `./LeadStatusSheet` and `ROLE_LABELS` from `../../data/permissions`.
+- Did not port the "Mark Lost" button/dialog from `LeadDetailScreen.tsx` — out of scope for this fix, which is specifically about the missing status-update trigger the user reported.
+- No new types, no migration.
+
+- **Verified:** `tsc --noEmit` clean. Dev server serves HTTP 200.
+- Nothing has been pushed or committed.
+
 ## 2026-09-09 (18)
 
 ### Update Status Engine — Phase 7: Project-side UI placement

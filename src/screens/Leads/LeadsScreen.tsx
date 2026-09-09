@@ -11,6 +11,8 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
+import { ROLE_LABELS } from '../../data/permissions'
+import { LeadStatusSheet, LEAD_STATUS_LABEL, ROLE_FOR_LEAD_STATUS } from './LeadStatusSheet'
 import type { Lead, LeadSource, LeadInterest, LeadStatus } from '../../types'
 
 type Filter = 'all' | LeadStatus
@@ -65,6 +67,7 @@ export default function LeadsScreen() {
   const [showNew, setShowNew] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   const [name, setName] = useState('')
@@ -141,6 +144,8 @@ export default function LeadsScreen() {
     setSnack({ open: true, msg: 'Lead deleted.', type: 'success' })
   }
 
+  const liveSelected = selected ? leads.find(l => l.id === selected.id) ?? null : null
+
   const filtered = leads.filter(l => {
     const matchSearch = !search
       || l.name.toLowerCase().includes(search.toLowerCase())
@@ -211,7 +216,10 @@ export default function LeadsScreen() {
 
       {/* Lead Detail Sheet */}
       <BottomSheet isOpen={!!selected && !showEdit} onClose={() => setSelected(null)} title={selected?.name ?? ''} height="full">
-        {selected && (
+        {(() => {
+          const selected = liveSelected
+          if (!selected) return null
+          return (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
@@ -272,6 +280,23 @@ export default function LeadsScreen() {
               <Phone size={16} /> Call {selected.name.split(' ')[0]}
             </a>
 
+            {can('edit_lead') && selected.status !== 'won' && selected.status !== 'lost' && (
+              <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>
+                  <p className="text-sm font-bold text-slate-800 mt-1">{LEAD_STATUS_LABEL[selected.status]}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Responsible: {selected.assignedToName ?? (ROLE_FOR_LEAD_STATUS[selected.status] ? ROLE_LABELS[ROLE_FOR_LEAD_STATUS[selected.status]!] : '—')}
+                  </p>
+                </div>
+                <button onClick={() => setShowStatusSheet(true)}
+                  className="w-full py-3.5 rounded-xl text-white text-sm font-bold active:opacity-90"
+                  style={{ background: '#0F2A4A' }}>
+                  Update Status →
+                </button>
+              </div>
+            )}
+
             <button onClick={() => navigate(`/leads/${selected.id}`)}
               className="w-full text-center text-sm font-bold py-3 rounded-xl border border-slate-200 text-slate-700 active:bg-slate-50">
               View Full Details →
@@ -284,8 +309,18 @@ export default function LeadsScreen() {
               </button>
             )}
           </div>
-        )}
+          )
+        })()}
       </BottomSheet>
+
+      {liveSelected && (
+        <LeadStatusSheet
+          isOpen={showStatusSheet}
+          onClose={() => setShowStatusSheet(false)}
+          lead={liveSelected}
+          onDone={(msg) => setSnack({ open: true, msg, type: 'success' })}
+        />
+      )}
 
       {/* New / Edit Lead Sheet */}
       <BottomSheet
