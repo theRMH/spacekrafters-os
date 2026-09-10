@@ -252,13 +252,6 @@ export interface Quotation {
 }
 
 export type ProjectStage =
-  | 'lead_converted'
-  | 'site_visit'
-  | 'requirements'
-  | 'boq_preparation'
-  | 'internal_approval'
-  | 'design'
-  | 'client_approval'
   | 'advance_payment'
   | 'execution'
   | 'procurement'

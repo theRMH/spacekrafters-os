@@ -23,13 +23,6 @@ import { ProjectStatusSheet, ROLE_FOR_PROJECT_STAGE, PROJECT_STAGE_LABEL } from 
 import type { ManagedUser, Project, ProjectStage, Quotation, PaymentMilestone, Payable, VendorBill, PurchaseOrder, ExpenseRequest, AuditLog, Client, Receipt } from '../../types'
 
 const STAGE_OPTIONS: { value: ProjectStage; label: string }[] = [
-  { value: 'lead_converted',   label: 'Lead Converted' },
-  { value: 'site_visit',       label: 'Site Visit' },
-  { value: 'requirements',     label: 'Requirements' },
-  { value: 'boq_preparation',  label: 'BOQ Preparation' },
-  { value: 'internal_approval',label: 'Internal Approval' },
-  { value: 'design',           label: 'Design' },
-  { value: 'client_approval',  label: 'Client Approval' },
   { value: 'advance_payment',  label: 'Advance Payment' },
   { value: 'execution',        label: 'Execution' },
   { value: 'procurement',      label: 'Procurement' },
@@ -68,7 +61,7 @@ function emptyProject(): Project {
     clientName: '',
     clientPhone: '',
     coordinatorName: '',
-    stage: 'lead_converted',
+    stage: 'advance_payment',
     status: 'active',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -146,6 +139,8 @@ export default function ProjectsScreen() {
       clientId: matchedClient?.id ?? f.clientId,
       quotationId: approvedQuotation && !f.contractValue ? approvedQuotation.id : f.quotationId,
       contractValue: approvedQuotation && !f.contractValue ? approvedQuotation.netAmount : f.contractValue,
+      coordinatorId: lead?.ownerId ?? f.coordinatorId,
+      coordinatorName: lead?.ownerName ?? f.coordinatorName,
     }))
   }
 

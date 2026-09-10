@@ -1,3 +1,30 @@
+## 2026-09-10 (22)
+
+### Project pipeline rework — remove spurious pre-project stages, permanent Lead/Project owner, eliminate generic fallback
+**Commit:** Uncommitted
+- Context: compared `ProjectStatusSheet.tsx`'s 14-value `ProjectStage` enum against `SpaceKrafters-Flow-Chart.md` and `SpaceKrafters_Final_Master_PRD.md`. Verdict: `lead_converted`, `site_visit`, `requirements`, `boq_preparation`, `internal_approval`, `design`, `client_approval` were not real Project-side stages — they duplicated work already completed on the Lead side before a Project record exists (Flow Chart nodes A–K all precede "Create Project"; PRD explicitly states the same order). That's why those 7 stages had no real form and fell through to a generic "Confirm this stage is complete to move on" fallback. User confirmed: drop them, make PC the permanent owner of both Lead and the Project it becomes, and eliminate the generic fallback entirely.
+- **Changed:** `src/types/index.ts` — `ProjectStage` now has only the 7 real Project-side values: `advance_payment | execution | procurement | handover_prep | final_payment | reconciliation | closed`. Breaking change to the enum, but checked `sks_projects` directly (REST query against `current_stage`) — table currently has 0 rows, so no existing data holds a removed stage value. No migration/backfill needed.
+- **Changed:** `src/screens/ProjectWorkspace/ProjectStatusSheet.tsx` — trimmed `ROLE_FOR_PROJECT_STAGE`/`PROJECT_STAGE_LABEL` to the 7 remaining stages; removed `STAGE_ORDER`/`nextStage()`/`submitGeneric()` and the `default` switch case entirely (the switch is now exhaustive over all 7 stages, so there is no reachable generic fallback anywhere in the Project pipeline). `procurement` and `final_payment` cases: replaced the old "disabled button + text pointing at a tab with no link" pattern with a conditional "Go to Procurement →" / "Go to Receivables →" secondary button (same pattern as the 4 Lead-side fixes below), shown instead of the disabled primary button when the gating condition isn't met yet.
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — `emptyProject()`'s initial `stage` changed from `lead_converted` to `advance_payment`; `STAGE_OPTIONS` trimmed to the 7 remaining values; `onLeadChange()` now also pre-fills `coordinatorId`/`coordinatorName` from the selected Lead's `ownerId`/`ownerName`, so the PC who owns the Lead automatically becomes the new Project's coordinator (field stays editable/required as before).
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — added a required "Lead Owner (PC)" dropdown (`getManagedUsersDirectory()` filtered to `role === 'project_coordinator'`, mirroring `ProjectsScreen.tsx`'s existing coordinator picker) to both the New Lead and Edit Lead forms. Create/update now require `ownerId` to be set and use the selected PC instead of silently defaulting `ownerId`/`ownerName` to whoever created the lead. No new fields — reuses the existing `Lead.ownerId`/`ownerName`, which remain untouched by the separate rotating `assignedRole`/`assignedToId`/`assignedToName` stage-assignee mechanism. Removed the now-unused `user` destructure from `useAuth()` (only `can` is still used in this file).
+- Confirmed no visibility-filtering change was needed: neither `LeadsScreen.tsx` nor `ProjectsScreen.tsx` filters its list by role/assignee today — all leads/projects are already visible to every user with the screen permission, so "always shown to him" for the permanent owner requires no additional filter logic.
+- Confirmed via grep that `LeadStatusSheet.tsx`'s Lead-side pipeline has no equivalent generic-fallback problem — all 12 non-terminal `LeadStatus` values already have explicit switch cases; its only `default` case is reached solely by the terminal `won`/`lost` statuses, where the Update Status banner is already hidden. No Lead-side changes needed for the "no generic fallback" requirement.
+- No migration for the new/changed application logic itself (all fields reused, no new columns) — only the `ProjectStage` enum shrink above needs a data-level decision for pre-existing rows.
+
+- **Verified:** `tsc --noEmit` clean. Dev server serves HTTP 200.
+- Nothing has been pushed or committed.
+
+## 2026-09-09 (21)
+
+### Update Status Engine — fix dead ends on qualified/site_visit_scheduled/site_visit_done/internally_approved
+**Commit:** Uncommitted
+- Context: user reported "there is no action available after changing the lead to qualified — then how will the lead move forward?" The block-(20) fix had added a `qualified` case with a "Confirm Site Visit Scheduled" button disabled until an Appointment exists, but with no way to actually go create that Appointment from within the sheet — a true dead end. Found the same flaw already pre-existing at 3 other spots.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — `qualified`, `site_visit_scheduled`, `site_visit_done`, and `internally_approved` cases each changed from a single disabled-until-ready button to conditional rendering: when the prerequisite record exists, show the real confirm button; when it doesn't, show a secondary "Go to Appointments →" / "Go to Site Visits →" / "Go to Requirements →" / "Go to Design Center →" button that closes the sheet and navigates there.
+- No new types, no migration.
+
+- **Verified:** `tsc --noEmit` clean. Dev server serves HTTP 200.
+- Nothing has been pushed or committed.
+
 ## 2026-09-09 (20)
 
 ### Update Status Engine — fix missing new/contacted/qualified transitions

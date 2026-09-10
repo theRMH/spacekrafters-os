@@ -222,27 +222,45 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
         return (
           <div className="space-y-3">
             <p className="text-sm text-slate-600">{hasAppointment ? 'A site visit appointment is scheduled.' : 'No appointment scheduled yet — schedule one in the Appointments tab first.'}</p>
-            <button disabled={!hasAppointment || saving} onClick={submitSiteVisitScheduling} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Confirm Site Visit Scheduled
-            </button>
+            {hasAppointment ? (
+              <button disabled={saving} onClick={submitSiteVisitScheduling} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                Confirm Site Visit Scheduled
+              </button>
+            ) : (
+              <button onClick={() => { onClose(); navigate('/appointments') }} className={secondaryBtn}>
+                Go to Appointments →
+              </button>
+            )}
           </div>
         )
       case 'site_visit_scheduled':
         return (
           <div className="space-y-3">
             <p className="text-sm text-slate-600">{hasSiteVisit ? 'Site visit is on record.' : 'No site visit logged yet — capture it in the Site Visits tab first.'}</p>
-            <button disabled={!hasSiteVisit || saving} onClick={submitSiteVisitScheduled} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Mark Site Visit Done
-            </button>
+            {hasSiteVisit ? (
+              <button disabled={saving} onClick={submitSiteVisitScheduled} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                Mark Site Visit Done
+              </button>
+            ) : (
+              <button onClick={() => { onClose(); navigate('/site-visits') }} className={secondaryBtn}>
+                Go to Site Visits →
+              </button>
+            )}
           </div>
         )
       case 'site_visit_done':
         return (
           <div className="space-y-3">
             <p className="text-sm text-slate-600">{hasRequirement ? 'Requirements are on record.' : 'No requirements captured yet — add them in the Requirements screen first.'}</p>
-            <button disabled={!hasRequirement || saving} onClick={submitSiteVisitDone} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Mark Requirements Captured
-            </button>
+            {hasRequirement ? (
+              <button disabled={saving} onClick={submitSiteVisitDone} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                Mark Requirements Captured
+              </button>
+            ) : (
+              <button onClick={() => { onClose(); navigate('/requirements') }} className={secondaryBtn}>
+                Go to Requirements →
+              </button>
+            )}
           </div>
         )
       case 'requirements_captured':
@@ -281,9 +299,15 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
         return (
           <div className="space-y-3">
             <p className="text-sm text-slate-600">{hasDesignPackage ? 'Design package started.' : 'Start a design package in the Design Center first.'}</p>
-            <button disabled={!hasDesignPackage || saving} onClick={() => save('design_in_progress', 'Design started')} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Confirm Design Started
-            </button>
+            {hasDesignPackage ? (
+              <button disabled={saving} onClick={() => save('design_in_progress', 'Design started')} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                Confirm Design Started
+              </button>
+            ) : (
+              <button onClick={() => { onClose(); navigate('/design') }} className={secondaryBtn}>
+                Go to Design Center →
+              </button>
+            )}
           </div>
         )
       case 'design_in_progress':

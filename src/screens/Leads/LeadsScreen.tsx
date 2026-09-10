@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Phone } from 'lucide-react'
 import { useCRM } from '../../context/CRMContext'
@@ -12,8 +12,9 @@ import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { ROLE_LABELS } from '../../data/permissions'
+import { getManagedUsersDirectory } from '../../services/userService'
 import { LeadStatusSheet, LEAD_STATUS_LABEL, ROLE_FOR_LEAD_STATUS } from './LeadStatusSheet'
-import type { Lead, LeadSource, LeadInterest, LeadStatus } from '../../types'
+import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser } from '../../types'
 
 type Filter = 'all' | LeadStatus
 
@@ -59,7 +60,7 @@ function fmtDateTime(val: string): string {
 export default function LeadsScreen() {
   const navigate = useNavigate()
   const { leads, addLead, updateLead, deleteLead } = useCRM()
-  const { user, can } = useAuth()
+  const { can } = useAuth()
 
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
@@ -79,11 +80,25 @@ export default function LeadsScreen() {
   const [source, setSource] = useState<LeadSource>('walk_in')
   const [interest, setInterest] = useState<LeadInterest>('medium')
   const [status, setStatus] = useState<LeadStatus>('new')
+  const [ownerId, setOwnerId] = useState('')
+  const [ownerName, setOwnerName] = useState('')
   const [formError, setFormError] = useState('')
+  const [coordinators, setCoordinators] = useState<ManagedUser[]>([])
+
+  useEffect(() => {
+    getManagedUsersDirectory().then(users => setCoordinators(users.filter(u => u.role === 'project_coordinator')))
+  }, [])
+
+  function onOwnerChange(id: string) {
+    const coordinator = coordinators.find(c => c.id === id)
+    setOwnerId(id)
+    setOwnerName(coordinator?.fullName ?? '')
+  }
 
   function resetForm() {
     setName(''); setPhone(''); setEmail(''); setCity('')
     setRequirement(''); setNotes(''); setSource('walk_in'); setInterest('medium'); setStatus('new')
+    setOwnerId(''); setOwnerName('')
     setFormError('')
   }
 
@@ -96,13 +111,14 @@ export default function LeadsScreen() {
     setName(lead.name); setPhone(lead.phone); setEmail(lead.email ?? ''); setCity(lead.city)
     setRequirement(lead.requirement ?? ''); setNotes(lead.notes ?? '')
     setSource(lead.source); setInterest(lead.interest); setStatus(lead.status)
+    setOwnerId(lead.ownerId ?? ''); setOwnerName(lead.ownerName)
     setFormError('')
     setShowEdit(true)
   }
 
   async function handleAddLead() {
-    if (!name.trim() || !phone.trim() || !city.trim()) {
-      setFormError('Name, phone, and city are required.')
+    if (!name.trim() || !phone.trim() || !city.trim() || !ownerId) {
+      setFormError('Name, phone, city, and lead owner are required.')
       return
     }
     const now = new Date()
@@ -110,7 +126,7 @@ export default function LeadsScreen() {
     const result = await addLead({
       name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
       requirement: requirement.trim() || undefined, notes: notes.trim() || undefined,
-      source, interest, status: 'new', ownerId: user?.id, ownerName: user?.name ?? 'Unassigned', slaDueAt,
+      source, interest, status: 'new', ownerId, ownerName, slaDueAt,
     })
     if (!result.ok) { setFormError(result.error ?? 'Could not save lead.'); return }
     setShowNew(false)
@@ -119,15 +135,15 @@ export default function LeadsScreen() {
 
   async function handleUpdateLead() {
     if (!selected) return
-    if (!name.trim() || !phone.trim() || !city.trim()) {
-      setFormError('Name, phone, and city are required.')
+    if (!name.trim() || !phone.trim() || !city.trim() || !ownerId) {
+      setFormError('Name, phone, city, and lead owner are required.')
       return
     }
     const statusChanged = status !== selected.status
     const result = await updateLead(selected.id, {
       name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
       requirement: requirement.trim() || undefined, notes: notes.trim() || undefined,
-      source, interest, status,
+      source, interest, status, ownerId, ownerName,
     }, statusChanged ? `Status changed to ${status.replace(/_/g, ' ')}` : undefined)
     if (!result.ok) { setFormError(result.error ?? 'Could not update lead.'); return }
     setShowEdit(false)
@@ -350,6 +366,14 @@ export default function LeadsScreen() {
             <label className="text-xs font-semibold text-slate-500 mb-1 block">City *</label>
             <input value={city} onChange={e => setCity(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead Owner (PC) *</label>
+            <select value={ownerId} onChange={e => onOwnerChange(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+              <option value="">— Select —</option>
+              {coordinators.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+            </select>
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Requirement</label>

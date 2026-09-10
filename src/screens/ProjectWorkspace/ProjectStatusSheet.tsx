@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { useAuth } from '../../context/AuthContext'
 import { getManagedUsersDirectory } from '../../services/userService'
@@ -9,12 +10,6 @@ import { upsertProject } from '../../services/projectService'
 import type { Project, ProjectStage, ManagedUser, UserRole, StatusHistoryItem } from '../../types'
 
 export const ROLE_FOR_PROJECT_STAGE: Partial<Record<ProjectStage, UserRole>> = {
-  site_visit:         'site_engineer',
-  requirements:       'project_coordinator',
-  boq_preparation:    'qs',
-  internal_approval:  'owner',
-  design:             'designer',
-  client_approval:    'project_coordinator',
   advance_payment:    'accounts',
   execution:          'site_engineer',
   procurement:        'purchase',
@@ -25,13 +20,6 @@ export const ROLE_FOR_PROJECT_STAGE: Partial<Record<ProjectStage, UserRole>> = {
 }
 
 export const PROJECT_STAGE_LABEL: Record<ProjectStage, string> = {
-  lead_converted:    'Lead Converted',
-  site_visit:        'Site Visit',
-  requirements:      'Requirements',
-  boq_preparation:   'BOQ Preparation',
-  internal_approval: 'Internal Approval',
-  design:            'Design',
-  client_approval:   'Client Approval',
   advance_payment:   'Advance Payment',
   execution:         'Execution',
   procurement:       'Procurement',
@@ -39,17 +27,6 @@ export const PROJECT_STAGE_LABEL: Record<ProjectStage, string> = {
   final_payment:     'Final Payment',
   reconciliation:    'Reconciliation',
   closed:            'Closed',
-}
-
-const STAGE_ORDER: ProjectStage[] = [
-  'lead_converted', 'site_visit', 'requirements', 'boq_preparation', 'internal_approval',
-  'design', 'client_approval', 'advance_payment', 'execution', 'procurement',
-  'handover_prep', 'final_payment', 'reconciliation', 'closed',
-]
-
-function nextStage(stage: ProjectStage): ProjectStage | undefined {
-  const i = STAGE_ORDER.indexOf(stage)
-  return i >= 0 && i < STAGE_ORDER.length - 1 ? STAGE_ORDER[i + 1] : undefined
 }
 
 interface Props {
@@ -61,6 +38,7 @@ interface Props {
 
 export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) {
   const { user } = useAuth()
+  const navigate = useNavigate()
 
   const [users, setUsers] = useState<ManagedUser[]>([])
   const [procurementComplete, setProcurementComplete] = useState(false)
@@ -143,12 +121,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
     await save('closed', 'Project reconciled', { status: 'closed' })
   }
 
-  async function submitGeneric() {
-    const next = nextStage(project.stage)
-    if (!next) return
-    await save(next, `Advanced to ${PROJECT_STAGE_LABEL[next]}`)
-  }
-
   const respRole = ROLE_FOR_PROJECT_STAGE[project.stage]
   const respName = project.assignedToName
   const canAct = !respRole || user?.role === respRole || user?.role === 'owner'
@@ -191,11 +163,17 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
             <p className="text-sm text-slate-600">
               {procurementComplete
                 ? 'All purchase orders are billed and paid.'
-                : 'Purchase orders are still open or have unpaid bills — manage them in the Procurement tab.'}
+                : 'Purchase orders are still open or have unpaid bills.'}
             </p>
-            <button disabled={!procurementComplete || saving} onClick={submitProcurement} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Confirm Procurement Complete
-            </button>
+            {procurementComplete ? (
+              <button disabled={saving} onClick={submitProcurement} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                Confirm Procurement Complete
+              </button>
+            ) : (
+              <button onClick={() => { onClose(); navigate('/procurement') }} className={secondaryBtn}>
+                Go to Procurement →
+              </button>
+            )}
           </div>
         )
       case 'handover_prep':
@@ -216,12 +194,18 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
           <div className="space-y-3">
             <p className="text-sm text-slate-600">
               {milestonesOutstanding > 0
-                ? `${milestonesOutstanding} payment milestone${milestonesOutstanding > 1 ? 's' : ''} still outstanding — record receipts in the Finance tab.`
+                ? `${milestonesOutstanding} payment milestone${milestonesOutstanding > 1 ? 's' : ''} still outstanding.`
                 : 'All payment milestones are received.'}
             </p>
-            <button disabled={milestonesOutstanding > 0 || saving} onClick={submitFinalPayment} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Confirm Final Payment Received
-            </button>
+            {milestonesOutstanding > 0 ? (
+              <button onClick={() => { onClose(); navigate('/receivables') }} className={secondaryBtn}>
+                Go to Receivables →
+              </button>
+            ) : (
+              <button disabled={saving} onClick={submitFinalPayment} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                Confirm Final Payment Received
+              </button>
+            )}
           </div>
         )
       case 'reconciliation':
@@ -235,15 +219,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
         )
       case 'closed':
         return <p className="text-sm text-slate-400 py-6 text-center">This project is closed.</p>
-      default:
-        return (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">Confirm this stage is complete to move on.</p>
-            <button disabled={saving} onClick={submitGeneric} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Confirm {PROJECT_STAGE_LABEL[project.stage]} Complete
-            </button>
-          </div>
-        )
     }
   }
 
