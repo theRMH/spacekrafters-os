@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, MapPin } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
@@ -40,6 +41,8 @@ function toLocalInputValue(val: string): string {
 export default function AppointmentsScreen() {
   const { user } = useAuth()
   const { leads } = useCRM()
+  const routerLocation = useLocation()
+  const navigate = useNavigate()
 
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -68,6 +71,15 @@ export default function AppointmentsScreen() {
 
   useEffect(() => { refresh() }, [])
 
+  useEffect(() => {
+    const state = routerLocation.state as { leadId?: string } | null
+    if (!state?.leadId) return
+    handleLeadPick(state.leadId)
+    setShowNew(true)
+    navigate(routerLocation.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.state])
+
   function resetForm() {
     setLeadId(''); setClientName(''); setScheduledAt(''); setLocation('')
     setStatus('scheduled'); setNotes(''); setFormError('')
@@ -89,7 +101,7 @@ export default function AppointmentsScreen() {
   function handleLeadPick(id: string) {
     setLeadId(id)
     const lead = leads.find(l => l.id === id)
-    if (lead) setClientName(lead.name)
+    if (lead) { setClientName(lead.name); setLocation(lead.city) }
   }
 
   async function handleAddAppointment() {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
@@ -40,6 +41,8 @@ function lineItemsFromSiteVisit(visit: SiteVisit): RequirementLineItem[] {
 export default function RequirementsScreen() {
   const { user } = useAuth()
   const { leads } = useCRM()
+  const routerLocation = useLocation()
+  const navigate = useNavigate()
 
   const [siteVisits, setSiteVisits] = useState<SiteVisit[]>([])
   const [requirements, setRequirements] = useState<Requirement[]>([])
@@ -79,6 +82,18 @@ export default function RequirementsScreen() {
 
   useEffect(() => { refresh() }, [])
 
+  useEffect(() => {
+    const state = routerLocation.state as { leadId?: string } | null
+    if (!state?.leadId || isLoading) return
+    const visit = siteVisits.find(v => v.leadId === state.leadId)
+    if (visit) {
+      handleSiteVisitPick(visit.id)
+      setShowNew(true)
+    }
+    navigate(routerLocation.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.state, isLoading])
+
   function visitLabel(visit: SiteVisit): string {
     const leadName = leads.find(l => l.id === visit.leadId)?.name ?? visit.leadId
     return `${leadName} — ${fmtDate(visit.visitDate)}`
@@ -112,6 +127,7 @@ export default function RequirementsScreen() {
     setSiteVisitId(id)
     const visit = siteVisits.find(v => v.id === id)
     if (visit && visit.rooms.length > 0) setLineItems(lineItemsFromSiteVisit(visit))
+    if (visit?.notes) setNotes(visit.notes)
   }
 
   function updateLineItem(id: string, patch: Partial<RequirementLineItem>) {

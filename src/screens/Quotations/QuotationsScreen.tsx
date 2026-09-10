@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Trash2, Download, Printer } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
@@ -72,6 +73,8 @@ function computeTotals(sections: BOQSection[], discountAmount: number) {
 export default function QuotationsScreen() {
   const { user, can } = useAuth()
   const { leads } = useCRM()
+  const routerLocation = useLocation()
+  const navigate = useNavigate()
 
   const [requirements, setRequirements] = useState<Requirement[]>([])
   const [siteVisits, setSiteVisits] = useState<SiteVisit[]>([])
@@ -106,6 +109,17 @@ export default function QuotationsScreen() {
   }
 
   useEffect(() => { refresh() }, [])
+
+  useEffect(() => {
+    const state = routerLocation.state as { leadId?: string } | null
+    if (!state?.leadId || isLoading) return
+    setLeadId(state.leadId)
+    const req = requirementsForLead(state.leadId)[0]
+    if (req) handleRequirementPick(req.id)
+    setShowNew(true)
+    navigate(routerLocation.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.state, isLoading])
 
   function leadName(id: string): string {
     return leads.find(l => l.id === id)?.name ?? id

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -55,6 +56,8 @@ const label = 'block text-xs font-semibold text-slate-500 mb-1'
 
 export default function ProcurementScreen() {
   const { user, can } = useAuth()
+  const routerLocation = useLocation()
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [prs, setPrs] = useState<PurchaseRequest[]>([])
@@ -86,6 +89,15 @@ export default function ProcurementScreen() {
   }
 
   useEffect(() => { reload() }, [])
+
+  useEffect(() => {
+    const state = routerLocation.state as { projectId?: string } | null
+    if (!state?.projectId || isLoading) return
+    setForm({ ...emptyPR(), projectId: state.projectId })
+    setShowForm(true)
+    navigate(routerLocation.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.state, isLoading])
 
   useEffect(() => {
     if (selected) {

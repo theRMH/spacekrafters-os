@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -53,6 +54,8 @@ const label = 'block text-xs font-semibold text-slate-500 mb-1'
 
 export default function ReceivablesScreen() {
   const { user } = useAuth()
+  const routerLocation = useLocation()
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [accounts, setAccounts] = useState<CompanyAccount[]>([])
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
@@ -84,8 +87,17 @@ export default function ReceivablesScreen() {
     }
   }, [milestones])
 
+  useEffect(() => {
+    const state = routerLocation.state as { projectId?: string } | null
+    if (!state?.projectId || isLoading) return
+    setForm(emptyMilestone(state.projectId))
+    setShowForm(true)
+    navigate(routerLocation.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.state, isLoading])
+
   function openCreate() {
-    setForm(emptyMilestone(projects[0]?.id ?? ''))
+    setForm(emptyMilestone(''))
     setShowForm(true)
   }
 

@@ -61,6 +61,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   const [hasAppointment, setHasAppointment] = useState(false)
   const [hasSiteVisit, setHasSiteVisit] = useState(false)
   const [hasRequirement, setHasRequirement] = useState(false)
+  const [hasQuotation, setHasQuotation] = useState(false)
   const [hasApprovedQuotation, setHasApprovedQuotation] = useState(false)
   const [hasDesignPackage, setHasDesignPackage] = useState(false)
 
@@ -82,7 +83,10 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
       const myVisitIds = new Set(visits.filter(v => v.leadId === lead.id).map(v => v.id))
       setHasRequirement(reqs.some(r => myVisitIds.has(r.siteVisitId)))
     })
-    getAllQuotations().then(qs => setHasApprovedQuotation(qs.some(q => q.leadId === lead.id && q.status === 'client_approved')))
+    getAllQuotations().then(qs => {
+      setHasQuotation(qs.some(q => q.leadId === lead.id))
+      setHasApprovedQuotation(qs.some(q => q.leadId === lead.id && q.status === 'client_approved'))
+    })
     getAllDesignPackages().then(pkgs => setHasDesignPackage(pkgs.some(p => p.leadId === lead.id)))
   }, [isOpen, lead.id])
 
@@ -227,7 +231,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
                 Confirm Site Visit Scheduled
               </button>
             ) : (
-              <button onClick={() => { onClose(); navigate('/appointments') }} className={secondaryBtn}>
+              <button onClick={() => { onClose(); navigate('/appointments', { state: { leadId: lead.id } }) }} className={secondaryBtn}>
                 Go to Appointments →
               </button>
             )}
@@ -242,7 +246,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
                 Mark Site Visit Done
               </button>
             ) : (
-              <button onClick={() => { onClose(); navigate('/site-visits') }} className={secondaryBtn}>
+              <button onClick={() => { onClose(); navigate('/site-visits', { state: { leadId: lead.id } }) }} className={secondaryBtn}>
                 Go to Site Visits →
               </button>
             )}
@@ -257,7 +261,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
                 Mark Requirements Captured
               </button>
             ) : (
-              <button onClick={() => { onClose(); navigate('/requirements') }} className={secondaryBtn}>
+              <button onClick={() => { onClose(); navigate('/requirements', { state: { leadId: lead.id } }) }} className={secondaryBtn}>
                 Go to Requirements →
               </button>
             )}
@@ -266,10 +270,16 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
       case 'requirements_captured':
         return (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">Draft the quotation in the Quotations screen, then confirm here.</p>
-            <button disabled={saving} onClick={submitQuotationDrafted} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Confirm Quotation Drafted
-            </button>
+            <p className="text-sm text-slate-600">{hasQuotation ? 'A quotation has been drafted.' : 'No quotation drafted yet — draft one in the Quotations screen first.'}</p>
+            {hasQuotation ? (
+              <button disabled={saving} onClick={submitQuotationDrafted} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                Confirm Quotation Drafted
+              </button>
+            ) : (
+              <button onClick={() => { onClose(); navigate('/quotations', { state: { leadId: lead.id } }) }} className={secondaryBtn}>
+                Go to Quotations →
+              </button>
+            )}
           </div>
         )
       case 'quotation_drafted':

@@ -170,7 +170,7 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
                 Confirm Procurement Complete
               </button>
             ) : (
-              <button onClick={() => { onClose(); navigate('/procurement') }} className={secondaryBtn}>
+              <button onClick={() => { onClose(); navigate('/procurement', { state: { projectId: project.id } }) }} className={secondaryBtn}>
                 Go to Procurement →
               </button>
             )}
@@ -198,7 +198,7 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
                 : 'All payment milestones are received.'}
             </p>
             {milestonesOutstanding > 0 ? (
-              <button onClick={() => { onClose(); navigate('/receivables') }} className={secondaryBtn}>
+              <button onClick={() => { onClose(); navigate('/receivables', { state: { projectId: project.id } }) }} className={secondaryBtn}>
                 Go to Receivables →
               </button>
             ) : (
