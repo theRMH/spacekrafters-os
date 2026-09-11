@@ -163,12 +163,17 @@ export default function ProjectsScreen() {
   }
 
   async function handleSave() {
-    if (!form.name.trim() || !form.clientName.trim() || !form.coordinatorId) {
-      setSnack({ open: true, msg: 'Name, client name, and coordinator are required.', type: 'error' })
+    if (!form.name.trim() || !form.coordinatorId) {
+      setSnack({ open: true, msg: 'Project name and coordinator are required.', type: 'error' })
       return
     }
-    if (showNewClient && (!newClient.name.trim() || !newClient.phone.trim())) {
-      setSnack({ open: true, msg: 'New client name and phone are required.', type: 'error' })
+    if (showNewClient) {
+      if (!newClient.name.trim() || !newClient.phone.trim()) {
+        setSnack({ open: true, msg: 'New client name and phone are required.', type: 'error' })
+        return
+      }
+    } else if (!form.clientName.trim()) {
+      setSnack({ open: true, msg: 'Client name is required.', type: 'error' })
       return
     }
     let clientId = form.clientId

@@ -1,3 +1,18 @@
+## 2026-09-11
+
+### Fix: New Project save silently blocked when creating a new client inline
+**Commit:** Uncommitted
+- User reported "New Project" save doing nothing when filling in a brand-new client via the "+ New Client" option in the Client dropdown.
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — `handleSave()`'s first validation check required `form.clientName.trim()` unconditionally, but picking "+ New Client" only ever populates `newClient.name`/`newClient.phone`, never `form.clientName`. Result: saving with a new client always failed the first check and showed "Name, client name, and coordinator are required," even with all new-client fields filled in. Split the check so it validates `newClient.name`/`newClient.phone` when `showNewClient` is true, and `form.clientName` only in the existing-client path.
+
+### Fix: spurious RLS error + empty managed-users cache on fresh login
+**Commit:** Uncommitted
+- User asked to run the app locally end-to-end and fix whatever broke. Installed deps, ran `npm run dev`, drove it with a Playwright script (login as `owner`/`9000000001`/`Test@1234`, click through every nav screen, exercise the just-fixed New Project form), watching `console --errors` throughout.
+- Found: every app load logged `[SpaceKrafters] users bulk sync error: new row violates row-level security policy for table "sks_managed_users"`.
+- **Changed:** `src/context/AuthContext.tsx` — `init()` called `initUsersFromSupabase()` before `supabase.auth.getSession()`, so the very first `sks_managed_users` read always ran unauthenticated (RLS-filtered to 0 rows), which the code reads as "table is empty" and tries to reseed defaults — an INSERT that RLS then rejects since anon isn't `owner`. Reordered so `getSession()` runs first and `initUsersFromSupabase()` only runs when a session exists; skip it entirely when logged out (only two callers ever read the resulting cache: `UserManagementScreen` and `SettingsScreen`'s own-profile-name sync, neither reachable pre-login). Also call `initUsersFromSupabase()` from `loginWithCredentials()` after a successful sign-in, since a login with no pre-existing persisted session previously left the cache empty for the rest of that session — meaning `SettingsScreen.tsx`'s "update my name" flow (`loadManagedUsers()` → find own row by email → `updateManagedUserProfile`) would silently no-op and never persist the name change to Supabase.
+- Verified via Playwright: fresh anonymous load now has zero console errors; login → Settings → Projects → New Project (existing-client and new-client paths) → sweep of all 26 top-level routes all came back clean, no console/page errors, no stuck loading states.
+- Test project (`SKS-TEST-01`) and test client (`Test Client Co`) created during this pass were deleted afterward via the app's own delete flow — live Supabase project, no leftover test rows.
+
 ## 2026-09-10 (23)
 
 ### Context-preserving navigation — carry lead/project id + known fields across pipeline screens

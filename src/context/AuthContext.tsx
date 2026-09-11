@@ -64,11 +64,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let unsubscribe: (() => void) | undefined
 
     async function init() {
-      await initUsersFromSupabase().catch(() => {})
-      if (!isSupabaseConfigured || !supabase) { if (!cancelled) setIsAuthReady(true); return }
+      if (!isSupabaseConfigured || !supabase) {
+        await initUsersFromSupabase().catch(() => {})
+        if (!cancelled) setIsAuthReady(true)
+        return
+      }
 
+      // Restore the auth session first so initUsersFromSupabase() runs with the
+      // right RLS context — calling it before getSession() meant every load hit
+      // sks_managed_users as an anonymous request, always saw 0 rows, and tried
+      // (and failed) to reseed defaults even when a valid session existed. With
+      // no session at all (logged out), skip it entirely — an anonymous reseed
+      // attempt can only fail RLS, and loginWithCredentials() populates the
+      // cache itself once a session exists.
       const { data: { session } } = await supabase.auth.getSession()
-      if (session) await loadProfileForSession(session.user.id)
+      if (session) {
+        await initUsersFromSupabase().catch(() => {})
+        await loadProfileForSession(session.user.id)
+      }
       if (!cancelled) setIsAuthReady(true)
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
@@ -95,6 +108,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabase.auth.signOut()
       return { success: false, error: 'Invalid phone number or password.' }
     }
+    // A fresh login (no persisted session at boot) means the mount-time
+    // initUsersFromSupabase() never ran authenticated, so the local managed-users
+    // cache is still empty — populate it now so screens that read it via
+    // loadManagedUsers() (e.g. Settings' own-profile-name sync) work immediately.
+    await initUsersFromSupabase().catch(() => {})
     if (managed.status === 'inactive') {
       await supabase.auth.signOut()
       return { success: false, error: 'This user is inactive. Please contact Admin.' }
