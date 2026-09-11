@@ -76,7 +76,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   useEffect(() => {
     if (!isOpen) return
     getManagedUsersDirectory().then(setUsers)
-    getAllAppointments().then(a => setHasAppointment(a.some(appt => appt.leadId === lead.id && appt.status === 'scheduled')))
+    getAllAppointments().then(a => setHasAppointment(a.some(appt => appt.leadId === lead.id && appt.status.trim().toLowerCase() !== 'cancelled')))
     getAllSiteVisits().then(v => setHasSiteVisit(v.some(sv => sv.leadId === lead.id)))
     getAllRequirements().then(async reqs => {
       const visits = await getAllSiteVisits()

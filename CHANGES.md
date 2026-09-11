@@ -1,5 +1,13 @@
 ## 2026-09-11
 
+### Fix: "Update Status" on Leads stuck in a loop at the Qualified stage even with a scheduled appointment
+**Commit:** Uncommitted
+- User reported: at the `qualified` stage, "Update Status" kept showing "No appointment scheduled yet" and looping back to the Appointments tab, even though an appointment for that exact lead already existed with a "Scheduled" badge showing. Confirmed via the Appointments Edit form that the appointment's Lead link was correct, which narrowed it down to the `status` comparison.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the `hasAppointment` check (`appt.leadId === lead.id && appt.status === 'scheduled'`) did a strict, case-sensitive match against the raw stored status. `StatusBadge` visually capitalizes whatever string it's given and falls back to displaying unrecognized values as-is, so a stored value that isn't the exact lowercase `scheduled` (e.g. from a manually-inserted test row) still renders as "Scheduled" everywhere while silently failing this check forever. Normalized the comparison (`.trim().toLowerCase()`).
+- User then reported a second, related bug: marking that same appointment **Completed** (instead of Scheduled) also made "Update Status" regress back to "No appointment scheduled yet," blocking progression to the next lead stage entirely.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — same `hasAppointment` check only ever accepted `status === 'scheduled'`, excluding `completed`/`rescheduled` appointments even though those represent an appointment that legitimately happened (or will). Only a `cancelled` appointment should actually mean "no appointment." Changed the check to `appt.status.trim().toLowerCase() !== 'cancelled'`.
+- **Verified:** `tsc --noEmit` clean.
+
 ### Fix: New Project save silently blocked when creating a new client inline
 **Commit:** Uncommitted
 - User reported "New Project" save doing nothing when filling in a brand-new client via the "+ New Client" option in the Client dropdown.
