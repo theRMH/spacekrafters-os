@@ -40,7 +40,7 @@ export default function LeadDetailScreen() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { leads, updateLead } = useCRM()
-  const { can } = useAuth()
+  const { can, user } = useAuth()
   const lead = leads.find(l => l.id === id)
 
   const [tab, setTab] = useState<Tab>('overview')
@@ -144,7 +144,7 @@ export default function LeadDetailScreen() {
               </button>
             )}
 
-            {can('edit_lead') && lead.status !== 'won' && lead.status !== 'lost' && (
+            {(can('edit_lead') || lead.assignedToId === user?.id) && lead.status !== 'won' && lead.status !== 'lost' && (
               <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                 <div>
                   <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>

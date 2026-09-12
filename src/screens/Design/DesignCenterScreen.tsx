@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
@@ -9,8 +11,9 @@ import { StatusBadge } from '../../components/badges/StatusBadge'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { getAllProjects } from '../../services/projectService'
 import { getAllDesignPackages, upsertDesignPackage, getAllDesignVersions, addDesignVersion } from '../../services/designService'
+import { getAllQuotations } from '../../services/quotationService'
 import { addAuditLog } from '../../services/auditLogService'
-import type { Project, DesignPackage, DesignPackageStatus, DesignVersion, AuditLog } from '../../types'
+import type { Project, DesignPackage, DesignPackageStatus, DesignVersion, AuditLog, Quotation } from '../../types'
 
 const STATUS_OPTIONS: { value: DesignPackageStatus; label: string }[] = [
   { value: 'in_progress',       label: 'In Progress' },
@@ -27,6 +30,9 @@ function fmtDateTime(val: string): string {
 
 export default function DesignCenterScreen() {
   const { user, can } = useAuth()
+  const { leads } = useCRM()
+  const routerLocation = useLocation()
+  const navigate = useNavigate()
   const canUpload = can('upload_design')
   const canApprove = can('approve_design')
   const canRequestRevision = can('request_revision')
@@ -34,6 +40,7 @@ export default function DesignCenterScreen() {
   const [projects, setProjects] = useState<Project[]>([])
   const [packages, setPackages] = useState<DesignPackage[]>([])
   const [versions, setVersions] = useState<DesignVersion[]>([])
+  const [quotations, setQuotations] = useState<Quotation[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const [selected, setSelected] = useState<DesignPackage | null>(null)
@@ -42,26 +49,54 @@ export default function DesignCenterScreen() {
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   const [projectId, setProjectId] = useState('')
+  const [leadId, setLeadId] = useState('')
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
   const [versionFiles, setVersionFiles] = useState<string[]>([])
   const [versionNote, setVersionNote] = useState('')
   const [formError, setFormError] = useState('')
 
+  // Design starts at the Lead's `internally_approved` stage (LeadStatusSheet.tsx),
+  // before a Project exists — Projects are only created once a Lead is Won. So a
+  // package must be linkable to either one; leads already Won/Lost are excluded
+  // since Won leads should be linked via their resulting Project instead.
+  const eligibleLeads = leads.filter(l => l.status !== 'won' && l.status !== 'lost')
+
   async function refresh() {
     setIsLoading(true)
-    const [projs, pkgs, vers] = await Promise.all([getAllProjects(), getAllDesignPackages(), getAllDesignVersions()])
+    const [projs, pkgs, vers, quotes] = await Promise.all([getAllProjects(), getAllDesignPackages(), getAllDesignVersions(), getAllQuotations()])
     setProjects(projs)
     setPackages(pkgs)
     setVersions(vers)
+    setQuotations(quotes)
     setIsLoading(false)
   }
 
   useEffect(() => { refresh() }, [])
 
+  useEffect(() => {
+    const state = routerLocation.state as { leadId?: string } | null
+    if (!state?.leadId || isLoading) return
+    resetNewForm()
+    setLeadId(state.leadId)
+    setShowNew(true)
+    navigate(routerLocation.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.state, isLoading])
+
   function projectName(id: string | undefined): string {
     if (!id) return 'Unassigned'
     return projects.find(p => p.id === id)?.name ?? id
+  }
+
+  function leadName(id: string | undefined): string | undefined {
+    return id ? leads.find(l => l.id === id)?.name : undefined
+  }
+
+  function packageLinkLabel(pkg: DesignPackage): string {
+    if (pkg.projectId) return projectName(pkg.projectId)
+    if (pkg.leadId) return `${leadName(pkg.leadId) ?? pkg.leadId} (Lead)`
+    return 'Unassigned'
   }
 
   function versionsFor(pkgId: string): DesignVersion[] {
@@ -69,7 +104,7 @@ export default function DesignCenterScreen() {
   }
 
   function resetNewForm() {
-    setProjectId(''); setName(''); setNotes(''); setFormError('')
+    setProjectId(''); setLeadId(''); setName(''); setNotes(''); setFormError('')
   }
 
   function openNew() {
@@ -84,15 +119,23 @@ export default function DesignCenterScreen() {
 
   async function handleCreatePackage() {
     if (!user) return
-    if (!projectId || !name.trim()) {
-      setFormError('Project and name are required.')
+    if (!projectId && !leadId) {
+      setFormError('Select a lead or a project.')
+      return
+    }
+    if (!name.trim()) {
+      setFormError('Package name is required.')
       return
     }
     const now = new Date().toISOString()
+    const quotationId = projectId
+      ? projects.find(p => p.id === projectId)?.quotationId
+      : quotations.find(q => q.leadId === leadId && q.status === 'client_approved')?.id
     const pkg: DesignPackage = {
       id: `dspkg_${Date.now()}`,
-      projectId,
-      quotationId: projects.find(p => p.id === projectId)?.quotationId,
+      projectId: projectId || undefined,
+      leadId: leadId || undefined,
+      quotationId,
       name: name.trim(),
       status: 'in_progress',
       notes: notes.trim() || undefined,
@@ -175,7 +218,7 @@ export default function DesignCenterScreen() {
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-bold text-slate-800">{pkg.name}</span>
-                <p className="text-xs text-slate-500 mt-0.5">{projectName(pkg.projectId)}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{packageLinkLabel(pkg)}</p>
                 <p className="text-xs text-slate-400 mt-1">{versionsFor(pkg.id).length} version{versionsFor(pkg.id).length !== 1 ? 's' : ''}</p>
               </div>
               <StatusBadge status={pkg.status} />
@@ -197,7 +240,7 @@ export default function DesignCenterScreen() {
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs text-slate-500">{projectName(selected.projectId)}</p>
+                <p className="text-xs text-slate-500">{packageLinkLabel(selected)}</p>
                 <StatusBadge status={selected.status} />
               </div>
               {canUpload && (
@@ -260,11 +303,20 @@ export default function DesignCenterScreen() {
       <BottomSheet isOpen={showNew} onClose={() => setShowNew(false)} title="New Design Package" height="full">
         <div className="space-y-3">
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
+          <p className="text-xs text-slate-500">Link to the Lead if the project hasn't been created yet, or to the Project once it has.</p>
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Project *</label>
-            <select value={projectId} onChange={e => setProjectId(e.target.value)}
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead (pre-project)</label>
+            <select value={leadId} onChange={e => { setLeadId(e.target.value); if (e.target.value) setProjectId('') }}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="">Select a project…</option>
+              <option value="">— None —</option>
+              {eligibleLeads.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Project</label>
+            <select value={projectId} onChange={e => { setProjectId(e.target.value); if (e.target.value) setLeadId('') }}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+              <option value="">— None —</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>

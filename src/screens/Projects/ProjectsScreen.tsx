@@ -15,6 +15,7 @@ import { getAllProjects, upsertProject, deleteProject } from '../../services/pro
 import { getAllQuotations, upsertQuotation } from '../../services/quotationService'
 import { getAllPaymentMilestones, upsertPaymentMilestone, getAllPayables, addReceipt } from '../../services/financeService'
 import { getAllVendorBills, getAllPurchaseOrders } from '../../services/procurementService'
+import { getAllDesignPackages, upsertDesignPackage } from '../../services/designService'
 import { getAllExpenseRequests } from '../../services/expenseService'
 import { addAuditLog } from '../../services/auditLogService'
 import { getAllClients, upsertClient } from '../../services/clientService'
@@ -224,6 +225,13 @@ export default function ProjectsScreen() {
     })
     setShowForm(false)
     setSnack({ open: true, msg: 'Project saved.', type: 'success' })
+
+    if (isNew && toSave.leadId) {
+      const leadPackages = (await getAllDesignPackages()).filter(pkg => pkg.leadId === toSave.leadId && !pkg.projectId)
+      for (const pkg of leadPackages) {
+        await upsertDesignPackage({ ...pkg, projectId: toSave.id, updatedAt: new Date().toISOString() })
+      }
+    }
 
     if (isNew && toSave.quotationId) {
       const quotation = quotations.find(q => q.id === toSave.quotationId)

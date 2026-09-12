@@ -24,7 +24,15 @@ const CHIPS: { value: Filter; label: string }[] = [
   { value: 'contacted',              label: 'Contacted'    },
   { value: 'qualified',              label: 'Qualified'    },
   { value: 'site_visit_scheduled',   label: 'Site Visit'   },
+  { value: 'site_visit_done',        label: LEAD_STATUS_LABEL.site_visit_done       },
   { value: 'requirements_captured',  label: 'Requirements' },
+  { value: 'quotation_drafted',      label: LEAD_STATUS_LABEL.quotation_drafted     },
+  { value: 'internally_approved',    label: LEAD_STATUS_LABEL.internally_approved   },
+  { value: 'design_in_progress',     label: LEAD_STATUS_LABEL.design_in_progress    },
+  { value: 'design_approved',        label: LEAD_STATUS_LABEL.design_approved       },
+  { value: 'sent_to_client',         label: LEAD_STATUS_LABEL.sent_to_client        },
+  { value: 'negotiating',            label: LEAD_STATUS_LABEL.negotiating           },
+  { value: 'client_approved',        label: LEAD_STATUS_LABEL.client_approved       },
   { value: 'won',                    label: 'Won'          },
   { value: 'lost',                   label: 'Lost'         },
 ]
@@ -60,7 +68,10 @@ function fmtDateTime(val: string): string {
 export default function LeadsScreen() {
   const navigate = useNavigate()
   const { leads, addLead, updateLead, deleteLead } = useCRM()
-  const { can } = useAuth()
+  const { can, user } = useAuth()
+  // Roles without full CRM access (edit_lead) only ever act on leads currently
+  // assigned to them — scope their list down instead of showing the whole pipeline.
+  const assignedOnly = !can('edit_lead')
 
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
@@ -163,6 +174,7 @@ export default function LeadsScreen() {
   const liveSelected = selected ? leads.find(l => l.id === selected.id) ?? null : null
 
   const filtered = leads.filter(l => {
+    if (assignedOnly && l.assignedToId !== user?.id) return false
     const matchSearch = !search
       || l.name.toLowerCase().includes(search.toLowerCase())
       || l.phone.includes(search)
@@ -296,7 +308,7 @@ export default function LeadsScreen() {
               <Phone size={16} /> Call {selected.name.split(' ')[0]}
             </a>
 
-            {can('edit_lead') && selected.status !== 'won' && selected.status !== 'lost' && (
+            {(can('edit_lead') || selected.assignedToId === user?.id) && selected.status !== 'won' && selected.status !== 'lost' && (
               <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                 <div>
                   <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>

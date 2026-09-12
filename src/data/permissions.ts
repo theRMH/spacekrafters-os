@@ -24,6 +24,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 
   accounts: [
     'view_home',
+    'view_leads',
     'view_expenses', 'approve_expense', 'record_payment',
     'view_company_finance', 'manage_company_accounts', 'view_receivables', 'record_receipt', 'view_payables', 'reconcile',
     'view_attendance', 'view_leave',
@@ -47,6 +48,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 
   site_engineer: [
     'view_home',
+    'view_leads',
     'view_site_visits', 'add_site_visit', 'edit_site_visit', 'add_requirements',
     'view_tasks', 'complete_task',
     'view_gantt',
@@ -56,6 +58,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 
   designer: [
     'view_home',
+    'view_leads',
     'view_design', 'upload_design', 'request_revision',
     'view_tasks', 'complete_task',
     'view_attendance', 'mark_attendance', 'view_leave',

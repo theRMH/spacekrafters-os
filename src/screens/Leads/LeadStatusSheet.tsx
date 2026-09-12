@@ -314,7 +314,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
                 Confirm Design Started
               </button>
             ) : (
-              <button onClick={() => { onClose(); navigate('/design') }} className={secondaryBtn}>
+              <button onClick={() => { onClose(); navigate('/design', { state: { leadId: lead.id } }) }} className={secondaryBtn}>
                 Go to Design Center →
               </button>
             )}
