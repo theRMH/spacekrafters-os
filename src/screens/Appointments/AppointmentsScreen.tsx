@@ -38,6 +38,12 @@ function toLocalInputValue(val: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+function todayInputValue(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 export default function AppointmentsScreen() {
   const { user } = useAuth()
   const { leads } = useCRM()
@@ -81,7 +87,7 @@ export default function AppointmentsScreen() {
   }, [routerLocation.state])
 
   function resetForm() {
-    setLeadId(''); setClientName(''); setScheduledAt(''); setLocation('')
+    setLeadId(''); setClientName(''); setScheduledAt(`${todayInputValue()}T`); setLocation('')
     setStatus('scheduled'); setNotes(''); setFormError('')
   }
 
@@ -105,7 +111,7 @@ export default function AppointmentsScreen() {
   }
 
   async function handleAddAppointment() {
-    if (!leadId || !clientName.trim() || !scheduledAt || !location.trim()) {
+    if (!leadId || !clientName.trim() || !scheduledAt.split('T')[1] || !location.trim()) {
       setFormError('Lead, client name, date/time, and location are required.')
       return
     }
@@ -128,7 +134,7 @@ export default function AppointmentsScreen() {
 
   async function handleUpdateAppointment() {
     if (!selected) return
-    if (!clientName.trim() || !scheduledAt || !location.trim()) {
+    if (!clientName.trim() || !scheduledAt.split('T')[1] || !location.trim()) {
       setFormError('Client name, date/time, and location are required.')
       return
     }
@@ -285,8 +291,14 @@ export default function AppointmentsScreen() {
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Date & Time *</label>
-            <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            <div className="grid grid-cols-2 gap-2">
+              <input type="date" value={scheduledAt.split('T')[0] || ''} min={todayInputValue()}
+                onChange={e => setScheduledAt(`${e.target.value}T${scheduledAt.split('T')[1] || '09:00'}`)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+              <input type="time" value={scheduledAt.split('T')[1] || ''}
+                onChange={e => setScheduledAt(`${scheduledAt.split('T')[0] || new Date().toISOString().slice(0, 10)}T${e.target.value}`)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            </div>
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Location *</label>

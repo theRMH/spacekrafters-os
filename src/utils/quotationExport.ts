@@ -24,6 +24,16 @@ export function downloadQuotationExcel(quotation: Quotation, leadName: string) {
   rows.push(['', '', '', '', '', 'Net Amount', quotation.netAmount])
 
   const sheet = XLSX.utils.aoa_to_sheet(rows)
+
+  const colCount = Math.max(...rows.map(r => r.length))
+  sheet['!cols'] = Array.from({ length: colCount }, (_, colIdx) => {
+    const maxLen = rows.reduce((max, row) => {
+      const cell = row[colIdx]
+      return Math.max(max, cell === undefined ? 0 : String(cell).length)
+    }, 0)
+    return { wch: Math.min(Math.max(maxLen + 2, 8), 30) }
+  })
+
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, 'Quotation')
   XLSX.writeFile(workbook, `Quotation_${leadName.replace(/\s+/g, '_')}_v${quotation.version}.xlsx`)

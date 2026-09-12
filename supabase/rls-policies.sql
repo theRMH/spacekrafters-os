@@ -268,12 +268,16 @@ CREATE POLICY "authenticated update boq items" ON sks_boq_items
   FOR UPDATE TO authenticated USING (sks_has_role('owner') OR sks_has_role('qs')) WITH CHECK (sks_has_role('owner') OR sks_has_role('qs'));
 
 -- ─── sks_design_packages / sks_design_versions ──────────────────────────────
+-- project_id is null for packages linked to a pre-project Lead; fall through to
+-- visible in that case (matches sks_documents' project_id IS NULL convention).
 CREATE POLICY "authenticated select design packages on visible projects" ON sks_design_packages
-  FOR SELECT TO authenticated USING (sks_can_see_project(project_id));
+  FOR SELECT TO authenticated USING (project_id IS NULL OR sks_can_see_project(project_id));
 CREATE POLICY "authenticated write design packages on visible projects" ON sks_design_packages
   FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner') OR sks_has_role('designer'));
 CREATE POLICY "authenticated update design packages" ON sks_design_packages
-  FOR UPDATE TO authenticated USING (sks_can_see_project(project_id)) WITH CHECK (sks_can_see_project(project_id));
+  FOR UPDATE TO authenticated
+  USING (project_id IS NULL OR sks_can_see_project(project_id))
+  WITH CHECK (project_id IS NULL OR sks_can_see_project(project_id));
 
 CREATE POLICY "authenticated select design versions" ON sks_design_versions
   FOR SELECT TO authenticated USING (true);

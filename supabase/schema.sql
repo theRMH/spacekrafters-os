@@ -183,13 +183,15 @@ ALTER TABLE sks_boq_items ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS sks_design_packages (
   id         TEXT        PRIMARY KEY,
-  project_id TEXT        NOT NULL REFERENCES sks_projects(id) ON DELETE CASCADE,
+  project_id TEXT        REFERENCES sks_projects(id) ON DELETE CASCADE,
+  lead_id    TEXT        REFERENCES sks_leads(id),
   status     TEXT        NOT NULL DEFAULT '',
   data       JSONB       NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS sks_design_packages_project_id_idx ON sks_design_packages(project_id);
+CREATE INDEX IF NOT EXISTS sks_design_packages_lead_id_idx ON sks_design_packages(lead_id);
 ALTER TABLE sks_design_packages ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS sks_design_versions (

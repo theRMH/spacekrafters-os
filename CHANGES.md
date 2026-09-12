@@ -1,3 +1,29 @@
+## 2026-09-12
+
+### Fix: quotation line-item fields had no persistent labels
+**Commit:** Uncommitted
+- User asked what the field after the Unit dropdown was ("sqft next what title?") — the Qty/Unit/Rate/Tax%/Amount row in the New Quotation form only had `placeholder` text (no `<label>`), so once a value like `0` was typed the label vanished, making the row unreadable.
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — line-item row now wraps each of Qty/Unit/Rate/Tax%/Amount in its own column with a persistent `text-[9px]` label above it, instead of relying on placeholder text alone.
+- **Verified:** `tsc --noEmit` clean.
+
+### Fix: Design Center pre-project package creation crashed on missing project_id
+**Commit:** Uncommitted
+- User reported: creating a Design Package against a pre-project Lead (no Project yet) failed with `null value in column "project_id" of relation "sks_design_packages" violates not-null constraint`. The 2026-09-11 fix above added the Lead dropdown and `leadId` field to the UI/type, but never touched the database: `sks_design_packages.project_id` was still `NOT NULL`, there was no `lead_id` column at all, and `designService.ts`'s `upsertDesignPackage()` only ever wrote `project_id: pkg.projectId` (undefined → null when linked via Lead only) — so every pre-project package was rejected at the DB layer regardless of what the form allowed.
+- **Changed:** `supabase/schema.sql` — `sks_design_packages.project_id` is now nullable, added `lead_id TEXT REFERENCES sks_leads(id)` column + index, matching the existing `sks_quotations`/`sks_documents` nullable-FK convention for pre-project entities. ⚠ DEPLOY — not yet applied to Supabase (requires `ALTER TABLE sks_design_packages ALTER COLUMN project_id DROP NOT NULL, ADD COLUMN lead_id TEXT REFERENCES sks_leads(id); CREATE INDEX sks_design_packages_lead_id_idx ON sks_design_packages(lead_id);` run against the live DB — `CREATE TABLE IF NOT EXISTS` in schema.sql won't retroactively alter the existing table).
+- **Changed:** `supabase/rls-policies.sql` — `sks_design_packages` SELECT/UPDATE policies now allow `project_id IS NULL OR sks_can_see_project(project_id)`, matching `sks_documents`' convention for rows not yet attached to a project. ⚠ DEPLOY (re-run the two `CREATE POLICY` statements — `DROP POLICY` the old versions first since Postgres has no `CREATE OR REPLACE POLICY`).
+- **Changed:** `src/services/designService.ts` — `upsertDesignPackage()` now writes both `project_id: pkg.projectId ?? null` and `lead_id: pkg.leadId ?? null` instead of only `project_id`.
+- **Verified:** `tsc --noEmit` clean. Not yet tested against a live Supabase instance since the migration above is still pending deploy — once applied, the existing lead→project design-package re-link logic in `ProjectsScreen.tsx:229-234` (already written, previously dead code since it could never receive a package to re-link) should start working end-to-end.
+
+### Fix: quotation Excel export columns clipped headers/values
+**Commit:** Uncommitted
+- User downloaded a quotation as `.xlsx` and reported misaligned columns — "Description" showed as "Descriptio", "Net Amount" as "Net Amou". Cause: `quotationExport.ts` built the sheet via `XLSX.utils.aoa_to_sheet(rows)` without ever setting column widths, so Excel's default ~8.4-char columns clipped anything longer.
+- **Changed:** `src/utils/quotationExport.ts` — after building the sheet, computes each column's width from the longest value in that column (`!cols`), clamped to 8–30 characters.
+
+### Fix: appointment date/time picker stayed open after selection, allowed past dates
+**Commit:** Uncommitted
+- User reported the native `datetime-local` picker in the New/Edit Appointment form stayed open after picking a date/time (browser-native behavior, not controllable from app code), and separately that it should default to today and block past dates.
+- **Changed:** `src/screens/Appointments/AppointmentsScreen.tsx` — replaced the single `datetime-local` input with separate `date` + `time` inputs (native date picker closes immediately on day click; native time input has no popup at all). Date input now has `min={todayInputValue()}` to block past dates, and `resetForm()` pre-fills today's date by default. Tightened the required-field checks in `handleAddAppointment`/`handleUpdateAppointment` to also require the time part, since the date now defaults to non-empty.
+
 ## 2026-09-11
 
 ### Fix: full Lead→Project pipeline audit — dead end at Design Center, missing status options, incomplete badges

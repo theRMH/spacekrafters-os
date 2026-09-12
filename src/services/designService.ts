@@ -15,7 +15,8 @@ export async function upsertDesignPackage(pkg: DesignPackage): Promise<{ ok: boo
   if (!supabase) return { ok: false, error: 'Not configured.' }
   const { error } = await supabase.from(PACKAGES_TABLE).upsert({
     id:         pkg.id,
-    project_id: pkg.projectId,
+    project_id: pkg.projectId ?? null,
+    lead_id:    pkg.leadId ?? null,
     status:     pkg.status,
     data:       pkg,
     updated_at: new Date().toISOString(),

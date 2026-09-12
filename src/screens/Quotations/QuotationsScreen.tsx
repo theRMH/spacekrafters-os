@@ -606,24 +606,36 @@ export default function QuotationsScreen() {
                               <Trash2 size={13} />
                             </button>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <input type="number" min="0" step="0.01" value={item.quantity}
-                              onChange={e => updateItem(section.id, item.id, { quantity: parseFloat(e.target.value) || 0 })}
-                              placeholder="Qty"
-                              className="w-1/4 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
-                            <select value={item.unit} onChange={e => updateItem(section.id, item.id, { unit: e.target.value })}
-                              className="w-1/5 border border-slate-200 rounded-lg px-1.5 py-1.5 text-xs focus:outline-none focus:border-indigo-400">
-                              {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                            </select>
-                            <input type="number" min="0" step="0.01" value={item.rate}
-                              onChange={e => updateItem(section.id, item.id, { rate: parseFloat(e.target.value) || 0 })}
-                              placeholder="Rate"
-                              className="w-1/4 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
-                            <input type="number" min="0" step="0.01" value={item.taxPercent ?? ''}
-                              onChange={e => updateItem(section.id, item.id, { taxPercent: e.target.value ? parseFloat(e.target.value) : undefined })}
-                              placeholder="Tax%"
-                              className="w-1/5 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
-                            <span className="w-1/4 text-right text-xs font-bold text-slate-700">{fmtCurrency(item.quantity * item.rate)}</span>
+                          <div className="flex items-end gap-1.5">
+                            <div className="w-1/4">
+                              <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Qty</label>
+                              <input type="number" min="0" step="0.01" value={item.quantity}
+                                onChange={e => updateItem(section.id, item.id, { quantity: parseFloat(e.target.value) || 0 })}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
+                            </div>
+                            <div className="w-1/5">
+                              <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Unit</label>
+                              <select value={item.unit} onChange={e => updateItem(section.id, item.id, { unit: e.target.value })}
+                                className="w-full border border-slate-200 rounded-lg px-1.5 py-1.5 text-xs focus:outline-none focus:border-indigo-400">
+                                {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                              </select>
+                            </div>
+                            <div className="w-1/4">
+                              <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Rate</label>
+                              <input type="number" min="0" step="0.01" value={item.rate}
+                                onChange={e => updateItem(section.id, item.id, { rate: parseFloat(e.target.value) || 0 })}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
+                            </div>
+                            <div className="w-1/5">
+                              <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Tax%</label>
+                              <input type="number" min="0" step="0.01" value={item.taxPercent ?? ''}
+                                onChange={e => updateItem(section.id, item.id, { taxPercent: e.target.value ? parseFloat(e.target.value) : undefined })}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
+                            </div>
+                            <div className="w-1/4">
+                              <label className="block text-[9px] font-semibold text-slate-400 mb-0.5 text-right">Amount</label>
+                              <span className="block text-right text-xs font-bold text-slate-700 py-1.5">{fmtCurrency(item.quantity * item.rate)}</span>
+                            </div>
                           </div>
                         </div>
                       ))}
