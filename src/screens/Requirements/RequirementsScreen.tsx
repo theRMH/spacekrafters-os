@@ -332,7 +332,7 @@ export default function RequirementsScreen() {
                     placeholder="Description"
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
                   <div className="flex items-center gap-2">
-                    <input type="number" min="0" step="0.01" value={item.quantity}
+                    <input type="number" min="0" step="0.01" value={item.quantity || ''}
                       onChange={e => updateLineItem(item.id, { quantity: parseFloat(e.target.value) || 0 })}
                       placeholder="Qty"
                       className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />

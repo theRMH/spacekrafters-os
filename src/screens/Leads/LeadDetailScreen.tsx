@@ -11,6 +11,7 @@ import { getAllAppointments } from '../../services/appointmentService'
 import { getAllFollowUps } from '../../services/followUpService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
 import { ROLE_LABELS } from '../../data/permissions'
+import { BUSINESS_DIVISION_LABEL, BUSINESS_CATEGORY_LABEL } from '../../data/businessDivisions'
 import type { Appointment, FollowUp, SiteVisit } from '../../types'
 import { LeadStatusSheet, LEAD_STATUS_LABEL, ROLE_FOR_LEAD_STATUS } from './LeadStatusSheet'
 
@@ -122,6 +123,9 @@ export default function LeadDetailScreen() {
                 { label: 'Phone',       value: lead.phone },
                 { label: 'Email',       value: lead.email ?? '—' },
                 { label: 'City',        value: lead.city },
+                { label: 'Business Division', value: lead.businessDivision
+                    ? BUSINESS_DIVISION_LABEL[lead.businessDivision] + (lead.businessCategory ? ` (${BUSINESS_CATEGORY_LABEL[lead.businessCategory]})` : '')
+                    : '—' },
                 { label: 'Requirement', value: lead.requirement ?? '—' },
                 { label: 'Owner',       value: lead.ownerName },
                 { label: 'Notes',       value: lead.notes ?? '—' },

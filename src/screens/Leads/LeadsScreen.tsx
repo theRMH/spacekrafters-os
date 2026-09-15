@@ -12,9 +12,13 @@ import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { ROLE_LABELS } from '../../data/permissions'
+import {
+  BUSINESS_DIVISION_OPTIONS, BUSINESS_DIVISION_LABEL,
+  DIVISIONS_WITH_CATEGORY, BUSINESS_CATEGORY_OPTIONS, BUSINESS_CATEGORY_LABEL,
+} from '../../data/businessDivisions'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { LeadStatusSheet, LEAD_STATUS_LABEL, ROLE_FOR_LEAD_STATUS } from './LeadStatusSheet'
-import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser } from '../../types'
+import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser, BusinessDivision, BusinessCategory } from '../../types'
 
 type Filter = 'all' | LeadStatus
 
@@ -86,6 +90,8 @@ export default function LeadsScreen() {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [city, setCity] = useState('')
+  const [businessDivision, setBusinessDivision] = useState<BusinessDivision | ''>('')
+  const [businessCategory, setBusinessCategory] = useState<BusinessCategory | ''>('')
   const [requirement, setRequirement] = useState('')
   const [notes, setNotes] = useState('')
   const [source, setSource] = useState<LeadSource>('walk_in')
@@ -106,8 +112,15 @@ export default function LeadsScreen() {
     setOwnerName(coordinator?.fullName ?? '')
   }
 
+  function onBusinessDivisionChange(value: string) {
+    const division = value as BusinessDivision | ''
+    setBusinessDivision(division)
+    if (!DIVISIONS_WITH_CATEGORY.includes(division as BusinessDivision)) setBusinessCategory('')
+  }
+
   function resetForm() {
     setName(''); setPhone(''); setEmail(''); setCity('')
+    setBusinessDivision(''); setBusinessCategory('')
     setRequirement(''); setNotes(''); setSource('walk_in'); setInterest('medium'); setStatus('new')
     setOwnerId(''); setOwnerName('')
     setFormError('')
@@ -120,6 +133,7 @@ export default function LeadsScreen() {
 
   function openEdit(lead: Lead) {
     setName(lead.name); setPhone(lead.phone); setEmail(lead.email ?? ''); setCity(lead.city)
+    setBusinessDivision(lead.businessDivision ?? ''); setBusinessCategory(lead.businessCategory ?? '')
     setRequirement(lead.requirement ?? ''); setNotes(lead.notes ?? '')
     setSource(lead.source); setInterest(lead.interest); setStatus(lead.status)
     setOwnerId(lead.ownerId ?? ''); setOwnerName(lead.ownerName)
@@ -136,6 +150,7 @@ export default function LeadsScreen() {
     const slaDueAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
     const result = await addLead({
       name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
+      businessDivision: businessDivision || undefined, businessCategory: businessCategory || undefined,
       requirement: requirement.trim() || undefined, notes: notes.trim() || undefined,
       source, interest, status: 'new', ownerId, ownerName, slaDueAt,
     })
@@ -153,6 +168,7 @@ export default function LeadsScreen() {
     const statusChanged = status !== selected.status
     const result = await updateLead(selected.id, {
       name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
+      businessDivision: businessDivision || undefined, businessCategory: businessCategory || undefined,
       requirement: requirement.trim() || undefined, notes: notes.trim() || undefined,
       source, interest, status, ownerId, ownerName,
     }, statusChanged ? `Status changed to ${status.replace(/_/g, ' ')}` : undefined)
@@ -219,6 +235,12 @@ export default function LeadsScreen() {
                     )}
                   </div>
                   {lead.requirement && <p className="text-xs text-slate-600 truncate mb-1">{lead.requirement}</p>}
+                  {lead.businessDivision && (
+                    <p className="text-[11px] text-indigo-500 font-medium truncate mb-1">
+                      {BUSINESS_DIVISION_LABEL[lead.businessDivision]}
+                      {lead.businessCategory ? ` · ${BUSINESS_CATEGORY_LABEL[lead.businessCategory]}` : ''}
+                    </p>
+                  )}
                   <p className="text-[11px] text-slate-400">{SOURCE_LABEL[lead.source] ?? lead.source} · {lead.ownerName}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
@@ -271,6 +293,9 @@ export default function LeadsScreen() {
                 { label: 'Phone',       value: selected.phone },
                 { label: 'Email',       value: selected.email ?? '—' },
                 { label: 'City',        value: selected.city },
+                { label: 'Business Division', value: selected.businessDivision
+                    ? BUSINESS_DIVISION_LABEL[selected.businessDivision] + (selected.businessCategory ? ` (${BUSINESS_CATEGORY_LABEL[selected.businessCategory]})` : '')
+                    : '—' },
                 { label: 'Source',      value: SOURCE_LABEL[selected.source] ?? selected.source },
                 { label: 'Owner',       value: selected.ownerName },
                 { label: 'Requirement', value: selected.requirement ?? '—' },
@@ -379,6 +404,24 @@ export default function LeadsScreen() {
             <input value={city} onChange={e => setCity(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Company / Business Division</label>
+            <select value={businessDivision} onChange={e => onBusinessDivisionChange(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+              <option value="">— Select —</option>
+              {BUSINESS_DIVISION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          {DIVISIONS_WITH_CATEGORY.includes(businessDivision as BusinessDivision) && (
+            <div>
+              <label className="text-xs font-semibold text-slate-500 mb-1 block">Category</label>
+              <select value={businessCategory} onChange={e => setBusinessCategory(e.target.value as BusinessCategory)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+                <option value="">— Select —</option>
+                {BUSINESS_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead Owner (PC) *</label>
             <select value={ownerId} onChange={e => onOwnerChange(e.target.value)}

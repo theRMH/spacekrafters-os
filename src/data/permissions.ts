@@ -134,6 +134,7 @@ export const SCREEN_PERMISSIONS: Record<string, Permission> = {
   payables:          'view_payables',
   'statement-import':'manage_company_accounts',
   reports:           'view_reports',
+  files:             'view_home',
   attendance:        'view_attendance',
   leave:             'view_leave',
   'personal-finance':'view_personal_finance',

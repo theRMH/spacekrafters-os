@@ -92,6 +92,8 @@ export type LeadStatus =
   | 'lost'
 export type LeadSource = 'referral' | 'walk_in' | 'website' | 'social_media' | 'cold_call' | 'exhibition' | 'other'
 export type LeadInterest = 'hot' | 'medium' | 'cold'
+export type BusinessDivision = 'fgd' | 'sk_constructions' | 'sk_interiors' | 'sk_turnkey_projects' | 'sk_real_estate'
+export type BusinessCategory = 'residential' | 'commercial' | 'industrial'
 
 export interface LeadActivityItem {
   id: string
@@ -107,6 +109,8 @@ export interface Lead {
   phone: string
   email?: string
   city: string
+  businessDivision?: BusinessDivision
+  businessCategory?: BusinessCategory
   requirement?: string
   notes?: string
   source: LeadSource
@@ -162,6 +166,8 @@ export interface SiteVisitRoom {
   id: string
   name: string
   measurements?: string
+  lengthFt?: string
+  widthFt?: string
   notes?: string
   photos?: string[]
 }

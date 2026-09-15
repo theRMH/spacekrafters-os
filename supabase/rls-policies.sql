@@ -138,11 +138,17 @@ CREATE POLICY "authenticated delete owner only" ON sks_projects
   FOR DELETE TO authenticated USING (sks_has_role('owner'));
 
 -- ─── sks_leads ───────────────────────────────────────────────────────────────
+-- site_engineer/designer/accounts also need to see and advance leads at the
+-- pipeline stages LeadStatusSheet.tsx's ROLE_FOR_LEAD_STATUS assigns them
+-- (site_visit_scheduled / internally_approved+design_in_progress / client_approved)
+-- — SELECT/UPDATE previously only recognized owner/admin/project_coordinator,
+-- so those stage-owner buttons were unclickable in practice (silent RLS no-op).
 CREATE POLICY "authenticated select visible leads" ON sks_leads
   FOR SELECT TO authenticated
   USING (
     sks_has_role('owner') OR sks_has_role('admin')
     OR (sks_has_role('project_coordinator') AND (owner_id = sks_my_id() OR owner_id IS NULL))
+    OR sks_has_role('site_engineer') OR sks_has_role('designer') OR sks_has_role('accounts')
   );
 
 CREATE POLICY "authenticated insert leads" ON sks_leads
@@ -151,8 +157,18 @@ CREATE POLICY "authenticated insert leads" ON sks_leads
 
 CREATE POLICY "authenticated update leads" ON sks_leads
   FOR UPDATE TO authenticated
-  USING (sks_has_role('owner') OR (sks_has_role('project_coordinator') AND (owner_id = sks_my_id() OR owner_id IS NULL)))
-  WITH CHECK (sks_has_role('owner') OR (sks_has_role('project_coordinator') AND (owner_id = sks_my_id() OR owner_id IS NULL)));
+  USING (
+    sks_has_role('owner')
+    OR (sks_has_role('project_coordinator') AND (owner_id = sks_my_id() OR owner_id IS NULL))
+    OR (sks_has_role('site_engineer') AND status = 'site_visit_scheduled')
+    OR (sks_has_role('designer') AND status IN ('internally_approved', 'design_in_progress'))
+    OR (sks_has_role('accounts') AND status = 'client_approved')
+  )
+  WITH CHECK (
+    sks_has_role('owner')
+    OR (sks_has_role('project_coordinator') AND (owner_id = sks_my_id() OR owner_id IS NULL))
+    OR sks_has_role('site_engineer') OR sks_has_role('designer') OR sks_has_role('accounts')
+  );
 
 CREATE POLICY "authenticated delete leads owner only" ON sks_leads
   FOR DELETE TO authenticated USING (sks_has_role('owner'));

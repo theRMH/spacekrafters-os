@@ -609,7 +609,7 @@ export default function QuotationsScreen() {
                           <div className="flex items-end gap-1.5">
                             <div className="w-1/4">
                               <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Qty</label>
-                              <input type="number" min="0" step="0.01" value={item.quantity}
+                              <input type="number" min="0" step="0.01" value={item.quantity || ''}
                                 onChange={e => updateItem(section.id, item.id, { quantity: parseFloat(e.target.value) || 0 })}
                                 className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
                             </div>
@@ -622,7 +622,7 @@ export default function QuotationsScreen() {
                             </div>
                             <div className="w-1/4">
                               <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Rate</label>
-                              <input type="number" min="0" step="0.01" value={item.rate}
+                              <input type="number" min="0" step="0.01" value={item.rate || ''}
                                 onChange={e => updateItem(section.id, item.id, { rate: parseFloat(e.target.value) || 0 })}
                                 className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
                             </div>
@@ -652,7 +652,7 @@ export default function QuotationsScreen() {
 
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Discount Amount</label>
-            <input type="number" min="0" step="0.01" value={discountAmount}
+            <input type="number" min="0" step="0.01" value={discountAmount || ''}
               onChange={e => setDiscountAmount(parseFloat(e.target.value) || 0)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>

@@ -90,6 +90,7 @@ export default function ProjectsScreen() {
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
   const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [quotations, setQuotations] = useState<Quotation[]>([])
+  const [quotationsLoaded, setQuotationsLoaded] = useState(false)
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
   const [payables, setPayables] = useState<Payable[]>([])
   const [vendorBills, setVendorBills] = useState<VendorBill[]>([])
@@ -100,7 +101,7 @@ export default function ProjectsScreen() {
   useEffect(() => {
     getAllProjects().then(setProjects)
     getManagedUsersDirectory().then(setCoordinators)
-    getAllQuotations().then(setQuotations)
+    getAllQuotations().then(qs => { setQuotations(qs); setQuotationsLoaded(true) })
     getAllPaymentMilestones().then(setMilestones)
     getAllPayables().then(setPayables)
     getAllVendorBills().then(setVendorBills)
@@ -110,6 +111,11 @@ export default function ProjectsScreen() {
   }, [])
 
   useEffect(() => {
+    // Wait for quotations to load before consuming ?leadId — onLeadChange looks
+    // up the lead's approved quotation to auto-fill Contract Value, and running
+    // it while `quotations` is still the initial [] silently skips that fill
+    // (the field is then left for someone to fill in by hand, e.g. a bare "1").
+    if (!quotationsLoaded) return
     const leadId = searchParams.get('leadId')
     if (leadId) {
       setForm(emptyProject())
@@ -118,7 +124,7 @@ export default function ProjectsScreen() {
       setSearchParams(params => { params.delete('leadId'); return params }, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams])
+  }, [searchParams, quotationsLoaded])
 
   const eligibleLeads = leads.filter(l => l.status === 'won')
 

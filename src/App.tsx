@@ -34,6 +34,7 @@ import ReceivablesScreen from './screens/Finance/ReceivablesScreen'
 import PayablesScreen from './screens/Finance/PayablesScreen'
 import StatementImportScreen from './screens/Finance/StatementImportScreen'
 import ReportsScreen from './screens/Reports/ReportsScreen'
+import FilesScreen from './screens/Files/FilesScreen'
 import AuditLogScreen from './screens/Settings/AuditLogScreen'
 import PersonalFinanceScreen from './screens/PersonalFinance/PersonalFinanceScreen'
 import PersonalCategoriesScreen from './screens/PersonalFinance/PersonalCategoriesScreen'
@@ -262,6 +263,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="reports">
             <AppShell><ReportsScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/files"
+        element={
+          <ProtectedRoute screenPath="files">
+            <AppShell><FilesScreen /></AppShell>
           </ProtectedRoute>
         }
       />

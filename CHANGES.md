@@ -1,3 +1,64 @@
+## 2026-09-15
+
+### Fix: multi-role QA testing — independent login per browser tab
+**Commit:** Uncommitted
+- User wanted to test multiple roles at once in one browser (Tab 1 = Site Engineer, Tab 2 = Designer, etc.) and asked for auth storage to move from `localStorage` to `sessionStorage` so each tab keeps its own session.
+- Made that storage swap, but investigation (a real 4-tab Playwright test, not just code review) showed it wasn't sufficient on its own: Supabase's client always opens a `BroadcastChannel` named after `storageKey` to sync auth events across **every tab of the origin**, regardless of which storage backend is configured. Logging in on tab B fired tab A's `onAuthStateChange` too — with tab B's session — and `AuthContext.tsx`'s handler (`loadProfileForSession`) then tried to load *that* user's managed-user row using tab A's own JWT. RLS on `sks_managed_users` correctly scopes `SELECT` to `auth_user_id = auth.uid()`, so the lookup returned nothing, and the existing "no profile found" fallback called `supabase.auth.signOut()` — signing tab A itself out. Confirmed via a raw `sessionStorage` diagnostic: tab A's session key was already gone *before* any refresh, immediately after tabs B/C/D logged in.
+- **Changed:** `src/lib/supabase.ts` — auth storage now `window.sessionStorage` (was `localStorage`), and `storageKey` is now unique per browser tab (`sb-<random-tab-id>-auth-token`, id generated once via `crypto.randomUUID()` and cached in that tab's own `sessionStorage` so it survives refreshes but is never shared). A unique key puts each tab on its own `BroadcastChannel`, so tabs stop receiving each other's auth events entirely — the actual fix for isolation, not the storage backend swap by itself.
+- **Verified:** with a throwaway Playwright script (`playwright` installed via `npm install --no-save`, removed after — no `package.json`/lockfile change) driving 4 real tabs in one browser context: logged into Site Engineer / Designer / Accounts / Owner in tabs A–D, refreshed tab A, confirmed all 4 tabs still showed their own correct role afterward with zero console errors. `tsc --noEmit` clean.
+- **Trade-off (as flagged by the user going in):** a normal page refresh does *not* log a tab out — `sessionStorage` survives reloads, it only clears when the tab itself is closed — confirmed by the test above. The one caveat: duplicating an existing tab, or a browser restoring tabs after a restart, copies that tab's `sessionStorage` (including the tab-id and session), so the new tab starts logged in as whoever the original was — open a fresh tab (Ctrl+T) instead of duplicating one to get an independent login there.
+
+### Fix: Contract Value showed ₹1 instead of the approved quotation's Net Amount when converting a Won lead to a Project
+**Commit:** Uncommitted
+- User reported: converting a Won lead (approved quotation ₹55) to a Project showed Contract Value ₹1 on the resulting project, not ₹55. Traced to a race condition in `src/screens/Projects/ProjectsScreen.tsx`: the `?leadId=` query-param effect (which runs `onLeadChange()` to auto-fill Contract Value from the lead's approved quotation) and the `getAllQuotations()` fetch both fire on mount, but the effect ran immediately while `quotations` was still `[]` — so `onLeadChange` could never find the approved quotation, the auto-fill silently no-opped, and the URL's `leadId` was stripped immediately after (no retry). The blank field was then filled in by hand during testing with placeholder values like `1`/`2` — confirmed directly against the live DB: every affected project had `quotationId: null`, meaning the link genuinely never happened.
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — added a `quotationsLoaded` flag, set once `getAllQuotations()` resolves; the `?leadId=` effect now waits for it before calling `onLeadChange()` and before clearing the URL param, so the lookup always runs against the real quotations list.
+- **Verified:** `tsc --noEmit` clean. Contract Value snapshots once at conversion time (by design, like a signed contract) and stays manually editable afterward — no live re-sync to the quotation if it's edited later, which was not part of what was reported broken.
+
+### Feature: build the missing Files screen
+**Commit:** Uncommitted
+- User (Test Accounts role) reported the "Files" nav tab wasn't working. Traced to: the nav item (`navItems.ts`, `/files`, `permission: 'view_home'`) has existed since early on, but no route or screen was ever built for it — `App.tsx` had no `/files` route, so it fell through to the catch-all wildcard and silently bounced back to `/home`, looking like a dead click.
+- Confirmed scope with user: a company-wide, read-only browse of all project documents grouped by project, reusing the existing per-project Documents feature's backend (`documentService.ts` / `sks_documents`, already used by `ProjectWorkspaceScreen.tsx`'s Documents tab) rather than building new storage.
+- **Added:** `src/screens/Files/FilesScreen.tsx` — lists every `ProjectDocument` the user's RLS grants them, grouped by project name (falls back to "Unassigned" for leadless/pre-project documents), search by file or project name, tapping a file opens its version history (reuses `MultiFileUploadField` in display mode, same pattern as Project Workspace). No upload here — adding documents stays on the per-project screen.
+- **Changed:** `src/App.tsx` — registered the `/files` route (`ProtectedRoute screenPath="files"`), matching the existing nav item.
+- **Changed:** `src/data/permissions.ts` — added `files: 'view_home'` to `SCREEN_PERMISSIONS` for consistency with the nav item's declared permission (the route would have been accessible either way, since `canAccessScreen` fails open for unlisted paths — but leaving it undeclared would have been misleading).
+- **Verified:** `tsc --noEmit` clean, `npm run build` succeeds.
+
+### Fix: Site Engineer's "Mark Site Visit Done" (and Designer/Accounts stage buttons) silently did nothing
+**Commit:** Uncommitted
+- User (logged in as Test Site Engineer) reported the "Mark Site Visit Done" button on the Update Status sheet did nothing when clicked. Traced to the same class of bug as the 2026-09-12 Design Center fix: `LeadStatusSheet.tsx`'s `ROLE_FOR_LEAD_STATUS` map assigns `site_visit_scheduled → site_engineer`, `internally_approved`/`design_in_progress → designer`, and `client_approved → accounts`, and the front-end's `canAct` check correctly lets those roles see and click the button — but `sks_leads`'s RLS SELECT/UPDATE policies only ever recognized `owner`/`admin`/`project_coordinator`. Verified directly against the live DB (`pg_policies`) that this was really the deployed state, not just a stale local file. The write was silently rejected by RLS with no visible error.
+- **Changed:** `supabase/rls-policies.sql` — `sks_leads` SELECT now also allows `site_engineer`/`designer`/`accounts`; UPDATE's `USING` clause allows those three roles to act, each gated to the specific status their stage-owner role covers (e.g. site_engineer only when `status = 'site_visit_scheduled'`), matching what `ROLE_FOR_LEAD_STATUS` already encodes client-side. `WITH CHECK` grants those roles unconditionally (status is expected to change as part of the update; the entry gate is the `USING` clause) while the existing `project_coordinator`/`owner` checks are untouched.
+- **Deployed:** applied directly to the live Supabase DB this session (same `SUPABASE_DB_URL` approach as the 2026-09-12 migration) and verified via `pg_policies` that the new policy text is live. ✅ DEPLOYED 2026-09-15.
+- **Verified:** `tsc --noEmit` clean (no app code changed, RLS-only fix).
+
+### Fix: quantity/rate/discount number inputs snapped back to "0" on backspace
+**Commit:** Uncommitted
+- User reported the Qty field on the New Requirement form wouldn't let them backspace the "0" away. Cause: these inputs are controlled by a numeric state that defaults to `0`, with `onChange={e => set(parseFloat(e.target.value) || 0)}`. Backspacing to an empty string makes `parseFloat('')` return `NaN`, which `|| 0` immediately coerces back to `0` — so the controlled input's displayed value snapped straight back to "0" on every keystroke, making it look like backspace did nothing. Same bug existed in the two Quotation line-item fields (Qty, Rate) and Discount Amount, which use the identical pattern.
+- **Changed:** `src/screens/Requirements/RequirementsScreen.tsx` — Qty input now uses `value={item.quantity || ''}`, matching the Tax% field's existing (already-correct) pattern of never displaying a bare `0`.
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — same fix applied to line-item Qty, Rate, and Discount Amount.
+- **Verified:** `tsc --noEmit` clean.
+
+### Fix: could not type in Site Visit Length/Width boxes
+**Commit:** Uncommitted
+- User reported being unable to type in the Length (ft) / Width (ft) boxes added earlier today. Root cause: those inputs derived their displayed value by regex-parsing the combined `room.measurements` string (`parseMeasurements`) on every render, but `formatMeasurements` only produces a two-number string (`"12ft x 14ft"`) once *both* sides have a value — typing a single digit into Length produced `"1ft"` alone, which the two-number regex can't match, so `parseMeasurements` fell back to `{ length: '', width: '' }` and wiped the field on every keystroke.
+- **Changed:** `src/types/index.ts` — `SiteVisitRoom` gains `lengthFt?`/`widthFt?` fields.
+- **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — the two inputs now read/write `room.lengthFt`/`room.widthFt` directly (no lossy round-trip through the combined string); `measurements` is still kept in sync on every change purely for the existing read-only display (`📏 {room.measurements}`) and Excel/PDF exports that already expect it. `openEdit()` backfills `lengthFt`/`widthFt` from the legacy `measurements` string for site visits saved before this field existed.
+- **Verified:** `tsc --noEmit` clean.
+
+### Feature: Company / Business Division on Leads
+**Commit:** Uncommitted
+- User asked for a "Company / Business Division" dropdown on the New Lead form (FGD, SK Constructions, SK Interiors, SK Turnkey Projects, SK Real Estate — the latter two with a Residential/Commercial/Industrial sub-category), saved with the lead and shown in Lead Details/List.
+- **Added:** `src/data/businessDivisions.ts` — `BUSINESS_DIVISION_OPTIONS`/`BUSINESS_DIVISION_LABEL` and `BUSINESS_CATEGORY_OPTIONS`/`BUSINESS_CATEGORY_LABEL` constant maps, plus `DIVISIONS_WITH_CATEGORY` (only `sk_interiors`/`sk_turnkey_projects` get the sub-category dropdown), following the same shared-constants pattern as `data/permissions.ts`.
+- **Changed:** `src/types/index.ts` — added `BusinessDivision`/`BusinessCategory` types and `businessDivision?`/`businessCategory?` fields on `Lead`. No DB migration needed — `sks_leads` stores the whole lead as JSONB (`leadService.ts`'s `upsertLead` writes `data: lead`), so the new fields persist automatically.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — New/Edit Lead form gets the Business Division dropdown between City and Lead Owner (PC), with the Category dropdown appearing only for Interiors/Turnkey Projects and clearing itself if the division changes to one without a category. Also shown on the lead list card (compact line under Requirement) and the Lead Detail bottom sheet's key/value list.
+- **Changed:** `src/screens/Leads/LeadDetailScreen.tsx` — added the same Business Division row to the full `/leads/:id` Overview tab.
+- **Verified:** `tsc --noEmit` clean.
+
+### Change: Site Visit room measurements split into two boxes
+**Commit:** Uncommitted
+- User asked for the free-text "Measurements (e.g. 12ft x 14ft)" field on the New/Edit Site Visit form to use two separate boxes instead of one.
+- **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — added `parseMeasurements`/`formatMeasurements` helpers; the single text input is now two `Length (ft)` / `Width (ft)` number inputs that combine into the same `"<length>ft x <width>ft"` string `SiteVisitRoom.measurements` already stored, so no type/schema change was needed. Editing an existing visit parses the stored string back into the two boxes via a regex on the leading two numbers.
+- **Verified:** `tsc --noEmit` clean.
+
 ## 2026-09-12
 
 ### Fix: quotation line-item fields had no persistent labels

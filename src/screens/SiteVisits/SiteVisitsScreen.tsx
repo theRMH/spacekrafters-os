@@ -29,7 +29,18 @@ function fmtDate(val: string): string {
 }
 
 function newRoom(): SiteVisitRoom {
-  return { id: `room_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: '', measurements: '', notes: '' }
+  return { id: `room_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: '', measurements: '', lengthFt: '', widthFt: '', notes: '' }
+}
+
+function parseMeasurements(val?: string): { length: string; width: string } {
+  const match = val?.match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/)
+  return { length: match?.[1] ?? '', width: match?.[2] ?? '' }
+}
+
+function formatMeasurements(length: string, width: string): string {
+  if (!length && !width) return ''
+  if (length && width) return `${length}ft x ${width}ft`
+  return `${length || width}ft`
 }
 
 function defaultChecklist(): SiteVisitChecklistItem[] {
@@ -98,7 +109,14 @@ export default function SiteVisitsScreen() {
 
   function openEdit(visit: SiteVisit) {
     setLeadId(visit.leadId); setAppointmentId(visit.appointmentId ?? ''); setVisitDate(visit.visitDate.slice(0, 10))
-    setRooms(visit.rooms.length ? visit.rooms : [newRoom()])
+    // Backfill lengthFt/widthFt for rooms saved before the two-box measurement
+    // input existed — they only have the combined "12ft x 14ft" string.
+    const roomsWithFt = visit.rooms.map(r => {
+      if (r.lengthFt !== undefined || r.widthFt !== undefined) return r
+      const { length, width } = parseMeasurements(r.measurements)
+      return { ...r, lengthFt: length, widthFt: width }
+    })
+    setRooms(roomsWithFt.length ? roomsWithFt : [newRoom()])
     setChecklist(visit.checklist.length ? visit.checklist : defaultChecklist())
     setNotes(visit.notes ?? '')
     setFormError('')
@@ -354,9 +372,17 @@ export default function SiteVisitsScreen() {
                       </button>
                     )}
                   </div>
-                  <input value={room.measurements ?? ''} onChange={e => updateRoom(room.id, { measurements: e.target.value })}
-                    placeholder="Measurements (e.g. 12ft x 14ft)"
-                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                  <div className="flex items-center gap-2">
+                    <input type="number" min="0" step="0.01" value={room.lengthFt ?? ''}
+                      onChange={e => updateRoom(room.id, { lengthFt: e.target.value, measurements: formatMeasurements(e.target.value, room.widthFt ?? '') })}
+                      placeholder="Length (ft)"
+                      className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                    <span className="text-slate-400 text-sm">×</span>
+                    <input type="number" min="0" step="0.01" value={room.widthFt ?? ''}
+                      onChange={e => updateRoom(room.id, { widthFt: e.target.value, measurements: formatMeasurements(room.lengthFt ?? '', e.target.value) })}
+                      placeholder="Width (ft)"
+                      className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                  </div>
                   <input value={room.notes ?? ''} onChange={e => updateRoom(room.id, { notes: e.target.value })}
                     placeholder="Notes (optional)"
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
