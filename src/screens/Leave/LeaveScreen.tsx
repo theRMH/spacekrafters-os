@@ -8,7 +8,10 @@ import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllLeaveApplications, upsertLeaveApplication, deleteLeaveApplication } from '../../services/leaveService'
 import { addAuditLog } from '../../services/auditLogService'
-import type { LeaveApplication, AuditLog } from '../../types'
+import { getManagedUsersDirectory } from '../../services/userService'
+import { sendPushNotification } from '../../utils/pushNotifications'
+import { hasPermission } from '../../utils/permissions'
+import type { LeaveApplication, AuditLog, ManagedUser } from '../../types'
 
 const inp = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-primary'
 const lbl = 'text-xs font-semibold text-slate-500 mb-1.5 block'
@@ -18,11 +21,13 @@ export default function LeaveScreen() {
   const canApprove = can('approve_leave')
 
   const [leaves, setLeaves] = useState<LeaveApplication[]>([])
+  const [team, setTeam] = useState<ManagedUser[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<LeaveApplication | null>(null)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
+  const [targetUserId, setTargetUserId] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [reason, setReason] = useState('')
@@ -31,16 +36,27 @@ export default function LeaveScreen() {
 
   async function refresh() {
     setIsLoading(true)
-    setLeaves(await getAllLeaveApplications())
+    const [lv, dir] = await Promise.all([
+      getAllLeaveApplications(),
+      canApprove ? getManagedUsersDirectory() : Promise.resolve([]),
+    ])
+    setLeaves(lv)
+    setTeam(dir)
     setIsLoading(false)
   }
 
-  useEffect(() => { refresh() }, [])
+  useEffect(() => { refresh() }, [canApprove])
 
   const visibleLeaves = canApprove ? leaves : leaves.filter(l => l.userId === user?.id)
 
+  function todayStr(): string {
+    const d = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  }
+
   function resetForm() {
-    setFromDate(''); setToDate(''); setReason(''); setNotes(''); setError('')
+    setTargetUserId(user?.id ?? ''); setFromDate(todayStr()); setToDate(''); setReason(''); setNotes(''); setError('')
   }
 
   async function handleCreate() {
@@ -53,11 +69,15 @@ export default function LeaveScreen() {
       return
     }
     if (!user) return
+    const target = targetUserId === user.id || !targetUserId
+      ? { id: user.id, name: user.name }
+      : team.find(m => m.id === targetUserId)
+    if (!target) { setError('Select who this leave is for.'); return }
     const now = new Date().toISOString()
     const leave: LeaveApplication = {
       id: `leave_${Date.now()}`,
-      userId: user.id,
-      userName: user.name,
+      userId: target.id,
+      userName: 'name' in target ? target.name : target.fullName,
       fromDate, toDate,
       reason: reason.trim(),
       notes: notes.trim() || undefined,
@@ -71,6 +91,26 @@ export default function LeaveScreen() {
     setShowNew(false)
     resetForm()
     setSnack({ open: true, msg: 'Leave application submitted!', type: 'success' })
+    notifyApprovers(leave)
+  }
+
+  // Push-alerts everyone who can approve leave (MD/Admin) the moment a
+  // request comes in — best-effort, same convention as syncManagedUserAuth:
+  // never blocks or fails the actual leave submission, which has already
+  // succeeded by the time this runs.
+  async function notifyApprovers(leave: LeaveApplication) {
+    if (!user) return
+    const directory = canApprove ? team : await getManagedUsersDirectory()
+    const approverIds = directory
+      .filter(m => m.id !== user.id && hasPermission(m.roles ?? m.role, 'approve_leave'))
+      .map(m => m.id)
+    if (approverIds.length === 0) return
+    await sendPushNotification(
+      approverIds,
+      'New Leave Request',
+      `${leave.userName} requested leave: ${leave.fromDate} → ${leave.toDate}`,
+      '/leave',
+    )
   }
 
   async function handleDecide(target: LeaveApplication, status: 'approved' | 'rejected') {
@@ -165,14 +205,25 @@ export default function LeaveScreen() {
 
       <BottomSheet isOpen={showNew} onClose={() => setShowNew(false)} title="New Leave Application" height="full">
         <div className="space-y-4">
+          {canApprove && (
+            <div>
+              <label className={lbl}>For</label>
+              <select value={targetUserId} onChange={e => setTargetUserId(e.target.value)} className={inp}>
+                {user && <option value={user.id}>{user.name} (Me)</option>}
+                {team.filter(m => m.id !== user?.id).map(m => (
+                  <option key={m.id} value={m.id}>{m.fullName} — {m.displayRole}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Leave From Date *</label>
-              <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className={inp} />
+              <input type="date" value={fromDate} min={todayStr()} onChange={e => setFromDate(e.target.value)} className={inp} />
             </div>
             <div>
               <label className={lbl}>Leave To Date *</label>
-              <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className={inp} />
+              <input type="date" value={toDate} min={fromDate || todayStr()} onChange={e => setToDate(e.target.value)} className={inp} />
             </div>
           </div>
           <div>

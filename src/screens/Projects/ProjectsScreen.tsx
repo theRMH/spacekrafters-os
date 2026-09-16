@@ -52,6 +52,12 @@ function fmtCurrency(n?: number): string {
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 }
 
+function todayStr(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 function emptyProject(): Project {
   return {
     id: `prj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -335,6 +341,7 @@ export default function ProjectsScreen() {
   })
 
   const canDelete = user?.role === 'owner'
+  const isEditingExisting = projects.some(p => p.id === form.id)
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] pb-24">
@@ -374,8 +381,8 @@ export default function ProjectsScreen() {
         )}
       </div>
 
-      {/* Create Project */}
-      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title="New Project">
+      {/* Create/Edit Project */}
+      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title={isEditingExisting ? 'Edit Project' : 'New Project'}>
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Project Name *</label>
@@ -468,7 +475,8 @@ export default function ProjectsScreen() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>Start Date</label>
-              <input type="date" className={inp} value={form.startDate ?? ''} onChange={e => setForm(f => ({ ...f, startDate: e.target.value || undefined }))} />
+              <input type="date" className={inp} value={form.startDate ?? ''} min={isEditingExisting ? undefined : todayStr()}
+                onChange={e => setForm(f => ({ ...f, startDate: e.target.value || undefined }))} />
             </div>
             <div>
               <label className={label}>Expected Handover</label>

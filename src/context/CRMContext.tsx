@@ -15,7 +15,7 @@ interface CRMContextValue {
 const CRMContext = createContext<CRMContextValue | null>(null)
 
 export function CRMProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
+  const { user, isAuthReady } = useAuth()
   const [leads, setLeads] = useState<Lead[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -25,7 +25,17 @@ export function CRMProvider({ children }: { children: ReactNode }) {
     setIsLoading(false)
   }
 
-  useEffect(() => { refreshLeads() }, [])
+  useEffect(() => {
+    // CRMProvider sits inside AuthProvider and mounts as soon as the app
+    // loads — before Supabase has restored the session. Fetching on an
+    // empty-deps effect meant this could fire as an anonymous request (RLS
+    // silently returns []) and never retry for the rest of the tab's life,
+    // since the effect never ran again. Wait for auth to actually resolve,
+    // and refetch if the logged-in user changes.
+    if (!isAuthReady) return
+    refreshLeads()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthReady, user?.id])
 
   async function addLead(lead: Omit<Lead, 'id' | 'activity' | 'createdAt' | 'updatedAt'>) {
     const now = new Date().toISOString()

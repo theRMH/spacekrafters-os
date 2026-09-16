@@ -23,6 +23,7 @@ interface FormState {
   email: string
   password: string
   role: UserRole | ''
+  displayTitle: string
   department: string
   status: 'active' | 'inactive'
   notes: string
@@ -30,7 +31,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   fullName: '', mobile: '', email: '', password: '',
-  role: '', department: '', status: 'active', notes: '',
+  role: '', displayTitle: '', department: '', status: 'active', notes: '',
 }
 
 const ROLE_OPTIONS = Object.keys(ROLE_LABELS) as UserRole[]
@@ -97,14 +98,15 @@ export default function UserManagementScreen() {
   function openEdit(u: ManagedUser) {
     setEditUser(u)
     setForm({
-      fullName:   u.fullName,
-      mobile:     u.mobile,
-      email:      u.email,
-      password:   u.password,
-      role:       u.role,
-      department: u.department ?? '',
-      status:     u.status,
-      notes:      u.notes ?? '',
+      fullName:     u.fullName,
+      mobile:       u.mobile,
+      email:        u.email,
+      password:     u.password,
+      role:         u.role,
+      displayTitle: u.displayRole !== ROLE_LABELS[u.role] ? u.displayRole : '',
+      department:   u.department ?? '',
+      status:       u.status,
+      notes:        u.notes ?? '',
     })
     setErrors({})
     setShowPass(false)
@@ -133,7 +135,7 @@ export default function UserManagementScreen() {
     if (!validate()) return
     const now = new Date().toISOString()
     const role = form.role as UserRole
-    const displayRole = ROLE_LABELS[role]
+    const displayRole = form.displayTitle.trim() || ROLE_LABELS[role]
     let updated: ManagedUser[]
 
     const credentialsChanged = !editUser
@@ -465,6 +467,15 @@ export default function UserManagementScreen() {
                   })}
                 </div>
                 {errors.role && <p className="text-xs text-red-500 mt-1">{errors.role}</p>}
+              </div>
+
+              <div>
+                <label className={lbl}>Display Title <span className="text-slate-300 font-normal normal-case">(optional)</span></label>
+                <input {...field('displayTitle')} className={inp}
+                  placeholder={form.role ? ROLE_LABELS[form.role as UserRole] : 'e.g. MD, Junior Architect, Site Supervisor'} />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  What's shown for this person around the app (their real job title). Leave blank to just use the Role label above — the Role itself still controls what they can access.
+                </p>
               </div>
 
               <div>

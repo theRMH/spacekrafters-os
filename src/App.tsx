@@ -20,6 +20,7 @@ import ProjectsScreen from './screens/Projects/ProjectsScreen'
 import ProjectWorkspaceScreen from './screens/ProjectWorkspace/ProjectWorkspaceScreen'
 import TaskDetailScreen from './screens/ProjectWorkspace/TaskDetailScreen'
 import LeaveScreen from './screens/Leave/LeaveScreen'
+import WeeklyPlannerScreen from './screens/WeeklyPlanner/WeeklyPlannerScreen'
 import AttendanceScreen from './screens/Attendance/AttendanceScreen'
 import DesignCenterScreen from './screens/Design/DesignCenterScreen'
 import DailyDiaryScreen from './screens/DailyDiary/DailyDiaryScreen'
@@ -303,6 +304,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="leave">
             <AppShell><LeaveScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/weekly-planner"
+        element={
+          <ProtectedRoute screenPath="weekly-planner">
+            <AppShell><WeeklyPlannerScreen /></AppShell>
           </ProtectedRoute>
         }
       />

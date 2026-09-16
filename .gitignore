@@ -12,6 +12,7 @@ dist-ssr/
 env.local
 .env*
 credentials-notes.txt
+_env.rmh
 
 # Supabase CLI local cache (contains project ref / pooler URL)
 supabase/.temp/

@@ -6,6 +6,7 @@ import {
   Truck, Wallet, Landmark, Receipt, CreditCard, BarChart2, ClipboardCheck,
   CalendarOff, UserCog, File, Settings, UploadCloud, History,
   PiggyBank, Tags, BellRing, TrendingUp, PieChart, CalendarDays, Scale, LineChart,
+  CalendarClock,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -82,8 +83,9 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
     label: 'HR',
     items: [
-      { icon: ClipboardCheck, label: 'Attendance', path: '/attendance', permission: 'view_attendance' },
-      { icon: CalendarOff,    label: 'Leave',      path: '/leave',      permission: 'view_leave'      },
+      { icon: ClipboardCheck, label: 'Attendance',     path: '/attendance',      permission: 'view_attendance'      },
+      { icon: CalendarOff,    label: 'Leave',          path: '/leave',           permission: 'view_leave'           },
+      { icon: CalendarClock,  label: 'Weekly Planner', path: '/weekly-planner',  permission: 'view_weekly_planner'  },
     ],
   },
   {

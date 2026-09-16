@@ -404,6 +404,20 @@ CREATE TABLE IF NOT EXISTS sks_leave_applications (
 CREATE INDEX IF NOT EXISTS sks_leave_applications_user_id_idx ON sks_leave_applications(user_id);
 ALTER TABLE sks_leave_applications ENABLE ROW LEVEL SECURITY;
 
+-- One row per person per day. Unlike attendance/leave (self-or-owner/admin
+-- visibility), this is deliberately team-wide read for everyone — see RLS.
+CREATE TABLE IF NOT EXISTS sks_weekly_plans (
+  id         TEXT        PRIMARY KEY,
+  user_id    TEXT        NOT NULL REFERENCES sks_managed_users(id) ON DELETE CASCADE,
+  date       DATE        NOT NULL,
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, date)
+);
+CREATE INDEX IF NOT EXISTS sks_weekly_plans_user_id_idx ON sks_weekly_plans(user_id);
+ALTER TABLE sks_weekly_plans ENABLE ROW LEVEL SECURITY;
+
 -- ─── System ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS sks_documents (
   id         TEXT        PRIMARY KEY,

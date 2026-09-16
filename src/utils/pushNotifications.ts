@@ -1,3 +1,4 @@
+import { supabase } from '../lib/supabase'
 import { savePushSubscription, deletePushSubscription } from '../services/pushSubscriptionService'
 
 const VAPID_PUBLIC_KEY = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined)?.trim()
@@ -82,4 +83,20 @@ export async function disablePushNotifications(): Promise<void> {
   if (!sub) return
   await deletePushSubscription(sub.endpoint)
   await sub.unsubscribe()
+}
+
+// Sends an actual push alert to the given managed users via the send-push
+// Edge Function (which holds the VAPID private key and does the real Web
+// Push delivery — the browser never has that key). Best-effort: callers
+// treat this the same way as the rest of the app treats non-critical side
+// effects (e.g. syncManagedUserAuth) — a failure here (function not deployed
+// yet, a user has no subscription, etc.) is surfaced but never blocks the
+// action that triggered it.
+export async function sendPushNotification(
+  userIds: string[], title: string, body: string, url?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase || userIds.length === 0) return { ok: true }
+  const { data, error } = await supabase.functions.invoke('send-push', { body: { userIds, title, body, url } })
+  if (error) return { ok: false, error: error.message }
+  return { ok: data?.ok !== false, error: data?.error }
 }

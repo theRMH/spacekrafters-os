@@ -444,11 +444,28 @@ CREATE POLICY "authenticated select leave own or owner/admin" ON sks_leave_appli
   FOR SELECT TO authenticated
   USING (user_id = sks_my_id() OR sks_has_role('owner') OR sks_has_role('admin'));
 CREATE POLICY "authenticated insert own leave" ON sks_leave_applications
-  FOR INSERT TO authenticated WITH CHECK (user_id = sks_my_id());
+  FOR INSERT TO authenticated
+  WITH CHECK (user_id = sks_my_id() OR sks_has_role('owner') OR sks_has_role('admin'));
 CREATE POLICY "authenticated update leave own or owner/admin approval" ON sks_leave_applications
   FOR UPDATE TO authenticated
   USING (user_id = sks_my_id() OR sks_has_role('owner') OR sks_has_role('admin'))
   WITH CHECK (user_id = sks_my_id() OR sks_has_role('owner') OR sks_has_role('admin'));
+
+-- Weekly Planner: MD/Admin see the whole team's plans; everyone else only
+-- their own row. (Previously team-wide SELECT for everyone — reverted per
+-- explicit requirement that regular employees must not be able to read
+-- other people's plans, enforced here at the RLS level, not just in the UI.)
+CREATE POLICY "authenticated select weekly plans own or owner/admin" ON sks_weekly_plans
+  FOR SELECT TO authenticated USING (user_id = sks_my_id() OR sks_has_role('owner') OR sks_has_role('admin'));
+CREATE POLICY "authenticated insert own weekly plan" ON sks_weekly_plans
+  FOR INSERT TO authenticated
+  WITH CHECK (user_id = sks_my_id() OR sks_has_role('owner'));
+CREATE POLICY "authenticated update own weekly plan" ON sks_weekly_plans
+  FOR UPDATE TO authenticated
+  USING (user_id = sks_my_id() OR sks_has_role('owner'))
+  WITH CHECK (user_id = sks_my_id() OR sks_has_role('owner'));
+CREATE POLICY "authenticated delete own weekly plan" ON sks_weekly_plans
+  FOR DELETE TO authenticated USING (user_id = sks_my_id() OR sks_has_role('owner'));
 
 -- ─── sks_documents / sks_document_versions ──────────────────────────────────
 CREATE POLICY "authenticated select documents on visible projects" ON sks_documents

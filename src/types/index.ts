@@ -32,7 +32,7 @@ export type Permission =
   // Finance
   | 'view_company_finance' | 'manage_company_accounts' | 'view_receivables' | 'record_receipt' | 'view_payables' | 'reconcile'
   // HR
-  | 'view_attendance' | 'mark_attendance' | 'view_leave' | 'approve_leave'
+  | 'view_attendance' | 'mark_attendance' | 'view_leave' | 'approve_leave' | 'view_weekly_planner'
   // Reports
   | 'view_reports' | 'view_financial_reports'
   // Admin
@@ -92,7 +92,7 @@ export type LeadStatus =
   | 'lost'
 export type LeadSource = 'referral' | 'walk_in' | 'website' | 'social_media' | 'cold_call' | 'exhibition' | 'other'
 export type LeadInterest = 'hot' | 'medium' | 'cold'
-export type BusinessDivision = 'fgd' | 'sk_constructions' | 'sk_interiors' | 'sk_turnkey_projects' | 'sk_real_estate'
+export type BusinessDivision = 'fgd' | 'first_property_contractors' | 'sk_constructions' | 'sk_turnkey_interiors'
 export type BusinessCategory = 'residential' | 'commercial' | 'industrial'
 
 export interface LeadActivityItem {
@@ -436,7 +436,7 @@ export interface LeaveApplication {
   updatedAt: string
 }
 
-export type AttendanceStatus = 'present' | 'absent' | 'half_day' | 'leave'
+export type AttendanceStatus = 'present' | 'absent' | 'half_day'
 
 export interface AttendanceRecord {
   id: string
@@ -444,7 +444,23 @@ export interface AttendanceRecord {
   userName: string
   date: string
   status: AttendanceStatus
+  startTime?: string  // ISO timestamp — set by the Start (clock-in) button, self-only
+  endTime?: string    // ISO timestamp — set by the End (clock-out) button, self-only
+  reason?: string     // required when status is 'absent' — collected via a confirmation dialog
   markedBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+// One row per person per day — team-wide visible (see sks_weekly_plans RLS),
+// each person only creates/edits their own.
+export interface WeeklyPlanEntry {
+  id: string
+  userId: string
+  userName: string
+  date: string
+  activity: string
+  notes?: string
   createdAt: string
   updatedAt: string
 }
