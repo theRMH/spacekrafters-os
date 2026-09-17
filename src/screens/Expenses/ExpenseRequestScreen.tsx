@@ -19,6 +19,12 @@ function fmtCurrency(n?: number): string {
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 }
 
+function todayStr(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 function fmtDate(val?: string): string {
   if (!val) return '—'
   const d = new Date(val)
@@ -317,7 +323,8 @@ export default function ExpenseRequestScreen() {
             </div>
             <div>
               <label className={label}>Needed By</label>
-              <input type="date" className={inp} value={form.neededBy?.slice(0, 10) ?? ''} onChange={e => setForm(f => ({ ...f, neededBy: e.target.value || undefined }))} />
+              <input type="date" className={inp} value={form.neededBy?.slice(0, 10) ?? ''} min={todayStr()}
+                onChange={e => setForm(f => ({ ...f, neededBy: e.target.value || undefined }))} />
             </div>
           </div>
           <div>

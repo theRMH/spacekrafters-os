@@ -440,6 +440,37 @@ CREATE POLICY "authenticated update own attendance" ON sks_attendance
   USING (user_id = sks_my_id() OR sks_has_role('owner') OR sks_has_role('admin'))
   WITH CHECK (user_id = sks_my_id() OR sks_has_role('owner') OR sks_has_role('admin'));
 
+-- GPS/photo capture tamper-resistance: once startTime/startCapture (or
+-- endTime/endCapture) are set on a row, a regular employee can no longer
+-- rewrite them — RLS above only checks row ownership, not which JSONB
+-- sub-keys changed, so this needs a real trigger. Owner/admin are exempt
+-- (genuine corrections still need to be possible).
+CREATE OR REPLACE FUNCTION sks_protect_attendance_capture() RETURNS TRIGGER AS $$
+BEGIN
+  IF sks_has_role('owner') OR sks_has_role('admin') THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.data->>'startTime' IS NOT NULL AND (
+    NEW.data->>'startTime' IS DISTINCT FROM OLD.data->>'startTime' OR
+    NEW.data->'startCapture' IS DISTINCT FROM OLD.data->'startCapture'
+  ) THEN
+    RAISE EXCEPTION 'startTime/startCapture cannot be modified once captured';
+  END IF;
+  IF OLD.data->>'endTime' IS NOT NULL AND (
+    NEW.data->>'endTime' IS DISTINCT FROM OLD.data->>'endTime' OR
+    NEW.data->'endCapture' IS DISTINCT FROM OLD.data->'endCapture'
+  ) THEN
+    RAISE EXCEPTION 'endTime/endCapture cannot be modified once captured';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS sks_attendance_protect_capture ON sks_attendance;
+CREATE TRIGGER sks_attendance_protect_capture
+  BEFORE UPDATE ON sks_attendance
+  FOR EACH ROW EXECUTE FUNCTION sks_protect_attendance_capture();
+
 CREATE POLICY "authenticated select leave own or owner/admin" ON sks_leave_applications
   FOR SELECT TO authenticated
   USING (user_id = sks_my_id() OR sks_has_role('owner') OR sks_has_role('admin'));
@@ -466,6 +497,22 @@ CREATE POLICY "authenticated update own weekly plan" ON sks_weekly_plans
   WITH CHECK (user_id = sks_my_id() OR sks_has_role('owner'));
 CREATE POLICY "authenticated delete own weekly plan" ON sks_weekly_plans
   FOR DELETE TO authenticated USING (user_id = sks_my_id() OR sks_has_role('owner'));
+
+-- Daily Tasks: deliberately MD (owner) only for assigning/seeing the whole
+-- team — client was explicit this is an MD-only capability, unlike Weekly
+-- Planner/Attendance above which also grant admin equal visibility. An
+-- employee can only ever see and flip the status of their own assigned task,
+-- never its title/notes, never anyone else's, never create/delete one.
+CREATE POLICY "authenticated select daily tasks own or MD" ON sks_daily_tasks
+  FOR SELECT TO authenticated USING (assignee_id = sks_my_id() OR sks_has_role('owner'));
+CREATE POLICY "authenticated insert daily tasks MD only" ON sks_daily_tasks
+  FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner'));
+CREATE POLICY "authenticated update daily tasks own status or MD" ON sks_daily_tasks
+  FOR UPDATE TO authenticated
+  USING (assignee_id = sks_my_id() OR sks_has_role('owner'))
+  WITH CHECK (assignee_id = sks_my_id() OR sks_has_role('owner'));
+CREATE POLICY "authenticated delete daily tasks MD only" ON sks_daily_tasks
+  FOR DELETE TO authenticated USING (sks_has_role('owner'));
 
 -- ─── sks_documents / sks_document_versions ──────────────────────────────────
 CREATE POLICY "authenticated select documents on visible projects" ON sks_documents

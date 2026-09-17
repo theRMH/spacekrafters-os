@@ -10,6 +10,7 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
+import { BUSINESS_DIVISION_LABEL, BUSINESS_CATEGORY_LABEL, BUSINESS_BRAND_LABEL } from '../../data/businessDivisions'
 import { getAllRequirements } from '../../services/requirementService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllQuotations, upsertQuotation, deleteQuotation } from '../../services/quotationService'
@@ -494,6 +495,20 @@ export default function QuotationsScreen() {
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Client</p>
                 <p className="text-sm font-semibold text-slate-800">{leadName(selected.leadId)}</p>
               </div>
+
+              {(() => {
+                const sourceLead = leads.find(l => l.id === selected.leadId)
+                if (!sourceLead?.businessDivision) return null
+                const label = BUSINESS_DIVISION_LABEL[sourceLead.businessDivision]
+                  + (sourceLead.businessCategory ? ` (${BUSINESS_CATEGORY_LABEL[sourceLead.businessCategory]})` : '')
+                  + (sourceLead.businessBrand ? ` (${BUSINESS_BRAND_LABEL[sourceLead.businessBrand]})` : '')
+                return (
+                  <div>
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Company / Brand</p>
+                    <p className="text-sm font-semibold text-slate-800">{label}</p>
+                  </div>
+                )
+              })()}
 
               {selected.sections.map(section => (
                 <table key={section.id} className="w-full text-xs border-collapse">

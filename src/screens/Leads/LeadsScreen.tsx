@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Phone } from 'lucide-react'
+import { Plus, Phone, Trash2, MoreVertical } from 'lucide-react'
 import { useCRM } from '../../context/CRMContext'
 import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -11,16 +11,26 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
-import { ROLE_LABELS } from '../../data/permissions'
+import { ROLE_LABELS, getRoleDisplayLabel } from '../../data/permissions'
 import {
   BUSINESS_DIVISION_OPTIONS, BUSINESS_DIVISION_LABEL,
   DIVISIONS_WITH_CATEGORY, BUSINESS_CATEGORY_OPTIONS, BUSINESS_CATEGORY_LABEL,
+  DIVISIONS_WITH_BRAND, BUSINESS_BRAND_OPTIONS, BUSINESS_BRAND_LABEL,
 } from '../../data/businessDivisions'
 import { getManagedUsersDirectory } from '../../services/userService'
+import { hasRole } from '../../utils/permissions'
 import { LeadStatusSheet, LEAD_STATUS_LABEL, ROLE_FOR_LEAD_STATUS } from './LeadStatusSheet'
-import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser, BusinessDivision, BusinessCategory } from '../../types'
+import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser, BusinessDivision, BusinessCategory, BusinessBrand, UserRole } from '../../types'
 
 type Filter = 'all' | LeadStatus
+
+const ASSIGNABLE_LEAD_OWNER_ROLES: UserRole[] = ['project_coordinator', 'qs', 'designer']
+// Sentinel <select> value for "type a name that isn't any existing account" —
+// the client sometimes provides a Lead Owner name that was never one of our
+// own Project Coordinator/QS/Designer accounts (e.g. an external referral
+// contact). That lead has no real owner_id to tie to, so it falls back to
+// the same "owner_id IS NULL" visibility RLS already grants unassigned leads.
+const CUSTOM_OWNER_VALUE = '__custom__'
 
 const CHIPS: { value: Filter; label: string }[] = [
   { value: 'all',                    label: 'All'          },
@@ -82,7 +92,8 @@ export default function LeadsScreen() {
   const [selected, setSelected] = useState<Lead | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
+  const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null)
   const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
@@ -92,6 +103,7 @@ export default function LeadsScreen() {
   const [city, setCity] = useState('')
   const [businessDivision, setBusinessDivision] = useState<BusinessDivision | ''>('')
   const [businessCategory, setBusinessCategory] = useState<BusinessCategory | ''>('')
+  const [businessBrand, setBusinessBrand] = useState<BusinessBrand | ''>('')
   const [requirement, setRequirement] = useState('')
   const [notes, setNotes] = useState('')
   const [source, setSource] = useState<LeadSource>('walk_in')
@@ -99,30 +111,55 @@ export default function LeadsScreen() {
   const [status, setStatus] = useState<LeadStatus>('new')
   const [ownerId, setOwnerId] = useState('')
   const [ownerName, setOwnerName] = useState('')
+  const [isCustomOwner, setIsCustomOwner] = useState(false)
   const [formError, setFormError] = useState('')
-  const [coordinators, setCoordinators] = useState<ManagedUser[]>([])
+  const [assignableMembers, setAssignableMembers] = useState<ManagedUser[]>([])
 
+  // Lead ownership is limited to the roles that actually work leads —
+  // Project Coordinator, QS, Designer — not every active team member.
   useEffect(() => {
-    getManagedUsersDirectory().then(users => setCoordinators(users.filter(u => u.role === 'project_coordinator')))
+    getManagedUsersDirectory().then(users => setAssignableMembers(
+      users.filter(u => u.status === 'active' && ASSIGNABLE_LEAD_OWNER_ROLES.some(r => hasRole(u, r)))
+    ))
   }, [])
 
+  // Close the per-lead "more actions" menu on any click elsewhere. A plain
+  // document listener, rather than a full-screen overlay, since the card's
+  // own active:scale press effect gives it a (no-op at rest) transform —
+  // that makes it a containing block, so a nested `fixed` overlay would only
+  // ever cover the card's own box, not the viewport.
+  useEffect(() => {
+    if (!menuOpenFor) return
+    const close = () => setMenuOpenFor(null)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [menuOpenFor])
+
   function onOwnerChange(id: string) {
-    const coordinator = coordinators.find(c => c.id === id)
+    if (id === CUSTOM_OWNER_VALUE) {
+      setIsCustomOwner(true)
+      setOwnerId('')
+      setOwnerName('')
+      return
+    }
+    setIsCustomOwner(false)
+    const member = assignableMembers.find(m => m.id === id)
     setOwnerId(id)
-    setOwnerName(coordinator?.fullName ?? '')
+    setOwnerName(member?.fullName ?? '')
   }
 
   function onBusinessDivisionChange(value: string) {
     const division = value as BusinessDivision | ''
     setBusinessDivision(division)
     if (!DIVISIONS_WITH_CATEGORY.includes(division as BusinessDivision)) setBusinessCategory('')
+    if (!DIVISIONS_WITH_BRAND.includes(division as BusinessDivision)) setBusinessBrand('')
   }
 
   function resetForm() {
     setName(''); setPhone(''); setEmail(''); setCity('')
-    setBusinessDivision(''); setBusinessCategory('')
+    setBusinessDivision(''); setBusinessCategory(''); setBusinessBrand('')
     setRequirement(''); setNotes(''); setSource('walk_in'); setInterest('medium'); setStatus('new')
-    setOwnerId(''); setOwnerName('')
+    setOwnerId(''); setOwnerName(''); setIsCustomOwner(false)
     setFormError('')
   }
 
@@ -134,15 +171,17 @@ export default function LeadsScreen() {
   function openEdit(lead: Lead) {
     setName(lead.name); setPhone(lead.phone); setEmail(lead.email ?? ''); setCity(lead.city)
     setBusinessDivision(lead.businessDivision ?? ''); setBusinessCategory(lead.businessCategory ?? '')
+    setBusinessBrand(lead.businessBrand ?? '')
     setRequirement(lead.requirement ?? ''); setNotes(lead.notes ?? '')
     setSource(lead.source); setInterest(lead.interest); setStatus(lead.status)
     setOwnerId(lead.ownerId ?? ''); setOwnerName(lead.ownerName)
+    setIsCustomOwner(!lead.ownerId)
     setFormError('')
     setShowEdit(true)
   }
 
   async function handleAddLead() {
-    if (!name.trim() || !phone.trim() || !city.trim() || !ownerId) {
+    if (!name.trim() || !phone.trim() || !city.trim() || !ownerName.trim()) {
       setFormError('Name, phone, city, and lead owner are required.')
       return
     }
@@ -151,8 +190,9 @@ export default function LeadsScreen() {
     const result = await addLead({
       name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
       businessDivision: businessDivision || undefined, businessCategory: businessCategory || undefined,
+      businessBrand: businessBrand || undefined,
       requirement: requirement.trim() || undefined, notes: notes.trim() || undefined,
-      source, interest, status: 'new', ownerId, ownerName, slaDueAt,
+      source, interest, status: 'new', ownerId: ownerId || undefined, ownerName: ownerName.trim(), slaDueAt,
     })
     if (!result.ok) { setFormError(result.error ?? 'Could not save lead.'); return }
     setShowNew(false)
@@ -161,7 +201,7 @@ export default function LeadsScreen() {
 
   async function handleUpdateLead() {
     if (!selected) return
-    if (!name.trim() || !phone.trim() || !city.trim() || !ownerId) {
+    if (!name.trim() || !phone.trim() || !city.trim() || !ownerName.trim()) {
       setFormError('Name, phone, city, and lead owner are required.')
       return
     }
@@ -169,8 +209,9 @@ export default function LeadsScreen() {
     const result = await updateLead(selected.id, {
       name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
       businessDivision: businessDivision || undefined, businessCategory: businessCategory || undefined,
+      businessBrand: businessBrand || undefined,
       requirement: requirement.trim() || undefined, notes: notes.trim() || undefined,
-      source, interest, status, ownerId, ownerName,
+      source, interest, status, ownerId: ownerId || undefined, ownerName: ownerName.trim(),
     }, statusChanged ? `Status changed to ${status.replace(/_/g, ' ')}` : undefined)
     if (!result.ok) { setFormError(result.error ?? 'Could not update lead.'); return }
     setShowEdit(false)
@@ -179,11 +220,12 @@ export default function LeadsScreen() {
   }
 
   async function confirmDelete() {
-    if (!selected) return
-    const result = await deleteLead(selected.id)
-    setShowDeleteDialog(false)
+    if (!deleteTarget) return
+    const result = await deleteLead(deleteTarget.id)
+    const deletedId = deleteTarget.id
+    setDeleteTarget(null)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete lead.', type: 'error' }); return }
-    setSelected(null)
+    if (selected?.id === deletedId) setSelected(null)
     setSnack({ open: true, msg: 'Lead deleted.', type: 'success' })
   }
 
@@ -239,12 +281,33 @@ export default function LeadsScreen() {
                     <p className="text-[11px] text-indigo-500 font-medium truncate mb-1">
                       {BUSINESS_DIVISION_LABEL[lead.businessDivision]}
                       {lead.businessCategory ? ` · ${BUSINESS_CATEGORY_LABEL[lead.businessCategory]}` : ''}
+                      {lead.businessBrand ? ` · ${BUSINESS_BRAND_LABEL[lead.businessBrand]}` : ''}
                     </p>
                   )}
                   <p className="text-[11px] text-slate-400">{SOURCE_LABEL[lead.source] ?? lead.source} · {lead.ownerName}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                  <StatusBadge status={lead.status} size="xs" />
+                  <div className="flex items-center gap-1.5 relative">
+                    <StatusBadge status={lead.status} size="xs" />
+                    {can('delete_lead') && (
+                      <>
+                        <button onClick={e => { e.stopPropagation(); setMenuOpenFor(menuOpenFor === lead.id ? null : lead.id) }}
+                          aria-label={`More actions for ${lead.name}`}
+                          className="p-1 rounded-lg text-slate-400 active:bg-slate-100">
+                          <MoreVertical size={15} />
+                        </button>
+                        {menuOpenFor === lead.id && (
+                          <div onClick={e => e.stopPropagation()}
+                            className="absolute top-full right-0 mt-1 z-40 bg-white rounded-xl shadow-sheet border border-slate-100 overflow-hidden min-w-[120px]">
+                            <button onClick={() => { setDeleteTarget(lead); setMenuOpenFor(null) }}
+                              className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-red-500 active:bg-red-50">
+                              <Trash2 size={13} /> Delete
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                   {overdue && (
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">
                       ⚠ SLA overdue
@@ -294,7 +357,9 @@ export default function LeadsScreen() {
                 { label: 'Email',       value: selected.email ?? '—' },
                 { label: 'City',        value: selected.city },
                 { label: 'Business Division', value: selected.businessDivision
-                    ? BUSINESS_DIVISION_LABEL[selected.businessDivision] + (selected.businessCategory ? ` (${BUSINESS_CATEGORY_LABEL[selected.businessCategory]})` : '')
+                    ? BUSINESS_DIVISION_LABEL[selected.businessDivision]
+                      + (selected.businessCategory ? ` (${BUSINESS_CATEGORY_LABEL[selected.businessCategory]})` : '')
+                      + (selected.businessBrand ? ` (${BUSINESS_BRAND_LABEL[selected.businessBrand]})` : '')
                     : '—' },
                 { label: 'Source',      value: SOURCE_LABEL[selected.source] ?? selected.source },
                 { label: 'Owner',       value: selected.ownerName },
@@ -356,7 +421,7 @@ export default function LeadsScreen() {
             </button>
 
             {can('delete_lead') && (
-              <button onClick={() => setShowDeleteDialog(true)}
+              <button onClick={() => setDeleteTarget(selected)}
                 className="w-full text-center text-xs font-semibold text-red-500 py-2">
                 Delete Lead
               </button>
@@ -422,13 +487,31 @@ export default function LeadsScreen() {
               </select>
             </div>
           )}
+          {DIVISIONS_WITH_BRAND.includes(businessDivision as BusinessDivision) && (
+            <div>
+              <label className="text-xs font-semibold text-slate-500 mb-1 block">Brand</label>
+              <select value={businessBrand} onChange={e => setBusinessBrand(e.target.value as BusinessBrand)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+                <option value="">— Select —</option>
+                {BUSINESS_BRAND_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          )}
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead Owner (PC) *</label>
-            <select value={ownerId} onChange={e => onOwnerChange(e.target.value)}
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead Owner / Assigned To *</label>
+            <select value={isCustomOwner ? CUSTOM_OWNER_VALUE : ownerId} onChange={e => onOwnerChange(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
               <option value="">— Select —</option>
-              {coordinators.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+              {assignableMembers.map(m => (
+                <option key={m.id} value={m.id}>{m.fullName} – {getRoleDisplayLabel(m.role, m.displayRole)}</option>
+              ))}
+              <option value={CUSTOM_OWNER_VALUE}>Other — type a name…</option>
             </select>
+            {isCustomOwner && (
+              <input value={ownerName} onChange={e => setOwnerName(e.target.value)}
+                placeholder="Lead Owner name"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm mt-2 focus:outline-none focus:border-indigo-400" />
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Requirement</label>
@@ -474,10 +557,10 @@ export default function LeadsScreen() {
       </BottomSheet>
 
       <Dialog
-        isOpen={showDeleteDialog}
-        onClose={() => setShowDeleteDialog(false)}
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
         title="Delete Lead"
-        message="Are you sure you want to delete this lead? This cannot be undone."
+        message={`Delete ${deleteTarget?.name ?? 'this lead'}? This also removes its linked appointments, follow-ups, site visits, requirements, and quotations. This cannot be undone.`}
         confirmLabel="Delete"
         onConfirm={confirmDelete}
         variant="danger"

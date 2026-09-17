@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Bell, LogOut, ChevronRight, Users, Pencil, Camera } from 'lucide-react'
+import { Bell, LogOut, ChevronRight, Users, Pencil, Camera, LocateFixed } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { loadManagedUsers, updateManagedUserProfile } from '../../utils/userStorage'
@@ -170,6 +170,28 @@ export default function SettingsScreen() {
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-slate-700">Manage Users</p>
                   <p className="text-[10px] text-slate-400 mt-0.5">Create, edit and deactivate users</p>
+                </div>
+                <ChevronRight size={15} className="text-slate-300 flex-shrink-0" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Attendance Settings */}
+        {user && can('manage_settings') && (
+          <div>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-2">Attendance</p>
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+              <button
+                onClick={() => navigate('/settings/attendance')}
+                className="w-full flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 text-left"
+              >
+                <div className="w-8 h-8 bg-emerald-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <LocateFixed size={16} className="text-emerald-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-700">Attendance Settings</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Office timing for late/early calculation</p>
                 </div>
                 <ChevronRight size={15} className="text-slate-300 flex-shrink-0" />
               </button>

@@ -4,11 +4,15 @@ import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { Dialog } from '../../components/feedback/Dialog'
+import { AttendanceCaptureSheet } from '../../components/attendance/AttendanceCaptureSheet'
+import { AttendanceCapturePreview } from '../../components/attendance/AttendanceCapturePreview'
 import { getAllAttendance, upsertAttendance } from '../../services/attendanceService'
 import { getAllLeaveApplications } from '../../services/leaveService'
 import { getManagedUsersDirectory } from '../../services/userService'
+import { getAttendanceSettings } from '../../services/attendanceSettingsService'
 import { downloadAttendanceExcel } from '../../utils/attendanceExport'
-import type { AttendanceRecord, AttendanceStatus, LeaveApplication, ManagedUser } from '../../types'
+import { computeAttendanceStatus } from '../../utils/attendanceStatus'
+import type { AttendanceRecord, AttendanceStatus, LeaveApplication, ManagedUser, AttendanceSettings, AttendanceCapture } from '../../types'
 
 // Leave is not a selectable/displayed attendance status — an approved leave
 // application is folded into Absent everywhere on this screen (calendar,
@@ -57,6 +61,21 @@ function fmtDate(dateKey: string): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+// Difference, in minutes, between a captured timestamp's local time-of-day
+// and the configured office time ("HH:mm") — positive means later.
+function minutesFromOfficeTime(iso: string, officeHHmm: string): number {
+  const d = new Date(iso)
+  const [oh, om] = officeHHmm.split(':').map(Number)
+  return (d.getHours() * 60 + d.getMinutes()) - (oh * 60 + om)
+}
+
+function fmtMinutes(mins: number): string {
+  const abs = Math.abs(mins)
+  const h = Math.floor(abs / 60)
+  const m = abs % 60
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
 function isOnApprovedLeave(userId: string, dateKey: string, leaves: LeaveApplication[]): boolean {
   return leaves.some(l => l.userId === userId && l.status === 'approved' && l.fromDate <= dateKey && dateKey <= l.toDate)
 }
@@ -78,8 +97,11 @@ export default function AttendanceScreen() {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [leaves, setLeaves] = useState<LeaveApplication[]>([])
   const [team, setTeam] = useState<ManagedUser[]>([])
+  const [attendanceSettings, setAttendanceSettings] = useState<AttendanceSettings | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
+  const [captureMode, setCaptureMode] = useState<'start' | 'end' | null>(null)
+  const [viewCapture, setViewCapture] = useState<{ capture: AttendanceCapture; label: string; timestamp?: string } | null>(null)
 
   const today = new Date()
   const todayKey = toDateKey(today)
@@ -89,14 +111,16 @@ export default function AttendanceScreen() {
 
   async function refresh() {
     setIsLoading(true)
-    const [att, lv, dir] = await Promise.all([
+    const [att, lv, dir, settings] = await Promise.all([
       getAllAttendance(),
       getAllLeaveApplications(),
       canManageTeam ? getManagedUsersDirectory() : Promise.resolve([]),
+      getAttendanceSettings(),
     ])
     setRecords(att)
     setLeaves(lv)
     setTeam(dir)
+    setAttendanceSettings(settings)
     setIsLoading(false)
   }
 
@@ -108,16 +132,26 @@ export default function AttendanceScreen() {
     return map
   }, [records, user?.id])
 
-  // Approved leave wins over whatever the attendance record says, and is
-  // folded into Absent — Attendance only ever shows Present/Absent/Half Day;
-  // Leave is a separate concept tracked in the Leave module. A leave approval
-  // is a deliberate, authoritative decision, whereas the attendance record
-  // for that same day could just be stale (e.g. marked Absent before the
-  // leave was approved, or never updated after).
+  // The earliest date this person has ANY attendance record — auto-Absent
+  // (in computeAttendanceStatus) never reaches back before this, so a day
+  // before someone ever used the attendance system is never wrongly marked
+  // absent (there's no join-date field to check against instead).
+  function earliestRecordDateKey(memberId: string): string | undefined {
+    return records.filter(r => r.userId === memberId).map(r => r.date).sort()[0]
+  }
+
+  // The one place this screen decides what status a day displays as — used
+  // by the calendar, both history views, and the payable-days summary — so
+  // Leave/Half-Day/Absent are computed the same way everywhere, via the same
+  // shared `computeAttendanceStatus` the Excel export also uses.
   function effectiveStatus(userId: string, dateKey: string): AttendanceStatus | undefined {
-    if (isOnApprovedLeave(userId, dateKey, leaves)) return 'absent'
-    const rec = records.find(r => r.userId === userId && r.date === dateKey)
-    return rec?.status
+    return computeAttendanceStatus({
+      dateKey,
+      todayKey,
+      rec: records.find(r => r.userId === userId && r.date === dateKey),
+      isOnApprovedLeave: isOnApprovedLeave(userId, dateKey, leaves),
+      earliestDateKey: earliestRecordDateKey(userId),
+    })
   }
 
   // Shared optimistic-save: reflect on screen immediately, roll back on failure.
@@ -184,31 +218,49 @@ export default function AttendanceScreen() {
   // the timestamp is captured automatically at the moment of the click, not
   // typed in, so it wouldn't mean anything for a different day or a different
   // person. Manual Present/Absent/Half Day marking (below) still covers
-  // correcting past days or days without a clock-in.
-  async function handleStart() {
+  // correcting past days or days without a clock-in. Neither button writes
+  // a record directly any more — both just open AttendanceCaptureSheet,
+  // which captures GPS → photo → timestamp, in that order, before
+  // handleCaptured() is ever called. No geofence — location is captured for
+  // MD/Admin verification, but never blocks attendance by distance.
+  function handleStart() {
     if (!user) return
     const existing = records.find(r => r.userId === user.id && r.date === todayKey)
     if (existing?.startTime) return
-    const now = new Date().toISOString()
-    const record: AttendanceRecord = {
-      id: existing?.id ?? `att_${user.id}_${todayKey}`,
-      userId: user.id, userName: user.name, date: todayKey,
-      status: 'present',
-      startTime: now,
-      endTime: existing?.endTime,
-      markedBy: user.name,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    }
-    await saveRecord(record, existing)
+    setCaptureMode('start')
   }
 
-  async function handleEnd() {
+  function handleEnd() {
     if (!user) return
     const existing = records.find(r => r.userId === user.id && r.date === todayKey)
     if (!existing?.startTime || existing.endTime) return
+    setCaptureMode('end')
+  }
+
+  async function handleCaptured(capture: AttendanceCapture & { timestamp: string }) {
+    if (!user || !captureMode) return
+    const existing = records.find(r => r.userId === user.id && r.date === todayKey)
     const now = new Date().toISOString()
-    const record: AttendanceRecord = { ...existing, endTime: now, updatedAt: now }
+    const record: AttendanceRecord = captureMode === 'start'
+      ? {
+          id: existing?.id ?? `att_${user.id}_${todayKey}`,
+          userId: user.id, userName: user.name, date: todayKey,
+          status: 'present',
+          startTime: capture.timestamp,
+          startCapture: { lat: capture.lat, lng: capture.lng, accuracy: capture.accuracy, photoUrl: capture.photoUrl },
+          endTime: existing?.endTime,
+          endCapture: existing?.endCapture,
+          markedBy: user.name,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        }
+      : {
+          ...existing!,
+          endTime: capture.timestamp,
+          endCapture: { lat: capture.lat, lng: capture.lng, accuracy: capture.accuracy, photoUrl: capture.photoUrl },
+          updatedAt: now,
+        }
+    setCaptureMode(null)
     await saveRecord(record, existing)
   }
 
@@ -247,6 +299,27 @@ export default function AttendanceScreen() {
       .sort((a, b) => a.dateKey.localeCompare(b.dateKey) || a.member.fullName.localeCompare(b.member.fullName))
   }, [canManageTeam, historyOptions, records, leaves, monthDays, todayKey])
 
+  // Small round thumbnails inline (not a text link) — tapping one opens the
+  // compact AttendanceCapturePreview instead of a big form-style Dialog.
+  function captureThumbnails(rec?: AttendanceRecord) {
+    if (!rec) return null
+    const items: { label: string; capture: AttendanceCapture; timestamp?: string }[] = []
+    if (rec.startCapture) items.push({ label: 'Start', capture: rec.startCapture, timestamp: rec.startTime })
+    if (rec.endCapture) items.push({ label: 'End', capture: rec.endCapture, timestamp: rec.endTime })
+    if (items.length === 0) return null
+    return (
+      <div className="flex items-center gap-2 mt-1.5">
+        {items.map(item => (
+          <button key={item.label} onClick={() => setViewCapture(item)}
+            className="flex items-center gap-1.5 pl-0.5 pr-2 py-0.5 rounded-full border border-slate-200 active:bg-slate-50">
+            <img src={item.capture.photoUrl} alt={`${item.label} photo`} className="w-6 h-6 rounded-full object-cover" />
+            <span className="text-[10px] font-semibold text-slate-600">{item.label}</span>
+          </button>
+        ))}
+      </div>
+    )
+  }
+
   function renderHistoryRow(row: { dateKey: string; status?: AttendanceStatus; rec?: AttendanceRecord }) {
     return (
       <div key={row.dateKey} className="bg-white rounded-2xl border border-slate-100 p-3.5">
@@ -265,9 +338,25 @@ export default function AttendanceScreen() {
             <span>Duration: <span className="font-semibold text-slate-700">{fmtDuration(row.rec.startTime, row.rec.endTime)}</span></span>
           </div>
         )}
+        {attendanceSettings && row.rec?.startTime && (() => {
+          const diff = minutesFromOfficeTime(row.rec!.startTime!, attendanceSettings.startTime)
+          return (
+            <p className="mt-1 text-[11px] font-semibold">
+              <span className={diff > 0 ? 'text-red-600' : 'text-emerald-600'}>
+                {diff > 0 ? `Late by ${fmtMinutes(diff)}` : 'On time'}
+              </span>
+              {row.rec?.endTime && minutesFromOfficeTime(row.rec.endTime, attendanceSettings.endTime) < 0 && (
+                <span className="ml-2 text-amber-600">
+                  Left early by {fmtMinutes(minutesFromOfficeTime(row.rec.endTime, attendanceSettings.endTime))}
+                </span>
+              )}
+            </p>
+          )
+        })()}
         {row.status === 'absent' && row.rec?.reason && (
           <p className="mt-1.5 text-[11px] text-slate-500">Reason: {row.rec.reason}</p>
         )}
+        {captureThumbnails(row.rec)}
       </div>
     )
   }
@@ -277,12 +366,25 @@ export default function AttendanceScreen() {
       .map(d => {
         const dateKey = toDateKey(d)
         const rec = records.find(r => r.userId === memberId && r.date === dateKey)
-        const status = isOnApprovedLeave(memberId, dateKey, leaves) ? 'absent' : rec?.status
+        const status = effectiveStatus(memberId, dateKey)
         return { dateKey, status, rec }
       })
       .filter(row => row.status || row.dateKey <= todayKey) // don't show blank future days
-      .filter(row => row.status) // only rows with an actual record/leave
+      .filter(row => row.status) // only rows with an actual record/leave/auto-Absent
       .reverse()
+  }
+
+  // Payable-days impact, from the days actually marked (recorded or
+  // auto-Absent/auto-Half-Day) so far this month — Half Day counts as 0.5,
+  // Absent counts as 0.
+  function monthSummaryFor(memberId: string) {
+    let present = 0, half = 0, absent = 0
+    for (const row of historyRowsFor(memberId)) {
+      if (row.status === 'present') present++
+      else if (row.status === 'half_day') half++
+      else if (row.status === 'absent') absent++
+    }
+    return { present, half, absent, marked: present + half + absent, payableDays: present + half * 0.5 }
   }
 
   async function handleDownload() {
@@ -357,31 +459,57 @@ export default function AttendanceScreen() {
           ) : (
             <>
               {selectedDateKey === todayKey && (
-                <div className="flex gap-2 mb-3">
-                  <button
-                    onClick={handleStart}
-                    disabled={!!myTodayRecord?.startTime}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold active:opacity-90 disabled:opacity-50 bg-emerald-600 text-white"
-                  >
-                    <LogIn size={14} />
-                    {myTodayRecord?.startTime ? `Started ${fmtTime(myTodayRecord.startTime)}` : 'Start'}
-                  </button>
-                  <button
-                    onClick={handleEnd}
-                    disabled={!myTodayRecord?.startTime || !!myTodayRecord?.endTime}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold active:opacity-90 disabled:opacity-50 bg-slate-700 text-white"
-                  >
-                    <LogOut size={14} />
-                    {myTodayRecord?.endTime ? `Ended ${fmtTime(myTodayRecord.endTime)}` : 'End'}
-                  </button>
-                </div>
+                <>
+                  {!attendanceSettings && (
+                    <p className="text-[11px] text-amber-600 font-medium mb-2">
+                      Office timing has not been configured yet. Contact your administrator.
+                    </p>
+                  )}
+                  <div className="flex gap-2 mb-1">
+                    <button
+                      onClick={handleStart}
+                      disabled={!attendanceSettings || !!myTodayRecord?.startTime}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold active:opacity-90 disabled:opacity-50 bg-emerald-600 text-white"
+                    >
+                      <LogIn size={14} />
+                      {myTodayRecord?.startTime ? `Started ${fmtTime(myTodayRecord.startTime)}` : 'Start'}
+                    </button>
+                    <button
+                      onClick={handleEnd}
+                      disabled={!attendanceSettings || !myTodayRecord?.startTime || !!myTodayRecord?.endTime}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold active:opacity-90 disabled:opacity-50 bg-slate-700 text-white"
+                    >
+                      <LogOut size={14} />
+                      {myTodayRecord?.endTime ? `Ended ${fmtTime(myTodayRecord.endTime)}` : 'End'}
+                    </button>
+                  </div>
+                  {attendanceSettings && (myTodayRecord?.startTime || myTodayRecord?.endTime) && (
+                    <div className="flex gap-4 mb-3 mt-1.5 text-[11px]">
+                      {myTodayRecord?.startTime && (() => {
+                        const diff = minutesFromOfficeTime(myTodayRecord.startTime, attendanceSettings.startTime)
+                        return <span className={diff > 0 ? 'text-red-600 font-semibold' : 'text-emerald-600 font-semibold'}>
+                          {diff > 0 ? `Late by ${fmtMinutes(diff)}` : 'On time'}
+                        </span>
+                      })()}
+                      {myTodayRecord?.endTime && (() => {
+                        const diff = minutesFromOfficeTime(myTodayRecord.endTime, attendanceSettings.endTime)
+                        return <span className={diff < 0 ? 'text-amber-600 font-semibold' : 'text-emerald-600 font-semibold'}>
+                          {diff < 0 ? `Left early by ${fmtMinutes(diff)}` : 'On time'}
+                        </span>
+                      })()}
+                    </div>
+                  )}
+                </>
               )}
               <p className="text-[11px] text-slate-400 mb-2">
-                Status: <span className={`font-bold ${myRecordByDate.get(selectedDateKey)?.status ? STATUS_STYLE[myRecordByDate.get(selectedDateKey)!.status].split(' ')[1] : 'text-slate-400'}`}>
-                  {myRecordByDate.get(selectedDateKey)?.status
-                    ? STATUS_OPTIONS.find(o => o.value === myRecordByDate.get(selectedDateKey)!.status)?.label
+                Status: <span className={`font-bold ${effectiveStatus(user?.id ?? '', selectedDateKey) ? STATUS_STYLE[effectiveStatus(user?.id ?? '', selectedDateKey)!].split(' ')[1] : 'text-slate-400'}`}>
+                  {effectiveStatus(user?.id ?? '', selectedDateKey)
+                    ? STATUS_OPTIONS.find(o => o.value === effectiveStatus(user?.id ?? '', selectedDateKey))?.label
                     : 'Not marked yet'}
                 </span>
+                {!myRecordByDate.get(selectedDateKey)?.status && effectiveStatus(user?.id ?? '', selectedDateKey) === 'absent' && (
+                  <span className="ml-1.5 text-slate-400">(auto — no attendance captured)</span>
+                )}
               </p>
               <div className="flex flex-wrap gap-2">
                 {STATUS_OPTIONS.map(opt => (
@@ -391,7 +519,7 @@ export default function AttendanceScreen() {
                       ? openAbsentDialog(user.id, user.name, selectedDateKey)
                       : markStatus(user.id, user.name, selectedDateKey, opt.value))}
                     className={`px-3 py-2 rounded-xl border text-xs font-semibold active:opacity-80 ${
-                      myRecordByDate.get(selectedDateKey)?.status === opt.value ? STATUS_STYLE[opt.value] : 'border-slate-200 text-slate-600'
+                      effectiveStatus(user?.id ?? '', selectedDateKey) === opt.value ? STATUS_STYLE[opt.value] : 'border-slate-200 text-slate-600'
                     }`}
                   >
                     {opt.label}
@@ -403,6 +531,30 @@ export default function AttendanceScreen() {
         </div>
       </div>
 
+      {/* Payable-days impact — lets an employee see at a glance how the month's
+          marked attendance (Present/Half Day/Absent) adds up, without this app
+          computing an actual ₹ salary figure (no wage field exists anywhere
+          in this system). */}
+      {user && (() => {
+        const summary = monthSummaryFor(user.id)
+        if (summary.marked === 0) return null
+        return (
+          <div className="px-4 pt-3">
+            <div className="bg-white rounded-2xl border border-slate-100 p-4">
+              <p className="text-xs font-bold text-slate-700 mb-2">My Payable Days — {monthLabel}</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                <span>Present: <span className="font-semibold text-emerald-700">{summary.present}</span></span>
+                <span>Half Day: <span className="font-semibold text-amber-700">{summary.half}</span></span>
+                <span>Absent: <span className="font-semibold text-red-700">{summary.absent}</span></span>
+              </div>
+              <p className="mt-2 text-lg font-extrabold text-slate-800">
+                {summary.payableDays} <span className="text-xs font-semibold text-slate-400">/ {summary.marked} days marked</span>
+              </p>
+              <p className="mt-1 text-[10px] text-slate-400">Half Day counts as 0.5; Absent counts as 0 toward payable days.</p>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* History — self always sees only their own; MD/Admin see every team member stacked, each collapsible. */}
       <div className="px-4 pt-6 space-y-2.5">
@@ -433,6 +585,8 @@ export default function AttendanceScreen() {
                     <th className="text-left px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap">In</th>
                     <th className="text-left px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap">Out</th>
                     <th className="text-left px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap">Duration</th>
+                    <th className="text-left px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap">Late / Early</th>
+                    <th className="text-left px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap">Photo / GPS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -450,6 +604,23 @@ export default function AttendanceScreen() {
                       <td className="px-3 py-2 border border-slate-200 text-slate-600 whitespace-nowrap">{fmtTime(row.rec?.startTime)}</td>
                       <td className="px-3 py-2 border border-slate-200 text-slate-600 whitespace-nowrap">{fmtTime(row.rec?.endTime)}</td>
                       <td className="px-3 py-2 border border-slate-200 text-slate-600 whitespace-nowrap">{fmtDuration(row.rec?.startTime, row.rec?.endTime)}</td>
+                      <td className="px-3 py-2 border border-slate-200 whitespace-nowrap">
+                        {attendanceSettings && row.rec?.startTime && (() => {
+                          const diff = minutesFromOfficeTime(row.rec!.startTime!, attendanceSettings.startTime)
+                          return diff > 0
+                            ? <span className="text-red-600 font-semibold">Late {fmtMinutes(diff)}</span>
+                            : <span className="text-emerald-600 font-semibold">On time</span>
+                        })()}
+                        {attendanceSettings && row.rec?.endTime && (() => {
+                          const diff = minutesFromOfficeTime(row.rec!.endTime!, attendanceSettings.endTime)
+                          return diff < 0
+                            ? <span className="ml-2 text-amber-600 font-semibold">Early {fmtMinutes(diff)}</span>
+                            : null
+                        })()}
+                      </td>
+                      <td className="px-3 py-2 border border-slate-200 whitespace-nowrap">
+                        {captureThumbnails(row.rec)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -493,6 +664,22 @@ export default function AttendanceScreen() {
           </div>
         </div>
       </Dialog>
+
+      <AttendanceCaptureSheet
+        isOpen={!!captureMode}
+        onClose={() => setCaptureMode(null)}
+        title={captureMode === 'end' ? 'End Attendance' : 'Start Attendance'}
+        onCaptured={handleCaptured}
+      />
+
+      {viewCapture && (
+        <AttendanceCapturePreview
+          capture={viewCapture.capture}
+          label={viewCapture.label}
+          timestamp={viewCapture.timestamp}
+          onClose={() => setViewCapture(null)}
+        />
+      )}
     </div>
   )
 }

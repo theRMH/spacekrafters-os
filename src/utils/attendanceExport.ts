@@ -1,4 +1,5 @@
 import type { AttendanceRecord } from '../types'
+import { computeAttendanceStatus } from './attendanceStatus'
 
 function pad(n: number): string { return String(n).padStart(2, '0') }
 
@@ -55,6 +56,9 @@ export async function downloadAttendanceExcel(
   // 2MB-per-file precache limit, and it's only ever needed when someone
   // actually clicks Download.
   const ExcelJS = (await import('exceljs')).default
+
+  const today = new Date()
+  const todayKey = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
 
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const monthLabel = new Date(year, month, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
@@ -113,6 +117,7 @@ export async function downloadAttendanceExcel(
 
   members.forEach(member => {
     const byDate = new Map(records.filter(r => r.userId === member.id).map(r => [r.date, r]))
+    const earliestDateKey = [...byDate.keys()].sort()[0]
     let present = 0, halfDay = 0, absent = 0, late = 0, lateExcess = 0
 
     // Reference order is IN TIME, OUT TIME, STATUS (status last).
@@ -134,7 +139,18 @@ export async function downloadAttendanceExcel(
         continue
       }
 
-      const status = rec?.status ?? 'absent'
+      // Shared with the on-screen Attendance history (src/utils/attendanceStatus.ts)
+      // so the export and the app can never silently disagree — folds a
+      // captured Present day short on hours into Half Day, and auto-Absent
+      // only applies from this person's first-ever record onward, never to a
+      // day that hasn't happened yet (exporting the current month mid-month
+      // used to mark every remaining day of the month "Absent" outright).
+      const status = computeAttendanceStatus({ dateKey, todayKey, rec, isOnApprovedLeave: false, earliestDateKey })
+      if (!status) {
+        inCells.push(fmtTime(rec?.startTime)); outCells.push(fmtTime(rec?.endTime)); statusCells.push('')
+        dayStatus.push('')
+        continue
+      }
       const label = status === 'half_day' ? 'Half Day' : status.charAt(0).toUpperCase() + status.slice(1)
       inCells.push(fmtTime(rec?.startTime))
       outCells.push(fmtTime(rec?.endTime))

@@ -14,6 +14,7 @@ const OWNER_PERMS: Permission[] = [
   'view_expenses', 'raise_expense_request', 'approve_expense', 'record_payment',
   'view_company_finance', 'manage_company_accounts', 'view_receivables', 'record_receipt', 'view_payables', 'reconcile',
   'view_attendance', 'mark_attendance', 'view_leave', 'approve_leave', 'view_weekly_planner',
+  'view_daily_tasks', 'assign_daily_task',
   'view_reports', 'view_financial_reports',
   'manage_users', 'manage_permissions', 'manage_settings', 'view_audit_log',
   'view_personal_finance', 'view_combined_finance',
@@ -27,7 +28,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_leads',
     'view_expenses', 'approve_expense', 'record_payment',
     'view_company_finance', 'manage_company_accounts', 'view_receivables', 'record_receipt', 'view_payables', 'reconcile',
-    'view_attendance', 'view_leave', 'view_weekly_planner',
+    'view_attendance', 'view_leave', 'view_weekly_planner', 'view_daily_tasks',
     'view_reports', 'view_financial_reports',
   ],
 
@@ -42,7 +43,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_tasks', 'add_task', 'edit_task', 'complete_task', 'add_subtask',
     'view_gantt', 'edit_deadline',
     'raise_expense_request',
-    'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner',
+    'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner', 'view_daily_tasks',
     'view_reports',
   ],
 
@@ -53,7 +54,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_tasks', 'complete_task',
     'view_gantt',
     'raise_expense_request',
-    'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner',
+    'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner', 'view_daily_tasks',
   ],
 
   designer: [
@@ -61,7 +62,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_leads',
     'view_design', 'upload_design', 'request_revision',
     'view_tasks', 'complete_task',
-    'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner',
+    'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner', 'view_daily_tasks',
   ],
 
   qs: [
@@ -69,19 +70,19 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_quotations', 'create_quotation', 'approve_quotation_internal',
     'view_projects',
     'view_procurement',
-    'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner',
+    'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner', 'view_daily_tasks',
     'view_reports',
   ],
 
   purchase: [
     'view_home',
     'view_procurement', 'raise_purchase_request', 'create_po', 'receive_goods', 'enter_vendor_bill',
-    'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner',
+    'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner', 'view_daily_tasks',
   ],
 
   admin: [
     'view_home',
-    'view_attendance', 'mark_attendance', 'view_leave', 'approve_leave', 'view_weekly_planner',
+    'view_attendance', 'mark_attendance', 'view_leave', 'approve_leave', 'view_weekly_planner', 'view_daily_tasks',
     'manage_users', 'manage_permissions', 'manage_settings',
   ],
 }
@@ -138,6 +139,7 @@ export const SCREEN_PERMISSIONS: Record<string, Permission> = {
   attendance:        'view_attendance',
   leave:             'view_leave',
   'weekly-planner':  'view_weekly_planner',
+  'daily-tasks':     'view_daily_tasks',
   'personal-finance':'view_personal_finance',
   'personal-categories':'view_personal_finance',
   'personal-commitments':'view_personal_finance',
@@ -147,5 +149,6 @@ export const SCREEN_PERMISSIONS: Record<string, Permission> = {
   'personal-calendar':'view_personal_finance',
   'combined-finance':'view_combined_finance',
   'settings/users':  'manage_users',
+  'settings/attendance': 'manage_settings',
   'audit-log':       'view_audit_log',
 }

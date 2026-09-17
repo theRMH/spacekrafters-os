@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import type { Lead, LeadActivityItem } from '../types'
 import { getAllLeads, upsertLead, deleteLead as deleteLeadRow } from '../services/leadService'
+import { getAllQuotations, deleteQuotation } from '../services/quotationService'
+import { getAllDesignPackages, upsertDesignPackage } from '../services/designService'
 import { useAuth } from './AuthContext'
 
 interface CRMContextValue {
@@ -74,7 +76,26 @@ export function CRMProvider({ children }: { children: ReactNode }) {
     return result
   }
 
+  // Appointments, Follow-ups, Site Visits, Requirements, and the lead's own
+  // activity log all cascade-delete automatically at the DB level (FKs with
+  // ON DELETE CASCADE — see supabase/schema.sql). Quotations don't (deleting
+  // a lead with a linked quotation would otherwise fail outright with a
+  // foreign-key violation), so those are deleted explicitly first, same as
+  // the client wants a lead deletable regardless of stage. Design Packages
+  // survive — their leadId is optional, so they're detached (not deleted)
+  // since there's no delete permission for that table at all.
   async function deleteLead(id: string) {
+    const [quotations, designPackages] = await Promise.all([getAllQuotations(), getAllDesignPackages()])
+
+    for (const q of quotations.filter(q => q.leadId === id)) {
+      const result = await deleteQuotation(q.id)
+      if (!result.ok) return result
+    }
+    for (const pkg of designPackages.filter(p => p.leadId === id)) {
+      const result = await upsertDesignPackage({ ...pkg, leadId: undefined, updatedAt: new Date().toISOString() })
+      if (!result.ok) return result
+    }
+
     const result = await deleteLeadRow(id)
     if (result.ok) setLeads(prev => prev.filter(l => l.id !== id))
     return result

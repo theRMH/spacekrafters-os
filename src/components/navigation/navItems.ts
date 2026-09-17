@@ -6,7 +6,7 @@ import {
   Truck, Wallet, Landmark, Receipt, CreditCard, BarChart2, ClipboardCheck,
   CalendarOff, UserCog, File, Settings, UploadCloud, History,
   PiggyBank, Tags, BellRing, TrendingUp, PieChart, CalendarDays, Scale, LineChart,
-  CalendarClock,
+  CalendarClock, LocateFixed, ListChecks,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -48,6 +48,7 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { icon: CheckSquare,        label: 'Tasks',       path: '/tasks',       permission: 'view_tasks' },
       { icon: GanttChartSquare,   label: 'Gantt',       path: '/gantt',       permission: 'view_gantt' },
       { icon: BookOpen,           label: 'Daily Diary', path: '/daily-diary', permission: 'view_tasks' },
+      { icon: ListChecks,         label: 'Daily Task',  path: '/daily-tasks', permission: 'view_daily_tasks' },
     ],
   },
   {
@@ -99,6 +100,7 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     label: 'Admin',
     items: [
       { icon: UserCog,  label: 'User Management', path: '/settings/users', permission: 'manage_users' },
+      { icon: LocateFixed, label: 'Attendance Settings', path: '/settings/attendance', permission: 'manage_settings' },
       { icon: Settings, label: 'Settings',        path: '/settings',       permission: 'view_home'    },
       { icon: History,  label: 'Audit Log',       path: '/audit-log',      permission: 'view_audit_log' },
     ],

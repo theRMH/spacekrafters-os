@@ -25,6 +25,12 @@ import type {
   Project, Vendor, PurchaseRequest, VendorQuote, PurchaseOrder, GoodsReceipt, VendorBill, Payable, AuditLog,
 } from '../../types'
 
+function todayStr(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
@@ -409,7 +415,8 @@ export default function ProcurementScreen() {
           </div>
           <div>
             <label className={label}>Needed By</label>
-            <input type="date" className={inp} value={form.neededBy?.slice(0, 10) ?? ''} onChange={e => setForm(f => ({ ...f, neededBy: e.target.value || undefined }))} />
+            <input type="date" className={inp} value={form.neededBy?.slice(0, 10) ?? ''} min={todayStr()}
+              onChange={e => setForm(f => ({ ...f, neededBy: e.target.value || undefined }))} />
           </div>
           <button onClick={handleSavePR} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
             Save Purchase Request

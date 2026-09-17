@@ -9,6 +9,7 @@ import LoginScreen from './screens/Login/LoginScreen'
 import HomeScreen from './screens/Home/HomeScreen'
 import SettingsScreen from './screens/Settings/SettingsScreen'
 import UserManagementScreen from './screens/Settings/UserManagementScreen'
+import AttendanceSettingsScreen from './screens/Settings/AttendanceSettingsScreen'
 import LeadsScreen from './screens/Leads/LeadsScreen'
 import LeadDetailScreen from './screens/Leads/LeadDetailScreen'
 import AppointmentsScreen from './screens/Appointments/AppointmentsScreen'
@@ -21,6 +22,7 @@ import ProjectWorkspaceScreen from './screens/ProjectWorkspace/ProjectWorkspaceS
 import TaskDetailScreen from './screens/ProjectWorkspace/TaskDetailScreen'
 import LeaveScreen from './screens/Leave/LeaveScreen'
 import WeeklyPlannerScreen from './screens/WeeklyPlanner/WeeklyPlannerScreen'
+import DailyTasksScreen from './screens/DailyTasks/DailyTasksScreen'
 import AttendanceScreen from './screens/Attendance/AttendanceScreen'
 import DesignCenterScreen from './screens/Design/DesignCenterScreen'
 import DailyDiaryScreen from './screens/DailyDiary/DailyDiaryScreen'
@@ -96,6 +98,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="settings/users">
             <AppShell><UserManagementScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/attendance"
+        element={
+          <ProtectedRoute screenPath="settings/attendance">
+            <AppShell><AttendanceSettingsScreen /></AppShell>
           </ProtectedRoute>
         }
       />
@@ -312,6 +322,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="weekly-planner">
             <AppShell><WeeklyPlannerScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/daily-tasks"
+        element={
+          <ProtectedRoute screenPath="daily-tasks">
+            <AppShell><DailyTasksScreen /></AppShell>
           </ProtectedRoute>
         }
       />

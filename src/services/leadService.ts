@@ -14,7 +14,7 @@ export async function upsertLead(lead: Lead): Promise<{ ok: boolean; error?: str
   if (!supabase) return { ok: false, error: 'Not configured.' }
   const { error } = await supabase.from(TABLE).upsert({
     id:         lead.id,
-    owner_id:   lead.ownerId ?? null,
+    owner_id:   lead.ownerId || null, // never '' — that's not a valid sks_managed_users FK reference
     status:     lead.status,
     data:       lead,
     updated_at: new Date().toISOString(),

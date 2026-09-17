@@ -10,6 +10,7 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
+import { BUSINESS_DIVISION_LABEL, BUSINESS_CATEGORY_LABEL, BUSINESS_BRAND_LABEL } from '../../data/businessDivisions'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getAllProjects, upsertProject, deleteProject } from '../../services/projectService'
 import { getAllQuotations, upsertQuotation } from '../../services/quotationService'
@@ -480,7 +481,9 @@ export default function ProjectsScreen() {
             </div>
             <div>
               <label className={label}>Expected Handover</label>
-              <input type="date" className={inp} value={form.expectedHandoverDate ?? ''} onChange={e => setForm(f => ({ ...f, expectedHandoverDate: e.target.value || undefined }))} />
+              <input type="date" className={inp} value={form.expectedHandoverDate ?? ''}
+                min={isEditingExisting ? undefined : (form.startDate || todayStr())}
+                onChange={e => setForm(f => ({ ...f, expectedHandoverDate: e.target.value || undefined }))} />
             </div>
           </div>
           <button onClick={handleSave} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
@@ -498,6 +501,14 @@ export default function ProjectsScreen() {
               <StatusBadge status={selected.stage} />
             </div>
             <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
+              {(() => {
+                const sourceLead = selected.leadId ? leads.find(l => l.id === selected.leadId) : undefined
+                if (!sourceLead?.businessDivision) return null
+                const label = BUSINESS_DIVISION_LABEL[sourceLead.businessDivision]
+                  + (sourceLead.businessCategory ? ` (${BUSINESS_CATEGORY_LABEL[sourceLead.businessCategory]})` : '')
+                  + (sourceLead.businessBrand ? ` (${BUSINESS_BRAND_LABEL[sourceLead.businessBrand]})` : '')
+                return <div className="flex justify-between"><span className="text-slate-500">Company / Brand</span><span className="font-semibold text-slate-800">{label}</span></div>
+              })()}
               <div className="flex justify-between"><span className="text-slate-500">Client</span><span className="font-semibold text-slate-800">{selected.clientName}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Phone</span><span className="font-semibold text-slate-800">{selected.clientPhone || '—'}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Coordinator</span><span className="font-semibold text-slate-800">{selected.coordinatorName}</span></div>

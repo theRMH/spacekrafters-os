@@ -33,6 +33,8 @@ export type Permission =
   | 'view_company_finance' | 'manage_company_accounts' | 'view_receivables' | 'record_receipt' | 'view_payables' | 'reconcile'
   // HR
   | 'view_attendance' | 'mark_attendance' | 'view_leave' | 'approve_leave' | 'view_weekly_planner'
+  // Daily Tasks — everyone can see their own; only MD (owner) can assign
+  | 'view_daily_tasks' | 'assign_daily_task'
   // Reports
   | 'view_reports' | 'view_financial_reports'
   // Admin
@@ -92,8 +94,11 @@ export type LeadStatus =
   | 'lost'
 export type LeadSource = 'referral' | 'walk_in' | 'website' | 'social_media' | 'cold_call' | 'exhibition' | 'other'
 export type LeadInterest = 'hot' | 'medium' | 'cold'
-export type BusinessDivision = 'fgd' | 'first_property_contractors' | 'sk_constructions' | 'sk_turnkey_interiors'
+export type BusinessDivision = 'fgd' | 'first_property_contractors' | 'sk_constructions' | 'sk_interiors' | 'sk_turnkey_interiors'
 export type BusinessCategory = 'residential' | 'commercial' | 'industrial'
+// FGD is a single company with two brand lines — this is a sub-selection under
+// the 'fgd' division, same pattern as BusinessCategory under 'sk_turnkey_interiors'.
+export type BusinessBrand = 'kitchenaid' | 'bosch_siemens_gaggenau'
 
 export interface LeadActivityItem {
   id: string
@@ -111,6 +116,7 @@ export interface Lead {
   city: string
   businessDivision?: BusinessDivision
   businessCategory?: BusinessCategory
+  businessBrand?: BusinessBrand
   requirement?: string
   notes?: string
   source: LeadSource
@@ -438,6 +444,13 @@ export interface LeaveApplication {
 
 export type AttendanceStatus = 'present' | 'absent' | 'half_day'
 
+export interface AttendanceCapture {
+  lat: number
+  lng: number
+  accuracy?: number   // meters, from the Geolocation API
+  photoUrl: string    // uploaded via storeFile(), photo already has date/time/location stamped on it
+}
+
 export interface AttendanceRecord {
   id: string
   userId: string
@@ -446,10 +459,21 @@ export interface AttendanceRecord {
   status: AttendanceStatus
   startTime?: string  // ISO timestamp — set by the Start (clock-in) button, self-only
   endTime?: string    // ISO timestamp — set by the End (clock-out) button, self-only
+  startCapture?: AttendanceCapture  // GPS + stamped photo captured at Start — set once, never edited after
+  endCapture?: AttendanceCapture    // GPS + stamped photo captured at End — set once, never edited after
   reason?: string     // required when status is 'absent' — collected via a confirmation dialog
   markedBy: string
   createdAt: string
   updatedAt: string
+}
+
+// Single company-wide row (id fixed to 'attendance' in sks_integration_settings)
+// — office hours, owner-configured, used to compute late-arrival/early-departure.
+// No geofence — attendance is never blocked by distance from the office,
+// but GPS is still captured on every record for MD/Admin to review.
+export interface AttendanceSettings {
+  startTime: string  // "09:30", 24h HH:mm
+  endTime: string    // "18:45", 24h HH:mm
 }
 
 // One row per person per day — team-wide visible (see sks_weekly_plans RLS),
@@ -461,6 +485,24 @@ export interface WeeklyPlanEntry {
   date: string
   activity: string
   notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// Distinct from WeeklyPlanEntry above: a Daily Task is assigned BY the MD TO
+// a team member (one-directional), not self-authored. The assignee can only
+// ever flip its status, never reassign or edit the title/notes.
+export type DailyTaskStatus = 'pending' | 'done'
+
+export interface DailyTask {
+  id: string
+  assigneeId: string
+  assigneeName: string
+  title: string
+  notes?: string
+  date: string
+  status: DailyTaskStatus
+  assignedBy: string
   createdAt: string
   updatedAt: string
 }

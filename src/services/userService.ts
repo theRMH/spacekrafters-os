@@ -39,7 +39,12 @@ export async function getManagedUsersDirectory(): Promise<ManagedUser[]> {
     password:      '',
     role:          r.role as ManagedUser['role'],
     displayRole:   r.display_role ?? '',
-    roles:         (r.roles ?? undefined) as ManagedUser['roles'],
+    // The RPC returns `[]` (not null) for accounts created without an
+    // explicit roles array (e.g. Raymond Thirupugazh, Rinoshika) — treating
+    // that as "no roles at all" broke hasRole()/hasPermission()'s `??`
+    // fallback to the single `role` field everywhere this directory feeds
+    // into a permission check, so normalize it to undefined here instead.
+    roles:         (r.roles && r.roles.length > 0 ? r.roles : undefined) as ManagedUser['roles'],
     displayRoles:  r.display_roles ?? undefined,
     department:    r.department ?? undefined,
     status:        r.status,

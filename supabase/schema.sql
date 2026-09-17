@@ -418,6 +418,21 @@ CREATE TABLE IF NOT EXISTS sks_weekly_plans (
 CREATE INDEX IF NOT EXISTS sks_weekly_plans_user_id_idx ON sks_weekly_plans(user_id);
 ALTER TABLE sks_weekly_plans ENABLE ROW LEVEL SECURITY;
 
+-- One-directional: MD assigns a task TO an employee (not self-authored, unlike
+-- sks_weekly_plans above). No UNIQUE(assignee_id, date) — an employee can have
+-- several tasks assigned for the same day.
+CREATE TABLE IF NOT EXISTS sks_daily_tasks (
+  id          TEXT        PRIMARY KEY,
+  assignee_id TEXT        NOT NULL REFERENCES sks_managed_users(id) ON DELETE CASCADE,
+  date        DATE        NOT NULL,
+  status      TEXT        NOT NULL DEFAULT 'pending',
+  data        JSONB       NOT NULL DEFAULT '{}',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS sks_daily_tasks_assignee_id_idx ON sks_daily_tasks(assignee_id);
+ALTER TABLE sks_daily_tasks ENABLE ROW LEVEL SECURITY;
+
 -- ─── System ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS sks_documents (
   id         TEXT        PRIMARY KEY,
