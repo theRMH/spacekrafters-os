@@ -1,17 +1,18 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import type { Lead, LeadActivityItem } from '../types'
-import { getAllLeads, upsertLead, deleteLead as deleteLeadRow } from '../services/leadService'
-import { getAllQuotations, deleteQuotation } from '../services/quotationService'
+import { getAllLeads, upsertLead, deleteLeads as deleteLeadRows } from '../services/leadService'
+import { getAllQuotations, deleteQuotations } from '../services/quotationService'
 import { getAllDesignPackages, upsertDesignPackage } from '../services/designService'
 import { useAuth } from './AuthContext'
 
 interface CRMContextValue {
-  leads:        Lead[]
-  isLoading:    boolean
-  refreshLeads: () => Promise<void>
-  addLead:      (lead: Omit<Lead, 'id' | 'activity' | 'createdAt' | 'updatedAt'>) => Promise<{ ok: boolean; error?: string }>
-  updateLead:   (id: string, updates: Partial<Lead>, activityNote?: string) => Promise<{ ok: boolean; error?: string }>
-  deleteLead:   (id: string) => Promise<{ ok: boolean; error?: string }>
+  leads:           Lead[]
+  isLoading:       boolean
+  refreshLeads:    () => Promise<void>
+  addLead:         (lead: Omit<Lead, 'id' | 'activity' | 'createdAt' | 'updatedAt'>) => Promise<{ ok: boolean; error?: string }>
+  updateLead:      (id: string, updates: Partial<Lead>, activityNote?: string) => Promise<{ ok: boolean; error?: string }>
+  deleteLead:      (id: string) => Promise<{ ok: boolean; error?: string }>
+  bulkDeleteLeads: (ids: string[]) => Promise<{ ok: boolean; error?: string }>
 }
 
 const CRMContext = createContext<CRMContextValue | null>(null)
@@ -84,25 +85,37 @@ export function CRMProvider({ children }: { children: ReactNode }) {
   // the client wants a lead deletable regardless of stage. Design Packages
   // survive — their leadId is optional, so they're detached (not deleted)
   // since there's no delete permission for that table at all.
-  async function deleteLead(id: string) {
+  async function bulkDeleteLeads(ids: string[]) {
+    if (ids.length === 0) return { ok: true }
+    const idSet = new Set(ids)
     const [quotations, designPackages] = await Promise.all([getAllQuotations(), getAllDesignPackages()])
 
-    for (const q of quotations.filter(q => q.leadId === id)) {
-      const result = await deleteQuotation(q.id)
-      if (!result.ok) return result
-    }
-    for (const pkg of designPackages.filter(p => p.leadId === id)) {
-      const result = await upsertDesignPackage({ ...pkg, leadId: undefined, updatedAt: new Date().toISOString() })
+    const quotationIds = quotations.filter(q => q.leadId && idSet.has(q.leadId)).map(q => q.id)
+    if (quotationIds.length > 0) {
+      const result = await deleteQuotations(quotationIds)
       if (!result.ok) return result
     }
 
-    const result = await deleteLeadRow(id)
-    if (result.ok) setLeads(prev => prev.filter(l => l.id !== id))
+    const affectedPackages = designPackages.filter(p => p.leadId && idSet.has(p.leadId))
+    if (affectedPackages.length > 0) {
+      const results = await Promise.all(affectedPackages.map(pkg =>
+        upsertDesignPackage({ ...pkg, leadId: undefined, updatedAt: new Date().toISOString() })
+      ))
+      const failed = results.find(r => !r.ok)
+      if (failed) return failed
+    }
+
+    const result = await deleteLeadRows(ids)
+    if (result.ok) setLeads(prev => prev.filter(l => !idSet.has(l.id)))
     return result
   }
 
+  async function deleteLead(id: string) {
+    return bulkDeleteLeads([id])
+  }
+
   return (
-    <CRMContext.Provider value={{ leads, isLoading, refreshLeads, addLead, updateLead, deleteLead }}>
+    <CRMContext.Provider value={{ leads, isLoading, refreshLeads, addLead, updateLead, deleteLead, bulkDeleteLeads }}>
       {children}
     </CRMContext.Provider>
   )

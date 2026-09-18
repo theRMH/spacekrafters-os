@@ -246,6 +246,42 @@ CREATE TABLE IF NOT EXISTS sks_purchase_requests (
 CREATE INDEX IF NOT EXISTS sks_purchase_requests_project_id_idx ON sks_purchase_requests(project_id);
 ALTER TABLE sks_purchase_requests ENABLE ROW LEVEL SECURITY;
 
+-- Material Request Form: Project -> Send to QS -> QS drafts -> Procurement
+-- sets dates -> Send to LO -> LO approves/rejects. One row per request.
+CREATE TABLE IF NOT EXISTS sks_mrfs (
+  id         TEXT        PRIMARY KEY,
+  project_id TEXT        NOT NULL REFERENCES sks_projects(id) ON DELETE CASCADE,
+  status     TEXT        NOT NULL DEFAULT '',
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS sks_mrfs_project_id_idx ON sks_mrfs(project_id);
+ALTER TABLE sks_mrfs ENABLE ROW LEVEL SECURITY;
+
+-- Simple standalone roster (name/nature of work/number) — separate from the
+-- full sks_vendors master, which carries GSTIN/address/contact fields this
+-- listing doesn't need.
+CREATE TABLE IF NOT EXISTS sks_vendor_labour (
+  id         TEXT        PRIMARY KEY,
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE sks_vendor_labour ENABLE ROW LEVEL SECURITY;
+
+-- Site Engineer Daily Report: locked once submitted; editing requires an
+-- LO-approved edit request (see editRequestStatus in the app's DailyReport type).
+CREATE TABLE IF NOT EXISTS sks_daily_reports (
+  id         TEXT        PRIMARY KEY,
+  project_id TEXT        NOT NULL REFERENCES sks_projects(id) ON DELETE CASCADE,
+  data       JSONB       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS sks_daily_reports_project_id_idx ON sks_daily_reports(project_id);
+ALTER TABLE sks_daily_reports ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS sks_vendor_quotes (
   id                    TEXT        PRIMARY KEY,
   purchase_request_id   TEXT        NOT NULL REFERENCES sks_purchase_requests(id) ON DELETE CASCADE,

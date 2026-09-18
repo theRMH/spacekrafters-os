@@ -24,8 +24,12 @@ import { ROLE_LABELS } from '../../data/permissions'
 import { ProjectStatusSheet, ROLE_FOR_PROJECT_STAGE, PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
 import type { ManagedUser, Project, ProjectStage, Quotation, PaymentMilestone, Payable, VendorBill, PurchaseOrder, ExpenseRequest, AuditLog, Client, Receipt } from '../../types'
 
+// Order matches PROJECT_STAGE_ORDER in ProjectStatusSheet.tsx (the single
+// source of truth for stage sequence) — change both together if the client's
+// final stage order differs from this.
 const STAGE_OPTIONS: { value: ProjectStage; label: string }[] = [
   { value: 'advance_payment',  label: 'Advance Payment' },
+  { value: 'designing',        label: 'Designing' },
   { value: 'execution',        label: 'Execution' },
   { value: 'procurement',      label: 'Procurement' },
   { value: 'handover_prep',    label: 'Handover Prep' },

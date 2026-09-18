@@ -29,6 +29,9 @@ import DailyDiaryScreen from './screens/DailyDiary/DailyDiaryScreen'
 import TasksScreen from './screens/Tasks/TasksScreen'
 import GanttListScreen from './screens/Gantt/GanttListScreen'
 import VendorMasterScreen from './screens/Procurement/VendorMasterScreen'
+import MRFScreen from './screens/MRF/MRFScreen'
+import VendorLabourScreen from './screens/VendorLabour/VendorLabourScreen'
+import DailyReportScreen from './screens/DailyReport/DailyReportScreen'
 import ClientMasterScreen from './screens/Clients/ClientMasterScreen'
 import ProcurementScreen from './screens/Procurement/ProcurementScreen'
 import ExpenseRequestScreen from './screens/Expenses/ExpenseRequestScreen'
@@ -37,6 +40,7 @@ import ReceivablesScreen from './screens/Finance/ReceivablesScreen'
 import PayablesScreen from './screens/Finance/PayablesScreen'
 import StatementImportScreen from './screens/Finance/StatementImportScreen'
 import ReportsScreen from './screens/Reports/ReportsScreen'
+import SiteVisitReportScreen from './screens/Reports/SiteVisitReportScreen'
 import FilesScreen from './screens/Files/FilesScreen'
 import AuditLogScreen from './screens/Settings/AuditLogScreen'
 import PersonalFinanceScreen from './screens/PersonalFinance/PersonalFinanceScreen'
@@ -176,7 +180,7 @@ function AuthedRoutes() {
       <Route
         path="/projects/:id"
         element={
-          <ProtectedRoute screenPath="projects">
+          <ProtectedRoute screenPath="project-workspace">
             <AppShell><ProjectWorkspaceScreen /></AppShell>
           </ProtectedRoute>
         }
@@ -184,7 +188,7 @@ function AuthedRoutes() {
       <Route
         path="/projects/:id/tasks/:taskId"
         element={
-          <ProtectedRoute screenPath="projects">
+          <ProtectedRoute screenPath="project-workspace">
             <AppShell><TaskDetailScreen /></AppShell>
           </ProtectedRoute>
         }
@@ -218,6 +222,30 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="vendors">
             <AppShell><VendorMasterScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/mrf"
+        element={
+          <ProtectedRoute screenPath="mrf">
+            <AppShell><MRFScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendors-labour"
+        element={
+          <ProtectedRoute screenPath="vendors-labour">
+            <AppShell><VendorLabourScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/daily-reports"
+        element={
+          <ProtectedRoute screenPath="daily-reports">
+            <AppShell><DailyReportScreen /></AppShell>
           </ProtectedRoute>
         }
       />
@@ -274,6 +302,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="reports">
             <AppShell><ReportsScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/site-visit-report"
+        element={
+          <ProtectedRoute screenPath="site-visit-report">
+            <AppShell><SiteVisitReportScreen /></AppShell>
           </ProtectedRoute>
         }
       />

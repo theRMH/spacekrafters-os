@@ -9,8 +9,31 @@ import { getAllPunchListItems } from '../../services/punchListService'
 import { upsertProject } from '../../services/projectService'
 import type { Project, ProjectStage, ManagedUser, UserRole, StatusHistoryItem } from '../../types'
 
+// Single source of truth for stage sequence — the client will share their
+// final order separately; reordering this array (and nothing else) is all
+// that's needed to change it. Every `submit*` transition below reads its
+// "next stage" from this array rather than hardcoding it, so the notes/
+// buttons stay correct automatically. STAGE_OPTIONS in ProjectsScreen.tsx
+// (the manual stage picker) should be kept in the same order.
+export const PROJECT_STAGE_ORDER: ProjectStage[] = [
+  'advance_payment',
+  'designing',
+  'execution',
+  'procurement',
+  'handover_prep',
+  'final_payment',
+  'reconciliation',
+  'closed',
+]
+
+export function nextProjectStage(from: ProjectStage): ProjectStage {
+  const idx = PROJECT_STAGE_ORDER.indexOf(from)
+  return PROJECT_STAGE_ORDER[idx + 1] ?? from
+}
+
 export const ROLE_FOR_PROJECT_STAGE: Partial<Record<ProjectStage, UserRole>> = {
   advance_payment:    'accounts',
+  designing:          'designer',
   execution:          'site_engineer',
   procurement:        'purchase',
   handover_prep:      'project_coordinator',
@@ -21,6 +44,7 @@ export const ROLE_FOR_PROJECT_STAGE: Partial<Record<ProjectStage, UserRole>> = {
 
 export const PROJECT_STAGE_LABEL: Record<ProjectStage, string> = {
   advance_payment:   'Advance Payment',
+  designing:         'Designing',
   execution:         'Execution',
   procurement:       'Procurement',
   handover_prep:     'Handover Prep',
@@ -98,27 +122,38 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
   }
 
   async function submitAdvance() {
-    await save('execution', 'Execution started')
+    const next = nextProjectStage('advance_payment')
+    await save(next, `Moved to ${PROJECT_STAGE_LABEL[next]}`)
+  }
+
+  async function submitDesigning() {
+    const next = nextProjectStage('designing')
+    await save(next, `Design finalized, moved to ${PROJECT_STAGE_LABEL[next]}`)
   }
 
   async function submitExecution() {
-    await save('procurement', 'Moved to procurement')
+    const next = nextProjectStage('execution')
+    await save(next, `Moved to ${PROJECT_STAGE_LABEL[next]}`)
   }
 
   async function submitProcurement() {
-    await save('handover_prep', 'Procurement complete, preparing handover')
+    const next = nextProjectStage('procurement')
+    await save(next, `Procurement complete, moved to ${PROJECT_STAGE_LABEL[next]}`)
   }
 
   async function submitHandoverPrep() {
-    await save('final_payment', 'Handover prepared, awaiting final payment')
+    const next = nextProjectStage('handover_prep')
+    await save(next, `Handover prepared, moved to ${PROJECT_STAGE_LABEL[next]}`)
   }
 
   async function submitFinalPayment() {
-    await save('reconciliation', 'Final payment received, reconciling')
+    const next = nextProjectStage('final_payment')
+    await save(next, `Final payment received, moved to ${PROJECT_STAGE_LABEL[next]}`)
   }
 
   async function submitReconciliation() {
-    await save('closed', 'Project reconciled', { status: 'closed' })
+    const next = nextProjectStage('reconciliation')
+    await save(next, 'Project reconciled', next === 'closed' ? { status: 'closed' } : undefined)
   }
 
   const respRole = ROLE_FOR_PROJECT_STAGE[project.stage]
@@ -142,9 +177,18 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
       case 'advance_payment':
         return (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">Advance payment is recorded. Confirm execution has started on site.</p>
+            <p className="text-sm text-slate-600">Advance payment is recorded. Confirm the project is ready to move to {PROJECT_STAGE_LABEL[nextProjectStage('advance_payment')]}.</p>
             <button disabled={saving} onClick={submitAdvance} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Mark Execution Started
+              Move to {PROJECT_STAGE_LABEL[nextProjectStage('advance_payment')]}
+            </button>
+          </div>
+        )
+      case 'designing':
+        return (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">Design is in progress — track it in the Design Center tab. Confirm here once the design is finalized and construction can begin.</p>
+            <button disabled={saving} onClick={submitDesigning} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+              Confirm Design Finalized
             </button>
           </div>
         )

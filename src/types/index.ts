@@ -15,6 +15,8 @@ export type Permission =
   | 'view_appointments' | 'add_appointment' | 'edit_appointment'
   // Site
   | 'view_site_visits' | 'add_site_visit' | 'edit_site_visit' | 'add_requirements'
+  // Site Visit report — MD/authorized-only rollup of every submitted site visit
+  | 'view_site_visit_reports'
   // Quotations
   | 'view_quotations' | 'create_quotation' | 'approve_quotation_internal' | 'send_quotation_client'
   // Design
@@ -27,6 +29,13 @@ export type Permission =
   | 'view_gantt' | 'edit_deadline'
   // Procurement
   | 'view_procurement' | 'raise_purchase_request' | 'approve_purchase_request' | 'create_po' | 'receive_goods' | 'enter_vendor_bill'
+  // MRF (Material Request Form) — Project sends to QS, QS drafts + submits to
+  // Procurement, Procurement sets dates + sends to LO, LO approves/rejects.
+  | 'view_mrf' | 'create_mrf' | 'submit_mrf' | 'set_mrf_dates' | 'approve_mrf'
+  // Vendors / Labour listing — simple roster, separate from the full Vendor master
+  | 'view_vendors_labour' | 'manage_vendors_labour'
+  // Site Engineer Daily Report — locked once submitted; editing requires LO approval
+  | 'view_daily_reports' | 'create_daily_report' | 'approve_daily_report_edit'
   // Expenses
   | 'view_expenses' | 'raise_expense_request' | 'approve_expense' | 'record_payment'
   // Finance
@@ -108,9 +117,17 @@ export interface LeadActivityItem {
   updatedAt: string
 }
 
+export type LeadCodePrefix = 'SK' | 'FGD'
+
 export interface Lead {
   id: string
   name: string
+  // Auto-generated at creation only (e.g. "SK004"/"FGD012") — never
+  // user-editable, never reassigned on edit. Optional because leads created
+  // before this field existed don't have one.
+  leadCodePrefix?: LeadCodePrefix
+  leadNumber?: string
+  siteNo?: string
   phone: string
   email?: string
   city: string
@@ -120,6 +137,10 @@ export interface Lead {
   requirement?: string
   notes?: string
   source: LeadSource
+  // Free-text sub-source, only meaningful (and only shown/editable) when
+  // source === 'other' — the client's real source list isn't finalized yet,
+  // so 'other' needs a manual name rather than a fixed set of values.
+  subSource?: string
   interest: LeadInterest
   status: LeadStatus
   ownerId?: string
@@ -148,6 +169,12 @@ export interface Appointment {
   location: string
   coordinatorId?: string
   coordinatorName: string
+  // Full assignee list for "Select Everyone"/multi-assign — coordinatorId/
+  // coordinatorName above stay in sync as the first entry (still used as the
+  // single-owner FK and by anything reading the old singular fields).
+  // Optional so older rows without it fall back to the single coordinator.
+  assignedToIds?: string[]
+  assignedToNames?: string[]
   status: AppointmentStatus
   notes?: string
   createdAt: string
@@ -190,6 +217,11 @@ export interface SiteVisit {
   projectId?: string
   appointmentId?: string
   visitDate: string
+  // Who conducted/was present at this visit — captured directly on the site
+  // visit itself (not looked up via a linked Appointment, which Site Visits
+  // no longer reads at all — see the 2026-09-18 separation entry).
+  teamMemberIds?: string[]
+  teamMemberNames?: string[]
   rooms: SiteVisitRoom[]
   checklist: SiteVisitChecklistItem[]
   notes?: string
@@ -242,6 +274,8 @@ export interface BOQSection {
   items: BOQLineItem[]
 }
 
+export type DiscountType = 'percentage' | 'amount'
+
 export interface Quotation {
   id: string
   leadId: string
@@ -252,12 +286,32 @@ export interface Quotation {
   sections: BOQSection[]
   totalAmount: number
   taxAmount: number
+  // discountType/discountValue are what the form edits (e.g. 10 meaning
+  // 10%, or 5000 meaning ₹5000) — discountAmount is always the computed
+  // final ₹ figure derived from them, kept so every existing consumer
+  // (netAmount math, PDF/Excel export, summary rows) keeps working
+  // unchanged. Both new fields are optional — quotations created before
+  // this existed have neither and are treated as a flat ₹ discount equal
+  // to their existing discountAmount.
+  discountType?: DiscountType
+  discountValue?: number
   discountAmount: number
   netAmount: number
+  // A single supporting PDF (e.g. a signed/formatted copy) attached to this
+  // quotation — array-typed to match this app's other file-list fields, but
+  // the form caps it at one file.
+  documentFiles?: string[]
   terms?: string
   paymentTerms?: string
   sentAt?: string
   approvedAt?: string
+  // Recorded once the client has approved (status === 'client_approved') —
+  // Design Center checks this before a new design package can be started
+  // for this quotation's lead (see DesignCenterScreen.tsx).
+  advancePaymentReceived?: boolean
+  advancePaymentAmount?: number
+  advancePaymentRef?: string
+  advancePaymentAt?: string
   createdBy: string
   createdAt: string
   updatedAt: string
@@ -265,6 +319,7 @@ export interface Quotation {
 
 export type ProjectStage =
   | 'advance_payment'
+  | 'designing'
   | 'execution'
   | 'procurement'
   | 'handover_prep'
@@ -290,6 +345,97 @@ export interface StatusHistoryItem {
   files?: string[]
   updatedBy: string
   updatedRole: UserRole
+  updatedAt: string
+}
+
+// ─── Material Request Form (MRF) ─────────────────────────────────────────────
+// Project -> Send to QS -> QS drafts material details -> Send to Procurement ->
+// Procurement sets Requesting/Expected Delivery dates -> Send to LO (the
+// project's Lead Owner) -> LO Approves/Rejects with notes.
+export type MRFStatus = 'pending_qs' | 'pending_procurement' | 'pending_lo_approval' | 'approved' | 'rejected'
+
+// Procurement's own execution status, tracked once the MRF is approved —
+// distinct from `status` above (the MRF's own QS/Procurement/LO approval
+// workflow). The client will share the real option list; edit
+// PROCUREMENT_STATUS_OPTIONS in data/procurementStatuses.ts to change it —
+// this field is deliberately a plain string, not a TS union, so that list
+// can change without a type/migration change.
+export interface ProcurementStatusHistoryItem {
+  status: string
+  isDelay: boolean
+  notes?: string
+  updatedBy: string
+  updatedAt: string
+}
+
+export interface MaterialRequestForm {
+  id: string
+  projectId: string
+  status: MRFStatus
+  materialDetails?: string          // filled by QS
+  requestingDate?: string           // filled by Procurement
+  expectedDeliveryDate?: string     // filled by Procurement
+  loId?: string                     // resolved Lead Owner for this project's lead
+  loName?: string
+  loNotes?: string                  // filled by LO on approve/reject
+  procurementStatus?: string
+  procurementStatusHistory?: ProcurementStatusHistoryItem[]
+  history: StatusHistoryItem[]
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── Vendors / Labour Listing ────────────────────────────────────────────────
+// Simple standalone roster (name/nature of work/number) — deliberately
+// separate from the full Vendor master (Procurement's Vendor type), which
+// carries GSTIN/address/contact fields this listing doesn't need.
+export interface VendorLabourEntry {
+  id: string
+  name: string
+  natureOfWork: string
+  // Flexible free-text — the client will share the exact format/options;
+  // kept as a plain string so that doesn't require a type change later.
+  number: string
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── Site Engineer Daily Report ──────────────────────────────────────────────
+// SE Creates -> Submit -> locked -> LO/MD/QS can view -> SE Requests Edit ->
+// LO Approval -> Edit Allowed (one edit, then it re-locks).
+export type DailyReportEditRequestStatus = 'none' | 'pending' | 'approved' | 'rejected'
+
+export interface DailyReportAreaEntry {
+  id: string
+  areaName: string
+  laborCount: number
+}
+
+export interface DailyReportEditHistoryItem {
+  action: 'submitted' | 'edit_requested' | 'edit_approved' | 'edit_rejected' | 'edited'
+  note?: string
+  updatedBy: string
+  updatedAt: string
+}
+
+export interface DailyReport {
+  id: string
+  projectId: string
+  date: string
+  totalLabourCount: number
+  natureOfWork: string
+  areas: DailyReportAreaEntry[]
+  notes?: string
+  locked: boolean
+  editRequestStatus: DailyReportEditRequestStatus
+  editRequestReason?: string
+  editApprovalNotes?: string
+  editHistory: DailyReportEditHistoryItem[]
+  createdBy: string
+  createdByName: string
+  createdAt: string
   updatedAt: string
 }
 
@@ -366,7 +512,13 @@ export interface TaskDependency {
 }
 
 // ─── Design Center ───────────────────────────────────────────────────────────
-export type DesignPackageStatus = 'in_progress' | 'client_review' | 'client_approved' | 'revision_requested'
+// 'client_review' is legacy (kept so pre-existing packages still render a
+// sensible label) — new packages now go through the same MD-approval flow as
+// Quotations: in_progress -> internal_review -> internally_approved ->
+// sent_to_client -> client_approved | revision_requested | rejected.
+export type DesignPackageStatus =
+  | 'in_progress' | 'client_review' | 'client_approved' | 'revision_requested'
+  | 'internal_review' | 'internally_approved' | 'sent_to_client' | 'rejected'
 
 export interface DesignPackage {
   id: string

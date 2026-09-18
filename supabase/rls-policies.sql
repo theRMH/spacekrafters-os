@@ -339,6 +339,70 @@ CREATE POLICY "authenticated update purchase requests on visible projects" ON sk
 CREATE POLICY "authenticated delete purchase requests" ON sks_purchase_requests
   FOR DELETE TO authenticated USING (sks_has_role('owner'));
 
+-- ─── sks_mrfs ─────────────────────────────────────────────────────────────────
+-- Visible to everyone who can act on some stage of the flow (PC sends to QS,
+-- QS drafts, Purchase sets dates, and any of PC/QS/designer could be the
+-- project's Lead Owner) — checked by role rather than sks_can_see_project
+-- since the responsible person for a given stage isn't always someone who'd
+-- otherwise have project visibility (e.g. Purchase has no task/PO yet at the
+-- point an MRF first reaches them).
+CREATE POLICY "authenticated select mrfs" ON sks_mrfs
+  FOR SELECT TO authenticated USING (
+    sks_has_role('owner') OR sks_has_role('project_coordinator') OR sks_has_role('qs')
+    OR sks_has_role('purchase') OR sks_has_role('designer')
+  );
+CREATE POLICY "authenticated insert mrfs" ON sks_mrfs
+  FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner') OR sks_has_role('project_coordinator'));
+CREATE POLICY "authenticated update mrfs" ON sks_mrfs
+  FOR UPDATE TO authenticated
+  USING (
+    sks_has_role('owner') OR sks_has_role('project_coordinator') OR sks_has_role('qs')
+    OR sks_has_role('purchase') OR sks_has_role('designer')
+  )
+  WITH CHECK (
+    sks_has_role('owner') OR sks_has_role('project_coordinator') OR sks_has_role('qs')
+    OR sks_has_role('purchase') OR sks_has_role('designer')
+  );
+CREATE POLICY "authenticated delete mrfs" ON sks_mrfs
+  FOR DELETE TO authenticated USING (sks_has_role('owner'));
+
+-- ─── sks_vendor_labour ────────────────────────────────────────────────────────
+CREATE POLICY "authenticated select vendor labour" ON sks_vendor_labour
+  FOR SELECT TO authenticated USING (
+    sks_has_role('owner') OR sks_has_role('project_coordinator') OR sks_has_role('qs')
+    OR sks_has_role('designer') OR sks_has_role('site_engineer') OR sks_has_role('accounts')
+  );
+CREATE POLICY "authenticated write vendor labour" ON sks_vendor_labour
+  FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner') OR sks_has_role('project_coordinator'));
+CREATE POLICY "authenticated update vendor labour" ON sks_vendor_labour
+  FOR UPDATE TO authenticated
+  USING (sks_has_role('owner') OR sks_has_role('project_coordinator'))
+  WITH CHECK (sks_has_role('owner') OR sks_has_role('project_coordinator'));
+CREATE POLICY "authenticated delete vendor labour" ON sks_vendor_labour
+  FOR DELETE TO authenticated USING (sks_has_role('owner'));
+
+-- ─── sks_daily_reports ────────────────────────────────────────────────────────
+-- RLS checks role-level write access only; the submit-lock / edit-request /
+-- LO-approval state machine itself is enforced in the app (same convention
+-- already used for sks_appointments/sks_site_visits/sks_requirements).
+CREATE POLICY "authenticated select daily reports" ON sks_daily_reports
+  FOR SELECT TO authenticated USING (
+    sks_has_role('owner') OR sks_has_role('site_engineer') OR sks_has_role('qs')
+    OR sks_has_role('project_coordinator') OR sks_has_role('designer')
+  );
+CREATE POLICY "authenticated insert daily reports" ON sks_daily_reports
+  FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner') OR sks_has_role('site_engineer'));
+CREATE POLICY "authenticated update daily reports" ON sks_daily_reports
+  FOR UPDATE TO authenticated
+  USING (
+    sks_has_role('owner') OR sks_has_role('site_engineer') OR sks_has_role('project_coordinator') OR sks_has_role('designer')
+  )
+  WITH CHECK (
+    sks_has_role('owner') OR sks_has_role('site_engineer') OR sks_has_role('project_coordinator') OR sks_has_role('designer')
+  );
+CREATE POLICY "authenticated delete daily reports" ON sks_daily_reports
+  FOR DELETE TO authenticated USING (sks_has_role('owner'));
+
 CREATE POLICY "authenticated select vendor quotes" ON sks_vendor_quotes
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY "authenticated write vendor quotes" ON sks_vendor_quotes

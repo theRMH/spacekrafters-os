@@ -120,6 +120,8 @@ export default function LeadDetailScreen() {
           <div className="space-y-4">
             <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-2.5">
               {[
+                { label: 'Lead ID',     value: lead.leadNumber ?? '—' },
+                { label: 'Site No.',    value: lead.siteNo ?? '—' },
                 { label: 'Phone',       value: lead.phone },
                 { label: 'Email',       value: lead.email ?? '—' },
                 { label: 'City',        value: lead.city },

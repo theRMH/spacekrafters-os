@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Trash2, Download, Printer } from 'lucide-react'
+import { Plus, Trash2, Download, Printer, MessageCircle, Mail } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
@@ -17,9 +18,23 @@ import { getAllQuotations, upsertQuotation, deleteQuotation } from '../../servic
 import { getAllProjects, upsertProject } from '../../services/projectService'
 import { addAuditLog } from '../../services/auditLogService'
 import { downloadQuotationExcel } from '../../utils/quotationExport'
-import type { Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem, Project, AuditLog } from '../../types'
+import type { Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem, Project, AuditLog, DiscountType, QuotationStatus } from '../../types'
 
-const UNIT_OPTIONS = ['sqft', 'nos', 'rft', 'sft', 'lot', 'set']
+const UNIT_OPTIONS = ['sqft', 'nos', 'rft', 'sft', 'lot', 'set', 'L.Sm', 'CFT', 'Kgs']
+
+// Client asked for this exact terminology ("MD Approval" / "MD Approved") in
+// the quotation flow specifically. Passed via StatusBadge's `label` override
+// rather than editing the shared status-label map, since 'internally_approved'
+// is also a Lead status and renaming it there would relabel Leads too.
+const QUOTATION_STATUS_LABEL: Record<QuotationStatus, string> = {
+  draft:               'Draft',
+  internal_review:     'Pending MD Approval',
+  internally_approved: 'MD Approved',
+  sent_to_client:      'Sent to Client',
+  revision_requested:  'Revision Requested',
+  client_approved:     'Client Approved',
+  rejected:            'Rejected',
+}
 
 function fmtDate(val: string): string {
   const d = new Date(val)
@@ -57,7 +72,7 @@ function sectionsFromRequirement(req: Requirement): BOQSection[] {
   }))
 }
 
-function computeTotals(sections: BOQSection[], discountAmount: number) {
+function computeTotals(sections: BOQSection[], discountType: DiscountType, discountValue: number) {
   let totalAmount = 0
   let taxAmount = 0
   for (const section of sections) {
@@ -67,8 +82,12 @@ function computeTotals(sections: BOQSection[], discountAmount: number) {
       taxAmount += amount * ((item.taxPercent ?? 0) / 100)
     }
   }
-  const netAmount = totalAmount + taxAmount - discountAmount
-  return { totalAmount, taxAmount, netAmount }
+  const preDiscountTotal = totalAmount + taxAmount
+  const discountAmount = discountType === 'percentage'
+    ? preDiscountTotal * (discountValue / 100)
+    : discountValue
+  const netAmount = preDiscountTotal - discountAmount
+  return { totalAmount, taxAmount, discountAmount, netAmount }
 }
 
 export default function QuotationsScreen() {
@@ -89,12 +108,18 @@ export default function QuotationsScreen() {
   const [showEdit, setShowEdit] = useState(false)
   const [showPrint, setShowPrint] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showSendChoice, setShowSendChoice] = useState(false)
+  const [showAdvancePayment, setShowAdvancePayment] = useState(false)
+  const [advanceAmount, setAdvanceAmount] = useState('')
+  const [advanceRef, setAdvanceRef] = useState('')
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   const [leadId, setLeadId] = useState('')
   const [requirementId, setRequirementId] = useState('')
   const [sections, setSections] = useState<BOQSection[]>([newSection()])
-  const [discountAmount, setDiscountAmount] = useState(0)
+  const [discountType, setDiscountType] = useState<DiscountType>('amount')
+  const [discountValue, setDiscountValue] = useState(0)
+  const [documentFiles, setDocumentFiles] = useState<string[]>([])
   const [terms, setTerms] = useState('')
   const [paymentTerms, setPaymentTerms] = useState('')
   const [formError, setFormError] = useState('')
@@ -139,7 +164,8 @@ export default function QuotationsScreen() {
 
   function resetForm() {
     setLeadId(''); setRequirementId(''); setSections([newSection()])
-    setDiscountAmount(0); setTerms(''); setPaymentTerms(''); setFormError('')
+    setDiscountType('amount'); setDiscountValue(0); setDocumentFiles([])
+    setTerms(''); setPaymentTerms(''); setFormError('')
   }
 
   function openNew() {
@@ -150,7 +176,12 @@ export default function QuotationsScreen() {
   function openEdit(q: Quotation) {
     setLeadId(q.leadId); setRequirementId(q.requirementId ?? '')
     setSections(q.sections.length ? q.sections : [newSection()])
-    setDiscountAmount(q.discountAmount); setTerms(q.terms ?? ''); setPaymentTerms(q.paymentTerms ?? '')
+    // Legacy quotations (created before discountType/discountValue existed)
+    // only have the computed discountAmount — treat that as a flat ₹ value.
+    setDiscountType(q.discountType ?? 'amount')
+    setDiscountValue(q.discountValue ?? q.discountAmount)
+    setDocumentFiles(q.documentFiles ?? [])
+    setTerms(q.terms ?? ''); setPaymentTerms(q.paymentTerms ?? '')
     setFormError('')
     setShowEdit(true)
   }
@@ -200,13 +231,15 @@ export default function QuotationsScreen() {
       setFormError('Lead and at least one section with a titled, priced line item are required.')
       return
     }
-    const { totalAmount, taxAmount, netAmount } = computeTotals(valid, discountAmount)
+    const { totalAmount, taxAmount, discountAmount, netAmount } = computeTotals(valid, discountType, discountValue)
     const now = new Date().toISOString()
     const quotation: Quotation = {
       id: `quo_${Date.now()}`,
       leadId, requirementId: requirementId || undefined,
       version: 1, status: 'draft',
-      sections: valid, totalAmount, taxAmount, discountAmount, netAmount,
+      sections: valid, totalAmount, taxAmount,
+      discountType, discountValue, discountAmount, netAmount,
+      documentFiles: documentFiles.length > 0 ? documentFiles : undefined,
       terms: terms.trim() || undefined, paymentTerms: paymentTerms.trim() || undefined,
       createdBy: user?.id ?? '', createdAt: now, updatedAt: now,
     }
@@ -224,10 +257,12 @@ export default function QuotationsScreen() {
       setFormError('At least one section with a titled, priced line item is required.')
       return
     }
-    const { totalAmount, taxAmount, netAmount } = computeTotals(valid, discountAmount)
+    const { totalAmount, taxAmount, discountAmount, netAmount } = computeTotals(valid, discountType, discountValue)
     const updated: Quotation = {
       ...selected, leadId, requirementId: requirementId || undefined,
-      sections: valid, totalAmount, taxAmount, discountAmount, netAmount,
+      sections: valid, totalAmount, taxAmount,
+      discountType, discountValue, discountAmount, netAmount,
+      documentFiles: documentFiles.length > 0 ? documentFiles : undefined,
       terms: terms.trim() || undefined, paymentTerms: paymentTerms.trim() || undefined,
       updatedAt: new Date().toISOString(),
     }
@@ -277,6 +312,55 @@ export default function QuotationsScreen() {
     }
   }
 
+  // Opens the client's own WhatsApp/email with a pre-filled message (deep
+  // links can't attach a binary file — the uploaded PDF's real, publicly
+  // fetchable URL is included in the text instead, same as how every other
+  // file this app stores is shared/viewed). Only moves the quotation to
+  // 'sent_to_client' once the share sheet has actually been opened.
+  async function handleSendToClient(channel: 'whatsapp' | 'email') {
+    if (!selected) return
+    const lead = leads.find(l => l.id === selected.leadId)
+    const docUrl = selected.documentFiles?.[0]
+    const message = `Hi ${lead?.name ?? ''}, please find your quotation from SpaceKrafters — Net Amount: ${fmtCurrency(selected.netAmount)}.`
+      + (docUrl ? ` View/download here: ${docUrl}` : '')
+
+    if (channel === 'whatsapp') {
+      const digits = (lead?.phone ?? '').replace(/\D/g, '')
+      if (!digits) { setSnack({ open: true, msg: 'This lead has no phone number on file.', type: 'error' }); return }
+      const intlPhone = digits.length === 10 ? `91${digits}` : digits
+      window.open(`https://wa.me/${intlPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+    } else {
+      if (!lead?.email) { setSnack({ open: true, msg: 'This lead has no email on file.', type: 'error' }); return }
+      window.location.href = `mailto:${lead.email}?subject=${encodeURIComponent('Your Quotation from SpaceKrafters')}&body=${encodeURIComponent(message)}`
+    }
+
+    setShowSendChoice(false)
+    await handleStatusChange(selected, 'sent_to_client')
+  }
+
+  // Design Center checks advancePaymentReceived on this quotation before a
+  // new design package can be started for this lead — see DesignCenterScreen.tsx.
+  async function handleRecordAdvancePayment() {
+    if (!selected) return
+    const amount = Number(advanceAmount)
+    if (!amount || amount <= 0) { setSnack({ open: true, msg: 'Enter a valid advance payment amount.', type: 'error' }); return }
+    const updated: Quotation = {
+      ...selected,
+      advancePaymentReceived: true,
+      advancePaymentAmount: amount,
+      advancePaymentRef: advanceRef.trim() || undefined,
+      advancePaymentAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    const result = await upsertQuotation(updated)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not record advance payment.', type: 'error' }); return }
+    setQuotations(prev => prev.map(q => (q.id === updated.id ? updated : q)))
+    setSelected(updated)
+    setShowAdvancePayment(false)
+    setAdvanceAmount(''); setAdvanceRef('')
+    setSnack({ open: true, msg: 'Advance payment recorded.', type: 'success' })
+  }
+
   async function confirmDelete() {
     if (!selected) return
     const result = await deleteQuotation(selected.id)
@@ -300,7 +384,7 @@ export default function QuotationsScreen() {
   }
 
   const filtered = quotations.filter(q => !search || leadName(q.leadId).toLowerCase().includes(search.toLowerCase()))
-  const formTotals = computeTotals(sections, discountAmount)
+  const formTotals = computeTotals(sections, discountType, discountValue)
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
@@ -333,7 +417,7 @@ export default function QuotationsScreen() {
                 <p className="text-sm font-bold" style={{ color: '#0F2A4A' }}>{fmtCurrency(q.netAmount)}</p>
                 <p className="text-[11px] text-slate-400 mt-0.5">{fmtDate(q.updatedAt)}</p>
               </div>
-              <StatusBadge status={q.status} size="xs" />
+              <StatusBadge status={q.status} label={QUOTATION_STATUS_LABEL[q.status]} size="xs" />
             </div>
           </div>
         ))}
@@ -351,7 +435,7 @@ export default function QuotationsScreen() {
         {selected && (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
-              <StatusBadge status={selected.status} size="sm" />
+              <StatusBadge status={selected.status} label={QUOTATION_STATUS_LABEL[selected.status]} size="sm" />
               <div className="flex items-center gap-2">
                 <button onClick={() => downloadQuotationExcel(selected, leadName(selected.leadId))}
                   aria-label="Download Excel"
@@ -403,9 +487,19 @@ export default function QuotationsScreen() {
             <div className="bg-slate-50 rounded-2xl p-3.5 space-y-1.5">
               <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.totalAmount)}</span></div>
               <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.taxAmount)}</span></div>
-              <div className="flex justify-between text-xs"><span className="text-slate-500">Discount</span><span className="font-semibold text-slate-700">-{fmtCurrency(selected.discountAmount)}</span></div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Discount{selected.discountType === 'percentage' && selected.discountValue ? ` (${selected.discountValue}%)` : ''}</span>
+                <span className="font-semibold text-slate-700">-{fmtCurrency(selected.discountAmount)}</span>
+              </div>
               <div className="flex justify-between text-sm pt-1.5 border-t border-slate-200"><span className="font-bold text-slate-800">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(selected.netAmount)}</span></div>
             </div>
+
+            {selected.documentFiles && selected.documentFiles.length > 0 && (
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quotation Document</p>
+                <MultiFileUploadField label="" files={selected.documentFiles} onChange={() => {}} readOnly />
+              </div>
+            )}
 
             {(selected.terms || selected.paymentTerms) && (
               <div className="space-y-2">
@@ -424,17 +518,17 @@ export default function QuotationsScreen() {
                 {selected.status === 'draft' && can('approve_quotation_internal') && (
                   <button onClick={() => handleStatusChange(selected, 'internal_review')}
                     className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
-                    Submit for Internal Review
+                    Submit for MD Approval
                   </button>
                 )}
                 {selected.status === 'internal_review' && can('approve_quotation_internal') && (
                   <button onClick={() => handleStatusChange(selected, 'internally_approved')}
                     className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
-                    Approve Internally
+                    MD Approve
                   </button>
                 )}
                 {selected.status === 'internally_approved' && can('send_quotation_client') && (
-                  <button onClick={() => handleStatusChange(selected, 'sent_to_client')}
+                  <button onClick={() => setShowSendChoice(true)}
                     className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
                     Send to Client
                   </button>
@@ -443,7 +537,7 @@ export default function QuotationsScreen() {
                   <>
                     <button onClick={() => handleStatusChange(selected, 'client_approved')}
                       className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
-                      Mark Client Approved
+                      Client Approved
                     </button>
                     <button onClick={() => handleStatusChange(selected, 'revision_requested')}
                       className="px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-700 active:bg-amber-100">
@@ -451,12 +545,29 @@ export default function QuotationsScreen() {
                     </button>
                     <button onClick={() => handleStatusChange(selected, 'rejected')}
                       className="px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-xs font-semibold text-red-700 active:bg-red-100">
-                      Rejected
+                      Client Rejected
                     </button>
                   </>
                 )}
+                {selected.status === 'client_approved' && !selected.advancePaymentReceived && can('send_quotation_client') && (
+                  <button onClick={() => setShowAdvancePayment(true)}
+                    className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
+                    Record Advance Payment
+                  </button>
+                )}
               </div>
             </div>
+
+            {selected.status === 'client_approved' && selected.advancePaymentReceived && (
+              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3.5">
+                <p className="text-xs font-bold text-emerald-700">Advance Payment Received</p>
+                <p className="text-xs text-emerald-600 mt-0.5">
+                  {fmtCurrency(selected.advancePaymentAmount ?? 0)}{selected.advancePaymentRef ? ` · Ref: ${selected.advancePaymentRef}` : ''}
+                  {selected.advancePaymentAt ? ` · ${fmtDate(selected.advancePaymentAt)}` : ''}
+                </p>
+                <p className="text-[11px] text-emerald-600 mt-1">Design can now be started for this lead in Design Center.</p>
+              </div>
+            )}
 
             {user?.role === 'owner' && (
               <button onClick={() => setShowDeleteDialog(true)}
@@ -666,16 +777,32 @@ export default function QuotationsScreen() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Discount Amount</label>
-            <input type="number" min="0" step="0.01" value={discountAmount || ''}
-              onChange={e => setDiscountAmount(parseFloat(e.target.value) || 0)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Discount</label>
+            <div className="flex gap-2">
+              <select value={discountType} onChange={e => setDiscountType(e.target.value as DiscountType)}
+                className="w-32 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-sm focus:outline-none focus:border-indigo-400">
+                <option value="amount">Amount (₹)</option>
+                <option value="percentage">Percentage (%)</option>
+              </select>
+              <input type="number" min="0" step="0.01" value={discountValue || ''}
+                onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)}
+                placeholder={discountType === 'percentage' ? 'e.g. 10' : 'e.g. 5000'}
+                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            </div>
+          </div>
+
+          <div>
+            <MultiFileUploadField label="Quotation Document (PDF)" files={documentFiles} onChange={setDocumentFiles}
+              accept="application/pdf,.pdf" maxFiles={1} uploadButtonLabel="Upload PDF" />
           </div>
 
           <div className="bg-slate-50 rounded-2xl p-3.5 space-y-1.5">
             <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.totalAmount)}</span></div>
             <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.taxAmount)}</span></div>
-            <div className="flex justify-between text-xs"><span className="text-slate-500">Discount</span><span className="font-semibold text-slate-700">-{fmtCurrency(discountAmount)}</span></div>
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">Discount{discountType === 'percentage' && discountValue ? ` (${discountValue}%)` : ''}</span>
+              <span className="font-semibold text-slate-700">-{fmtCurrency(formTotals.discountAmount)}</span>
+            </div>
             <div className="flex justify-between text-sm pt-1.5 border-t border-slate-200"><span className="font-bold text-slate-800">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(formTotals.netAmount)}</span></div>
           </div>
 
@@ -709,6 +836,47 @@ export default function QuotationsScreen() {
         onConfirm={confirmDelete}
         variant="danger"
       />
+
+      {/* Send to Client — choose channel */}
+      <BottomSheet isOpen={showSendChoice} onClose={() => setShowSendChoice(false)} title="Send to Client">
+        <div className="space-y-3 pb-4">
+          <p className="text-xs text-slate-500">
+            Opens {leadName(selected?.leadId ?? '')}'s WhatsApp or email with the quotation summary
+            {selected?.documentFiles?.length ? ' and a link to the uploaded PDF' : ''} pre-filled.
+          </p>
+          <button onClick={() => handleSendToClient('whatsapp')}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-emerald-600 text-white text-sm font-bold active:bg-emerald-700">
+            <MessageCircle size={16} /> Send via WhatsApp
+          </button>
+          <button onClick={() => handleSendToClient('email')}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white text-sm font-bold active:opacity-90"
+            style={{ background: '#0F2A4A' }}>
+            <Mail size={16} /> Send via Email
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Record Advance Payment */}
+      <BottomSheet isOpen={showAdvancePayment} onClose={() => setShowAdvancePayment(false)} title="Record Advance Payment">
+        <div className="space-y-3 pb-4">
+          <p className="text-xs text-slate-500">Design can't be started for this lead until this is recorded.</p>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Advance Amount Received *</label>
+            <input type="number" value={advanceAmount} onChange={e => setAdvanceAmount(e.target.value)} placeholder="₹"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Reference (optional)</label>
+            <input value={advanceRef} onChange={e => setAdvanceRef(e.target.value)} placeholder="UTR / cheque no."
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+          </div>
+          <button onClick={handleRecordAdvancePayment}
+            className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
+            style={{ background: '#0F2A4A' }}>
+            Confirm Advance Payment
+          </button>
+        </div>
+      </BottomSheet>
 
       <Snackbar
         isOpen={snack.open}

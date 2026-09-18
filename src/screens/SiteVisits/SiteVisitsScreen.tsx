@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, CheckSquare, Square } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -11,9 +11,10 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllSiteVisits, upsertSiteVisit, deleteSiteVisit } from '../../services/siteVisitService'
-import { getAllAppointments } from '../../services/appointmentService'
+import { getManagedUsersDirectory } from '../../services/userService'
+import { getRoleDisplayLabel } from '../../data/permissions'
 import { addAuditLog } from '../../services/auditLogService'
-import type { SiteVisit, SiteVisitRoom, SiteVisitChecklistItem, Appointment, AuditLog } from '../../types'
+import type { SiteVisit, SiteVisitRoom, SiteVisitChecklistItem, AuditLog, ManagedUser } from '../../types'
 
 const DEFAULT_CHECKLIST_LABELS = [
   'Electrical points marked',
@@ -54,7 +55,6 @@ export default function SiteVisitsScreen() {
   const navigate = useNavigate()
 
   const [visits, setVisits] = useState<SiteVisit[]>([])
-  const [appointments, setAppointments] = useState<Appointment[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const [search, setSearch] = useState('')
@@ -65,40 +65,52 @@ export default function SiteVisitsScreen() {
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   const [leadId, setLeadId] = useState('')
-  const [appointmentId, setAppointmentId] = useState('')
   const [visitDate, setVisitDate] = useState('')
+  const [teamMemberIds, setTeamMemberIds] = useState<string[]>([])
   const [rooms, setRooms] = useState<SiteVisitRoom[]>([newRoom()])
   const [checklist, setChecklist] = useState<SiteVisitChecklistItem[]>(defaultChecklist())
   const [notes, setNotes] = useState('')
   const [formError, setFormError] = useState('')
+  const [assignableMembers, setAssignableMembers] = useState<ManagedUser[]>([])
 
   async function refresh() {
     setIsLoading(true)
-    const [v, a] = await Promise.all([getAllSiteVisits(), getAllAppointments()])
-    setVisits(v)
-    setAppointments(a)
+    setVisits(await getAllSiteVisits())
     setIsLoading(false)
   }
 
   useEffect(() => { refresh() }, [])
 
   useEffect(() => {
+    getManagedUsersDirectory().then(users => setAssignableMembers(users.filter(u => u.status === 'active')))
+  }, [])
+
+  function toggleTeamMember(id: string) {
+    setTeamMemberIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
+  }
+
+  function namesFor(ids: string[]): string[] {
+    return ids.map(id => assignableMembers.find(m => m.id === id)?.fullName ?? (id === user?.id ? user?.name : undefined) ?? 'Unknown')
+  }
+
+  // Site Visits schedules independently of Appointments — this only carries
+  // the lead forward from a "Log Site Visit" deep link elsewhere in the app
+  // (e.g. Leads), it doesn't touch or depend on any appointment record.
+  useEffect(() => {
     const state = routerLocation.state as { leadId?: string } | null
-    if (!state?.leadId || isLoading) return
-    handleLeadChange(state.leadId)
-    const appt = appointmentsForLead(state.leadId).find(a => a.status === 'scheduled')
-    if (appt) handleAppointmentPick(appt.id)
+    if (!state?.leadId) return
+    setLeadId(state.leadId)
     setShowNew(true)
     navigate(routerLocation.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routerLocation.state, isLoading])
+  }, [routerLocation.state])
 
   function leadName(id: string): string {
     return leads.find(l => l.id === id)?.name ?? id
   }
 
   function resetForm() {
-    setLeadId(''); setAppointmentId(''); setVisitDate(''); setRooms([newRoom()]); setChecklist(defaultChecklist())
+    setLeadId(''); setVisitDate(''); setTeamMemberIds(user ? [user.id] : []); setRooms([newRoom()]); setChecklist(defaultChecklist())
     setNotes(''); setFormError('')
   }
 
@@ -108,7 +120,8 @@ export default function SiteVisitsScreen() {
   }
 
   function openEdit(visit: SiteVisit) {
-    setLeadId(visit.leadId); setAppointmentId(visit.appointmentId ?? ''); setVisitDate(visit.visitDate.slice(0, 10))
+    setLeadId(visit.leadId); setVisitDate(visit.visitDate.slice(0, 10))
+    setTeamMemberIds(visit.teamMemberIds ?? [])
     // Backfill lengthFt/widthFt for rooms saved before the two-box measurement
     // input existed — they only have the combined "12ft x 14ft" string.
     const roomsWithFt = visit.rooms.map(r => {
@@ -121,21 +134,6 @@ export default function SiteVisitsScreen() {
     setNotes(visit.notes ?? '')
     setFormError('')
     setShowEdit(true)
-  }
-
-  function handleLeadChange(id: string) {
-    setLeadId(id)
-    setAppointmentId('')
-  }
-
-  function handleAppointmentPick(id: string) {
-    setAppointmentId(id)
-    const appt = appointments.find(a => a.id === id)
-    if (appt) setVisitDate(appt.scheduledAt.slice(0, 10))
-  }
-
-  function appointmentsForLead(id: string): Appointment[] {
-    return appointments.filter(a => a.leadId === id)
   }
 
   function updateRoom(id: string, patch: Partial<SiteVisitRoom>) {
@@ -152,14 +150,15 @@ export default function SiteVisitsScreen() {
 
   async function handleAddVisit() {
     const validRooms = rooms.filter(r => r.name.trim())
-    if (!leadId || !visitDate || validRooms.length === 0) {
-      setFormError('Lead, visit date, and at least one named room are required.')
+    if (!leadId || !visitDate || validRooms.length === 0 || teamMemberIds.length === 0) {
+      setFormError('Lead, visit date, team members, and at least one named room are required.')
       return
     }
     const now = new Date().toISOString()
     const visit: SiteVisit = {
       id: `sv_${Date.now()}`,
-      leadId, appointmentId: appointmentId || undefined, visitDate: new Date(visitDate).toISOString(),
+      leadId, visitDate: new Date(visitDate).toISOString(),
+      teamMemberIds, teamMemberNames: namesFor(teamMemberIds),
       rooms: validRooms, checklist, notes: notes.trim() || undefined,
       createdAt: now, updatedAt: now,
     }
@@ -173,12 +172,13 @@ export default function SiteVisitsScreen() {
   async function handleUpdateVisit() {
     if (!selected) return
     const validRooms = rooms.filter(r => r.name.trim())
-    if (!visitDate || validRooms.length === 0) {
-      setFormError('Visit date and at least one named room are required.')
+    if (!visitDate || validRooms.length === 0 || teamMemberIds.length === 0) {
+      setFormError('Visit date, team members, and at least one named room are required.')
       return
     }
     const updated: SiteVisit = {
-      ...selected, leadId, appointmentId: appointmentId || undefined, visitDate: new Date(visitDate).toISOString(),
+      ...selected, leadId, visitDate: new Date(visitDate).toISOString(),
+      teamMemberIds, teamMemberNames: namesFor(teamMemberIds),
       rooms: validRooms, checklist, notes: notes.trim() || undefined,
       updatedAt: new Date().toISOString(),
     }
@@ -273,6 +273,10 @@ export default function SiteVisitsScreen() {
               </PermissionGate>
             </div>
 
+            {selected.teamMemberNames && selected.teamMemberNames.length > 0 && (
+              <p className="text-xs text-slate-500">Team: {selected.teamMemberNames.join(', ')}</p>
+            )}
+
             <div>
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rooms</p>
               <div className="space-y-2">
@@ -282,7 +286,7 @@ export default function SiteVisitsScreen() {
                     {room.measurements && <p className="text-xs text-slate-600 mb-1">📏 {room.measurements}</p>}
                     {room.notes && <p className="text-xs text-slate-500">{room.notes}</p>}
                     {room.photos && room.photos.length > 0 && (
-                      <MultiFileUploadField label="Room Photos" files={room.photos} onChange={() => {}} accept="image/*" uploadButtonLabel="Upload Photo" />
+                      <MultiFileUploadField label="Room Photos" files={room.photos} onChange={() => {}} accept="image/*" uploadButtonLabel="Upload Photo" readOnly />
                     )}
                   </div>
                 ))}
@@ -329,28 +333,36 @@ export default function SiteVisitsScreen() {
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead *</label>
-            <select value={leadId} onChange={e => handleLeadChange(e.target.value)} disabled={showEdit}
+            <select value={leadId} onChange={e => setLeadId(e.target.value)} disabled={showEdit}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 disabled:opacity-60">
               <option value="">Select a lead…</option>
               {leads.map(l => <option key={l.id} value={l.id}>{l.name} — {l.city}</option>)}
             </select>
           </div>
-          {leadId && appointmentsForLead(leadId).length > 0 && (
-            <div>
-              <label className="text-xs font-semibold text-slate-500 mb-1 block">Linked Appointment</label>
-              <select value={appointmentId} onChange={e => handleAppointmentPick(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-                <option value="">None</option>
-                {appointmentsForLead(leadId).map(a => (
-                  <option key={a.id} value={a.id}>{fmtDate(a.scheduledAt)} — {a.status}</option>
-                ))}
-              </select>
-            </div>
-          )}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Visit Date *</label>
             <input type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Team Members *</label>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 max-h-56 overflow-y-auto">
+              {assignableMembers.map(m => {
+                const isChecked = teamMemberIds.includes(m.id)
+                return (
+                  <button type="button" key={m.id} onClick={() => toggleTeamMember(m.id)}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left active:bg-slate-100">
+                    {isChecked ? <CheckSquare size={17} className="text-indigo-600 shrink-0" /> : <Square size={17} className="text-slate-300 shrink-0" />}
+                    <span className="text-sm text-slate-700 truncate">{m.fullName}</span>
+                    <span className="text-[11px] text-slate-400 ml-auto shrink-0">{getRoleDisplayLabel(m.role, m.displayRole)}</span>
+                  </button>
+                )
+              })}
+              {assignableMembers.length === 0 && (
+                <p className="text-xs text-slate-400 text-center py-4">No active team members found</p>
+              )}
+            </div>
           </div>
 
           <div>

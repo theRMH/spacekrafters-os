@@ -55,6 +55,9 @@ export default function TaskDetailScreen() {
   const [lateReason, setLateReason] = useState('')
   const [showSubtaskSheet, setShowSubtaskSheet] = useState(false)
   const [subtaskTitle, setSubtaskTitle] = useState('')
+  const [subtaskAssigneeId, setSubtaskAssigneeId] = useState('')
+  const [showAssigneeSheet, setShowAssigneeSheet] = useState(false)
+  const [reassignId, setReassignId] = useState('')
   const [showDepSheet, setShowDepSheet] = useState(false)
   const [depTaskId, setDepTaskId] = useState('')
 
@@ -72,9 +75,14 @@ export default function TaskDetailScreen() {
   useEffect(() => { refresh() }, [])
 
   const task = tasks.find(t => t.id === taskId)
-  const subtasks = tasks.filter(t => t.parentTaskId === taskId)
+  const allSubtasks = tasks.filter(t => t.parentTaskId === taskId)
+  // Same visibility rule as ProjectWorkspaceScreen's task list: employees
+  // only see subtasks assigned to themselves, managers see all.
+  const canManageTasks = can('edit_task')
+  const subtasks = canManageTasks ? allSubtasks : allSubtasks.filter(t => t.assigneeId === user?.id)
   const taskDeps = dependencies.filter(d => d.taskId === taskId)
   const otherProjectTasks = tasks.filter(t => t.projectId === projectId && t.id !== taskId && t.parentTaskId !== taskId)
+  const activeUsers = users.filter(u => u.status === 'active')
 
   function isLate(t: Task): boolean {
     if (!t.deadline) return false
@@ -128,14 +136,30 @@ export default function TaskDetailScreen() {
   }
 
   async function handleAddSubtask() {
-    if (!task || !user || !subtaskTitle.trim()) return
-    const sub = { ...newSubtask(task.projectId, task.id, user.id), title: subtaskTitle.trim() }
+    if (!task || !user || !subtaskTitle.trim() || !subtaskAssigneeId) return
+    const assignee = users.find(u => u.id === subtaskAssigneeId)
+    const sub: Task = {
+      ...newSubtask(task.projectId, task.id, user.id), title: subtaskTitle.trim(),
+      assigneeId: subtaskAssigneeId, assigneeName: assignee?.fullName,
+    }
     const result = await upsertTask(sub)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to add subtask.', type: 'error' }); return }
     setTasks(prev => [sub, ...prev])
     setSubtaskTitle('')
+    setSubtaskAssigneeId('')
     setShowSubtaskSheet(false)
     setSnack({ open: true, msg: 'Subtask added.', type: 'success' })
+  }
+
+  async function handleReassign() {
+    if (!task || !reassignId) return
+    const assignee = users.find(u => u.id === reassignId)
+    const updated: Task = { ...task, assigneeId: reassignId, assigneeName: assignee?.fullName, updatedAt: new Date().toISOString() }
+    const result = await upsertTask(updated)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to reassign task.', type: 'error' }); return }
+    setTasks(prev => prev.map(x => (x.id === updated.id ? updated : x)))
+    setShowAssigneeSheet(false)
+    setSnack({ open: true, msg: 'Task reassigned.', type: 'success' })
   }
 
   async function handleAddDependency() {
@@ -194,7 +218,18 @@ export default function TaskDetailScreen() {
 
       <div className="px-4 pt-4 space-y-4">
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-slate-500">Assignee</span><span className="font-semibold text-slate-800">{task.assigneeName ?? userName(task.assigneeId)}</span></div>
+          <div className="flex justify-between items-center">
+            <span className="text-slate-500">Assignee</span>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-slate-800">{task.assigneeName ?? userName(task.assigneeId)}</span>
+              <PermissionGate permission="edit_task">
+                <button onClick={() => { setReassignId(task.assigneeId ?? ''); setShowAssigneeSheet(true) }}
+                  className="text-xs font-semibold text-indigo-600 active:opacity-70">
+                  Change
+                </button>
+              </PermissionGate>
+            </div>
+          </div>
           <div className="flex justify-between"><span className="text-slate-500">Deadline</span><span className={`font-semibold ${isLate(task) && task.status !== 'completed' ? 'text-red-600' : 'text-slate-800'}`}>{fmtDate(task.deadline)}</span></div>
           {task.completedAt && <div className="flex justify-between"><span className="text-slate-500">Completed</span><span className="font-semibold text-slate-800">{fmtDate(task.completedAt)}</span></div>}
           {task.lateReason && (
@@ -228,12 +263,15 @@ export default function TaskDetailScreen() {
             </PermissionGate>
           </div>
           {subtasks.length === 0 ? (
-            <p className="text-xs text-slate-400">No subtasks.</p>
+            <p className="text-xs text-slate-400">{allSubtasks.length === 0 ? 'No subtasks.' : 'No subtasks assigned to you.'}</p>
           ) : (
             <div className="space-y-2">
               {subtasks.map(sub => (
                 <div key={sub.id} className="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
-                  <span className="text-sm text-slate-800">{sub.title}</span>
+                  <div>
+                    <span className="text-sm text-slate-800">{sub.title}</span>
+                    {canManageTasks && sub.assigneeName && <p className="text-[11px] text-slate-400 mt-0.5">{sub.assigneeName}</p>}
+                  </div>
                   <StatusBadge status={sub.status} size="xs" />
                 </div>
               ))}
@@ -270,15 +308,38 @@ export default function TaskDetailScreen() {
       </div>
 
       {/* Add Subtask */}
-      <BottomSheet isOpen={showSubtaskSheet} onClose={() => setShowSubtaskSheet(false)} title="Add Subtask">
+      <BottomSheet isOpen={showSubtaskSheet} onClose={() => { setShowSubtaskSheet(false); setSubtaskAssigneeId('') }} title="Add Subtask">
         <div className="space-y-4 pb-4">
           <input
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400"
             value={subtaskTitle} onChange={e => setSubtaskTitle(e.target.value)} placeholder="Subtask title" autoFocus
           />
-          <button onClick={handleAddSubtask} disabled={!subtaskTitle.trim()}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Assign To *</label>
+            <select value={subtaskAssigneeId} onChange={e => setSubtaskAssigneeId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+              <option value="">— Select —</option>
+              {activeUsers.map(u => <option key={u.id} value={u.id}>{u.fullName}</option>)}
+            </select>
+          </div>
+          <button onClick={handleAddSubtask} disabled={!subtaskTitle.trim() || !subtaskAssigneeId}
             className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700 disabled:opacity-40">
             Add Subtask
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Reassign Task */}
+      <BottomSheet isOpen={showAssigneeSheet} onClose={() => setShowAssigneeSheet(false)} title="Change Assignee">
+        <div className="space-y-4 pb-4">
+          <select value={reassignId} onChange={e => setReassignId(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+            <option value="">— Select —</option>
+            {activeUsers.map(u => <option key={u.id} value={u.id}>{u.fullName}</option>)}
+          </select>
+          <button onClick={handleReassign} disabled={!reassignId}
+            className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700 disabled:opacity-40">
+            Save
           </button>
         </div>
       </BottomSheet>

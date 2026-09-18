@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Phone, Trash2, MoreVertical } from 'lucide-react'
+import { Plus, Phone, Trash2, MoreVertical, CheckSquare, Square, X, ListChecks } from 'lucide-react'
 import { useCRM } from '../../context/CRMContext'
 import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -20,7 +20,7 @@ import {
 import { getManagedUsersDirectory } from '../../services/userService'
 import { hasRole } from '../../utils/permissions'
 import { LeadStatusSheet, LEAD_STATUS_LABEL, ROLE_FOR_LEAD_STATUS } from './LeadStatusSheet'
-import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser, BusinessDivision, BusinessCategory, BusinessBrand, UserRole } from '../../types'
+import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser, BusinessDivision, BusinessCategory, BusinessBrand, UserRole, LeadCodePrefix } from '../../types'
 
 type Filter = 'all' | LeadStatus
 
@@ -62,6 +62,11 @@ const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
 ]
 const SOURCE_LABEL: Record<LeadSource, string> = Object.fromEntries(SOURCE_OPTIONS.map(o => [o.value, o.label])) as Record<LeadSource, string>
 
+function sourceLabel(lead: Lead): string {
+  const base = SOURCE_LABEL[lead.source] ?? lead.source
+  return lead.source === 'other' && lead.subSource ? `${base} — ${lead.subSource}` : base
+}
+
 const INTEREST_OPTIONS: { value: LeadInterest; label: string; badge: string }[] = [
   { value: 'hot',    label: '🔥 Hot',    badge: 'bg-red-100 text-red-700'     },
   { value: 'medium', label: '🌡️ Medium', badge: 'bg-amber-100 text-amber-700' },
@@ -81,7 +86,7 @@ function fmtDateTime(val: string): string {
 
 export default function LeadsScreen() {
   const navigate = useNavigate()
-  const { leads, addLead, updateLead, deleteLead } = useCRM()
+  const { leads, addLead, updateLead, deleteLead, bulkDeleteLeads } = useCRM()
   const { can, user } = useAuth()
   // Roles without full CRM access (edit_lead) only ever act on leads currently
   // assigned to them — scope their list down instead of showing the whole pipeline.
@@ -96,8 +101,13 @@ export default function LeadsScreen() {
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null)
   const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
 
   const [name, setName] = useState('')
+  const [leadCodePrefix, setLeadCodePrefix] = useState<LeadCodePrefix | ''>('')
+  const [siteNo, setSiteNo] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [city, setCity] = useState('')
@@ -107,6 +117,7 @@ export default function LeadsScreen() {
   const [requirement, setRequirement] = useState('')
   const [notes, setNotes] = useState('')
   const [source, setSource] = useState<LeadSource>('walk_in')
+  const [subSource, setSubSource] = useState('')
   const [interest, setInterest] = useState<LeadInterest>('medium')
   const [status, setStatus] = useState<LeadStatus>('new')
   const [ownerId, setOwnerId] = useState('')
@@ -155,10 +166,29 @@ export default function LeadsScreen() {
     if (!DIVISIONS_WITH_BRAND.includes(division as BusinessDivision)) setBusinessBrand('')
   }
 
+  function onSourceChange(value: LeadSource) {
+    setSource(value)
+    if (value !== 'other') setSubSource('')
+  }
+
+  // Next number for a prefix = highest existing number for that prefix + 1,
+  // padded to 3 digits (SK001, SK002… FGD001, FGD002…, independent counters).
+  // Computed from the currently-loaded lead list rather than a DB sequence —
+  // fine at this app's scale, same pragmatic approach used everywhere else
+  // in this codebase (no dedicated counter/sequence tables anywhere).
+  function nextLeadNumber(prefix: LeadCodePrefix): string {
+    const nums = leads
+      .filter(l => l.leadCodePrefix === prefix && l.leadNumber)
+      .map(l => parseInt(l.leadNumber!.slice(prefix.length), 10))
+      .filter(n => !isNaN(n))
+    const next = (nums.length > 0 ? Math.max(...nums) : 0) + 1
+    return `${prefix}${String(next).padStart(3, '0')}`
+  }
+
   function resetForm() {
-    setName(''); setPhone(''); setEmail(''); setCity('')
+    setName(''); setLeadCodePrefix(''); setSiteNo(''); setPhone(''); setEmail(''); setCity('')
     setBusinessDivision(''); setBusinessCategory(''); setBusinessBrand('')
-    setRequirement(''); setNotes(''); setSource('walk_in'); setInterest('medium'); setStatus('new')
+    setRequirement(''); setNotes(''); setSource('walk_in'); setSubSource(''); setInterest('medium'); setStatus('new')
     setOwnerId(''); setOwnerName(''); setIsCustomOwner(false)
     setFormError('')
   }
@@ -169,11 +199,11 @@ export default function LeadsScreen() {
   }
 
   function openEdit(lead: Lead) {
-    setName(lead.name); setPhone(lead.phone); setEmail(lead.email ?? ''); setCity(lead.city)
+    setName(lead.name); setSiteNo(lead.siteNo ?? ''); setPhone(lead.phone); setEmail(lead.email ?? ''); setCity(lead.city)
     setBusinessDivision(lead.businessDivision ?? ''); setBusinessCategory(lead.businessCategory ?? '')
     setBusinessBrand(lead.businessBrand ?? '')
     setRequirement(lead.requirement ?? ''); setNotes(lead.notes ?? '')
-    setSource(lead.source); setInterest(lead.interest); setStatus(lead.status)
+    setSource(lead.source); setSubSource(lead.subSource ?? ''); setInterest(lead.interest); setStatus(lead.status)
     setOwnerId(lead.ownerId ?? ''); setOwnerName(lead.ownerName)
     setIsCustomOwner(!lead.ownerId)
     setFormError('')
@@ -181,18 +211,20 @@ export default function LeadsScreen() {
   }
 
   async function handleAddLead() {
-    if (!name.trim() || !phone.trim() || !city.trim() || !ownerName.trim()) {
-      setFormError('Name, phone, city, and lead owner are required.')
+    if (!name.trim() || !phone.trim() || !city.trim() || !ownerName.trim() || !leadCodePrefix) {
+      setFormError('Name, phone, city, lead owner, and type (SK/FGD) are required.')
       return
     }
     const now = new Date()
     const slaDueAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
     const result = await addLead({
-      name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
+      name: name.trim(), leadCodePrefix, leadNumber: nextLeadNumber(leadCodePrefix),
+      siteNo: siteNo.trim() || undefined, phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
       businessDivision: businessDivision || undefined, businessCategory: businessCategory || undefined,
       businessBrand: businessBrand || undefined,
       requirement: requirement.trim() || undefined, notes: notes.trim() || undefined,
-      source, interest, status: 'new', ownerId: ownerId || undefined, ownerName: ownerName.trim(), slaDueAt,
+      source, subSource: source === 'other' ? (subSource.trim() || undefined) : undefined,
+      interest, status: 'new', ownerId: ownerId || undefined, ownerName: ownerName.trim(), slaDueAt,
     })
     if (!result.ok) { setFormError(result.error ?? 'Could not save lead.'); return }
     setShowNew(false)
@@ -207,11 +239,12 @@ export default function LeadsScreen() {
     }
     const statusChanged = status !== selected.status
     const result = await updateLead(selected.id, {
-      name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
+      name: name.trim(), siteNo: siteNo.trim() || undefined, phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
       businessDivision: businessDivision || undefined, businessCategory: businessCategory || undefined,
       businessBrand: businessBrand || undefined,
       requirement: requirement.trim() || undefined, notes: notes.trim() || undefined,
-      source, interest, status, ownerId: ownerId || undefined, ownerName: ownerName.trim(),
+      source, subSource: source === 'other' ? (subSource.trim() || undefined) : undefined,
+      interest, status, ownerId: ownerId || undefined, ownerName: ownerName.trim(),
     }, statusChanged ? `Status changed to ${status.replace(/_/g, ' ')}` : undefined)
     if (!result.ok) { setFormError(result.error ?? 'Could not update lead.'); return }
     setShowEdit(false)
@@ -227,6 +260,36 @@ export default function LeadsScreen() {
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete lead.', type: 'error' }); return }
     if (selected?.id === deletedId) setSelected(null)
     setSnack({ open: true, msg: 'Lead deleted.', type: 'success' })
+  }
+
+  function toggleSelectMode() {
+    setSelectMode(prev => !prev)
+    setSelectedIds(new Set())
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(prev => (prev.size === filtered.length ? new Set() : new Set(filtered.map(l => l.id))))
+  }
+
+  async function confirmBulkDelete() {
+    if (selectedIds.size === 0) return
+    const ids = [...selectedIds]
+    const result = await bulkDeleteLeads(ids)
+    setShowBulkDeleteConfirm(false)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete selected leads.', type: 'error' }); return }
+    if (selected && ids.includes(selected.id)) setSelected(null)
+    setSelectMode(false)
+    setSelectedIds(new Set())
+    setSnack({ open: true, msg: `${ids.length} lead${ids.length === 1 ? '' : 's'} deleted.`, type: 'success' })
   }
 
   const liveSelected = selected ? leads.find(l => l.id === selected.id) ?? null : null
@@ -247,13 +310,24 @@ export default function LeadsScreen() {
       <div className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-14 z-20">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-extrabold text-slate-800">Leads</h1>
-          <PermissionGate permission="add_lead">
-            <button onClick={openNew} aria-label="Add new lead"
-              className="w-10 h-10 rounded-xl flex items-center justify-center shadow-fab active:opacity-90"
-              style={{ background: '#0F2A4A' }}>
-              <Plus size={19} className="text-white" strokeWidth={2.5} />
-            </button>
-          </PermissionGate>
+          <div className="flex items-center gap-2">
+            <PermissionGate permission="delete_lead">
+              <button onClick={toggleSelectMode} aria-label={selectMode ? 'Cancel selection' : 'Select leads'}
+                className={`h-10 px-3 rounded-xl flex items-center gap-1.5 text-xs font-semibold active:opacity-90 ${
+                  selectMode ? 'bg-slate-100 text-slate-600' : 'border border-slate-200 bg-white text-slate-600'
+                }`}>
+                {selectMode ? <X size={15} /> : <ListChecks size={15} />}
+                {selectMode ? 'Cancel' : 'Select'}
+              </button>
+            </PermissionGate>
+            <PermissionGate permission="add_lead">
+              <button onClick={openNew} aria-label="Add new lead"
+                className="w-10 h-10 rounded-xl flex items-center justify-center shadow-fab active:opacity-90"
+                style={{ background: '#0F2A4A' }}>
+                <Plus size={19} className="text-white" strokeWidth={2.5} />
+              </button>
+            </PermissionGate>
+          </div>
         </div>
         <SearchBar value={search} onChange={setSearch} placeholder="Search leads…" className="mb-3" />
         <FilterChips chips={CHIPS} active={filter} onChange={setFilter} />
@@ -263,13 +337,27 @@ export default function LeadsScreen() {
         {filtered.map(lead => {
           const overdue = isSlaOverdue(lead)
           const interestOpt = INTEREST_OPTIONS.find(o => o.value === lead.interest)
+          const isChecked = selectedIds.has(lead.id)
           return (
-            <div key={lead.id} onClick={() => setSelected(lead)}
+            <div key={lead.id} onClick={() => (selectMode ? toggleSelected(lead.id) : setSelected(lead))}
               className="w-full text-left bg-white rounded-2xl shadow-card border border-slate-100 p-4 active:scale-[0.98] transition-transform cursor-pointer">
               <div className="flex items-start justify-between gap-3">
+                {selectMode && (
+                  <button onClick={e => { e.stopPropagation(); toggleSelected(lead.id) }}
+                    aria-label={isChecked ? `Deselect ${lead.name}` : `Select ${lead.name}`}
+                    className="shrink-0 mt-0.5 text-slate-300">
+                    {isChecked ? <CheckSquare size={19} className="text-indigo-600" /> : <Square size={19} />}
+                  </button>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                    {lead.leadNumber && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{lead.leadNumber}</span>
+                    )}
                     <span className="text-sm font-bold text-slate-800">{lead.name}</span>
+                    {lead.siteNo && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{lead.siteNo}</span>
+                    )}
                     <span className="text-slate-300 text-xs">|</span>
                     <span className="text-xs text-slate-500">{lead.city}</span>
                     {interestOpt && (
@@ -284,36 +372,38 @@ export default function LeadsScreen() {
                       {lead.businessBrand ? ` · ${BUSINESS_BRAND_LABEL[lead.businessBrand]}` : ''}
                     </p>
                   )}
-                  <p className="text-[11px] text-slate-400">{SOURCE_LABEL[lead.source] ?? lead.source} · {lead.ownerName}</p>
+                  <p className="text-[11px] text-slate-400">{sourceLabel(lead)} · {lead.ownerName}</p>
                 </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <div className="flex items-center gap-1.5 relative">
-                    <StatusBadge status={lead.status} size="xs" />
-                    {can('delete_lead') && (
-                      <>
-                        <button onClick={e => { e.stopPropagation(); setMenuOpenFor(menuOpenFor === lead.id ? null : lead.id) }}
-                          aria-label={`More actions for ${lead.name}`}
-                          className="p-1 rounded-lg text-slate-400 active:bg-slate-100">
-                          <MoreVertical size={15} />
-                        </button>
-                        {menuOpenFor === lead.id && (
-                          <div onClick={e => e.stopPropagation()}
-                            className="absolute top-full right-0 mt-1 z-40 bg-white rounded-xl shadow-sheet border border-slate-100 overflow-hidden min-w-[120px]">
-                            <button onClick={() => { setDeleteTarget(lead); setMenuOpenFor(null) }}
-                              className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-red-500 active:bg-red-50">
-                              <Trash2 size={13} /> Delete
-                            </button>
-                          </div>
-                        )}
-                      </>
+                {!selectMode && (
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5 relative">
+                      <StatusBadge status={lead.status} size="xs" />
+                      {can('delete_lead') && (
+                        <>
+                          <button onClick={e => { e.stopPropagation(); setMenuOpenFor(menuOpenFor === lead.id ? null : lead.id) }}
+                            aria-label={`More actions for ${lead.name}`}
+                            className="p-1 rounded-lg text-slate-400 active:bg-slate-100">
+                            <MoreVertical size={15} />
+                          </button>
+                          {menuOpenFor === lead.id && (
+                            <div onClick={e => e.stopPropagation()}
+                              className="absolute top-full right-0 mt-1 z-40 bg-white rounded-xl shadow-sheet border border-slate-100 overflow-hidden min-w-[120px]">
+                              <button onClick={() => { setDeleteTarget(lead); setMenuOpenFor(null) }}
+                                className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-red-500 active:bg-red-50">
+                                <Trash2 size={13} /> Delete
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {overdue && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">
+                        ⚠ SLA overdue
+                      </span>
                     )}
                   </div>
-                  {overdue && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">
-                      ⚠ SLA overdue
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           )
@@ -326,6 +416,24 @@ export default function LeadsScreen() {
           </div>
         )}
       </div>
+
+      {selectMode && (
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[390px] px-4 pb-2 z-30
+          lg:left-[260px] lg:translate-x-0 lg:w-[calc(100%-260px)] lg:max-w-none lg:bottom-6 lg:px-6">
+          <div className="bg-white rounded-2xl shadow-sheet border border-slate-100 px-4 py-3 flex items-center justify-between gap-3 lg:max-w-md lg:ml-auto lg:mr-6">
+            <button onClick={toggleSelectAll} className="text-xs font-semibold text-indigo-600 active:opacity-70">
+              {selectedIds.size === filtered.length && filtered.length > 0 ? 'Clear all' : `Select all (${filtered.length})`}
+            </button>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold text-slate-500">{selectedIds.size} selected</span>
+              <button onClick={() => setShowBulkDeleteConfirm(true)} disabled={selectedIds.size === 0}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-red-500 active:opacity-90 disabled:opacity-40">
+                <Trash2 size={13} /> Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lead Detail Sheet */}
       <BottomSheet isOpen={!!selected && !showEdit} onClose={() => setSelected(null)} title={selected?.name ?? ''} height="full">
@@ -353,6 +461,8 @@ export default function LeadsScreen() {
 
             <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5">
               {[
+                { label: 'Lead ID',     value: selected.leadNumber ?? '—' },
+                { label: 'Site No.',    value: selected.siteNo ?? '—' },
                 { label: 'Phone',       value: selected.phone },
                 { label: 'Email',       value: selected.email ?? '—' },
                 { label: 'City',        value: selected.city },
@@ -361,7 +471,7 @@ export default function LeadsScreen() {
                       + (selected.businessCategory ? ` (${BUSINESS_CATEGORY_LABEL[selected.businessCategory]})` : '')
                       + (selected.businessBrand ? ` (${BUSINESS_BRAND_LABEL[selected.businessBrand]})` : '')
                     : '—' },
-                { label: 'Source',      value: SOURCE_LABEL[selected.source] ?? selected.source },
+                { label: 'Source',      value: sourceLabel(selected) },
                 { label: 'Owner',       value: selected.ownerName },
                 { label: 'Requirement', value: selected.requirement ?? '—' },
                 { label: 'Notes',       value: selected.notes ?? '—' },
@@ -449,9 +559,30 @@ export default function LeadsScreen() {
       >
         <div className="space-y-3">
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
+          {!showEdit && (
+            <div>
+              <label className="text-xs font-semibold text-slate-500 mb-1 block">Type *</label>
+              <select value={leadCodePrefix} onChange={e => setLeadCodePrefix(e.target.value as LeadCodePrefix | '')}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+                <option value="">— Select —</option>
+                <option value="SK">SK</option>
+                <option value="FGD">FGD</option>
+              </select>
+              {leadCodePrefix && (
+                <p className="text-xs text-slate-500 mt-1.5">
+                  Lead ID: <span className="font-bold text-slate-700">{nextLeadNumber(leadCodePrefix)}</span> (auto-generated)
+                </p>
+              )}
+            </div>
+          )}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Name *</label>
             <input value={name} onChange={e => setName(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Site No.</label>
+            <input value={siteNo} onChange={e => setSiteNo(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
           <div>
@@ -520,10 +651,15 @@ export default function LeadsScreen() {
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Source</label>
-            <select value={source} onChange={e => setSource(e.target.value as LeadSource)}
+            <select value={source} onChange={e => onSourceChange(e.target.value as LeadSource)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
               {SOURCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+            {source === 'other' && (
+              <input value={subSource} onChange={e => setSubSource(e.target.value)}
+                placeholder="Type the source…"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm mt-2 focus:outline-none focus:border-indigo-400" />
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Interest</label>
@@ -563,6 +699,16 @@ export default function LeadsScreen() {
         message={`Delete ${deleteTarget?.name ?? 'this lead'}? This also removes its linked appointments, follow-ups, site visits, requirements, and quotations. This cannot be undone.`}
         confirmLabel="Delete"
         onConfirm={confirmDelete}
+        variant="danger"
+      />
+
+      <Dialog
+        isOpen={showBulkDeleteConfirm}
+        onClose={() => setShowBulkDeleteConfirm(false)}
+        title="Delete Selected Leads"
+        message={`Delete ${selectedIds.size} selected lead${selectedIds.size === 1 ? '' : 's'}? This also removes their linked appointments, follow-ups, site visits, requirements, and quotations. This cannot be undone.`}
+        confirmLabel="Delete"
+        onConfirm={confirmBulkDelete}
         variant="danger"
       />
 

@@ -6,7 +6,7 @@ import {
   Truck, Wallet, Landmark, Receipt, CreditCard, BarChart2, ClipboardCheck,
   CalendarOff, UserCog, File, Settings, UploadCloud, History,
   PiggyBank, Tags, BellRing, TrendingUp, PieChart, CalendarDays, Scale, LineChart,
-  CalendarClock, LocateFixed, ListChecks,
+  CalendarClock, LocateFixed, ListChecks, FileSearch, Hammer, FileEdit,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -38,6 +38,7 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     label: 'Site & Design',
     items: [
       { icon: MapPin,    label: 'Site Visits',  path: '/site-visits',  permission: 'view_site_visits' },
+      { icon: FileSearch, label: 'Site Visit Report', path: '/site-visit-report', permission: 'view_site_visit_reports' },
       { icon: FileText,  label: 'Quotations',   path: '/quotations',   permission: 'view_quotations'  },
       { icon: Layers,    label: 'Design Center', path: '/design',      permission: 'view_design'      },
     ],
@@ -49,6 +50,7 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { icon: GanttChartSquare,   label: 'Gantt',       path: '/gantt',       permission: 'view_gantt' },
       { icon: BookOpen,           label: 'Daily Diary', path: '/daily-diary', permission: 'view_tasks' },
       { icon: ListChecks,         label: 'Daily Task',  path: '/daily-tasks', permission: 'view_daily_tasks' },
+      { icon: FileEdit,           label: 'Daily Report',path: '/daily-reports', permission: 'view_daily_reports' },
     ],
   },
   {
@@ -56,6 +58,8 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     items: [
       { icon: ShoppingCart, label: 'Procurement', path: '/procurement', permission: 'view_procurement' },
       { icon: Truck,        label: 'Vendors',     path: '/vendors',     permission: 'view_procurement' },
+      { icon: FileSearch,   label: 'MRF',         path: '/mrf',         permission: 'view_mrf' },
+      { icon: Hammer,       label: 'Vendors / Labour', path: '/vendors-labour', permission: 'view_vendors_labour' },
     ],
   },
   {

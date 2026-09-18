@@ -6,7 +6,7 @@ const LABELS: Record<string, string> = {
   design_approved: 'Design Approved', sent_to_client: 'Sent To Client',
   negotiating: 'Negotiating', client_approved: 'Client Approved',
   won: 'Won', lost: 'Lost',
-  advance_payment: 'Advance Payment', execution: 'Execution', procurement: 'Procurement',
+  advance_payment: 'Advance Payment', designing: 'Designing', execution: 'Execution', procurement: 'Procurement',
   handover_prep: 'Handover Prep', final_payment: 'Final Payment', reconciliation: 'Reconciliation',
   closed: 'Closed', active: 'Active', on_hold: 'On Hold',
   scheduled: 'Scheduled', completed: 'Completed', rescheduled: 'Rescheduled', cancelled: 'Cancelled',
@@ -33,6 +33,7 @@ const COLORS: Record<string, { bg: string; text: string }> = {
   won:                    { bg: 'bg-emerald-50',  text: 'text-emerald-700' },
   lost:                   { bg: 'bg-red-50',      text: 'text-red-700'     },
   advance_payment:        { bg: 'bg-amber-50',    text: 'text-amber-700'   },
+  designing:               { bg: 'bg-purple-50',   text: 'text-purple-700'  },
   execution:               { bg: 'bg-blue-50',     text: 'text-blue-700'    },
   procurement:             { bg: 'bg-violet-50',   text: 'text-violet-700'  },
   handover_prep:           { bg: 'bg-teal-50',     text: 'text-teal-700'    },
@@ -59,11 +60,17 @@ const COLORS: Record<string, { bg: string; text: string }> = {
 interface Props {
   status: string
   size?: 'xs' | 'sm' | 'md'
+  // Overrides the looked-up label for this one badge without touching the
+  // shared LABELS map above — needed where the same status string means
+  // something with different wording in different contexts (e.g. Quotations
+  // wanting "MD Approved" while Leads keep "Internally Approved" for the
+  // same underlying 'internally_approved' value).
+  label?: string
 }
 
-export function StatusBadge({ status, size = 'sm' }: Props) {
+export function StatusBadge({ status, size = 'sm', label: labelOverride }: Props) {
   const colors = COLORS[status] ?? { bg: 'bg-slate-100', text: 'text-slate-600' }
-  const label  = LABELS[status] ?? status.replace(/_/g, ' ')
+  const label  = labelOverride ?? LABELS[status] ?? status.replace(/_/g, ' ')
 
   const sizeClass = size === 'xs'
     ? 'text-[10px] px-1.5 py-0.5'

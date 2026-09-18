@@ -9,7 +9,7 @@ import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllLeaveApplications, upsertLeaveApplication, deleteLeaveApplication } from '../../services/leaveService'
 import { addAuditLog } from '../../services/auditLogService'
 import { getManagedUsersDirectory } from '../../services/userService'
-import { sendPushNotification } from '../../utils/pushNotifications'
+import { sendNotification } from '../../utils/notifications'
 import { hasPermission } from '../../utils/permissions'
 import type { LeaveApplication, AuditLog, ManagedUser } from '../../types'
 
@@ -94,10 +94,11 @@ export default function LeaveScreen() {
     notifyApprovers(leave)
   }
 
-  // Push-alerts everyone who can approve leave (MD/Admin) the moment a
-  // request comes in — best-effort, same convention as syncManagedUserAuth:
-  // never blocks or fails the actual leave submission, which has already
-  // succeeded by the time this runs.
+  // Alerts everyone who can approve leave (MD/Admin) the moment a request
+  // comes in, across every notification channel (push + SMS + WhatsApp) —
+  // best-effort, same convention as syncManagedUserAuth: never blocks or
+  // fails the actual leave submission, which has already succeeded by the
+  // time this runs.
   async function notifyApprovers(leave: LeaveApplication) {
     if (!user) return
     const directory = canApprove ? team : await getManagedUsersDirectory()
@@ -105,7 +106,7 @@ export default function LeaveScreen() {
       .filter(m => m.id !== user.id && hasPermission(m.roles ?? m.role, 'approve_leave'))
       .map(m => m.id)
     if (approverIds.length === 0) return
-    await sendPushNotification(
+    await sendNotification(
       approverIds,
       'New Leave Request',
       `${leave.userName} requested leave: ${leave.fromDate} → ${leave.toDate}`,

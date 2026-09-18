@@ -29,3 +29,10 @@ export async function deleteLead(id: string): Promise<{ ok: boolean; error?: str
   if (error) return { ok: false, error: error.message }
   return { ok: true }
 }
+
+export async function deleteLeads(ids: string[]): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Not configured.' }
+  const { error } = await supabase.from(TABLE).delete().in('id', ids)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}

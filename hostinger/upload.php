@@ -1,6 +1,7 @@
 <?php
 $ALLOWED_ORIGINS = [
     'https://spacekrafters.com',
+    'https://spacekrafters-os.vercel.app',
     'http://localhost:5173',
     'http://localhost:4173',
 ];

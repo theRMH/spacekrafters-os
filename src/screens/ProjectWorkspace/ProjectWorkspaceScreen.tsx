@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { hasRole } from '../../utils/permissions'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { Accordion } from '../../components/layout/Accordion'
 import { StatusBadge } from '../../components/badges/StatusBadge'
@@ -20,12 +21,13 @@ import { getAllExpenseRequests } from '../../services/expenseService'
 import { getAllPaymentMilestones, getAllReceipts } from '../../services/financeService'
 import { getAllPunchListItems, upsertPunchListItem } from '../../services/punchListService'
 import { getAllDocuments, upsertDocument, getAllDocumentVersions, addDocumentVersion } from '../../services/documentService'
+import { getAllMRFs } from '../../services/mrfService'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { Dialog } from '../../components/feedback/Dialog'
 import { GanttChart } from './GanttChart'
 import { ProjectStatusSheet, ROLE_FOR_PROJECT_STAGE, PROJECT_STAGE_LABEL } from './ProjectStatusSheet'
 import { ROLE_LABELS } from '../../data/permissions'
-import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task, TaskDependency, DailyDiaryEntry, ExpenseRequest, PaymentMilestone, Receipt, SiteVisit, PunchListItem, ProjectDocument, ProjectDocumentVersion } from '../../types'
+import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task, TaskDependency, DailyDiaryEntry, ExpenseRequest, PaymentMilestone, Receipt, SiteVisit, PunchListItem, ProjectDocument, ProjectDocumentVersion, UserRole, MaterialRequestForm } from '../../types'
 
 type Tab = 'overview' | 'gantt' | 'team' | 'tasks' | 'requirements' | 'boq' | 'design' | 'diary' | 'finance' | 'procurement' | 'documents' | 'handover'
 
@@ -43,6 +45,15 @@ const TABS: { value: Tab; label: string; placeholder?: boolean }[] = [
   { value: 'documents',    label: 'Documents' },
   { value: 'handover',     label: 'Handover' },
 ]
+
+// Field roles (site_engineer, designer) can open a project workspace to
+// reach tasks assigned to them (see 'project-workspace' in permissions.ts),
+// but Finance/BOQ/Procurement show contract value, budget, margin, and
+// payment milestones with no further gating of their own — hide those three
+// tabs specifically for these two roles rather than widening view_projects
+// itself, which would also expose the same figures on the Projects list.
+const FIELD_ROLES: UserRole[] = ['site_engineer', 'designer']
+const SENSITIVE_TABS: Tab[] = ['finance', 'boq', 'procurement']
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -75,8 +86,11 @@ export default function ProjectWorkspaceScreen() {
   const [searchParams] = useSearchParams()
   const { user, can } = useAuth()
 
+  const isFieldRole = user ? FIELD_ROLES.some(r => hasRole(user, r)) : false
+  const visibleTabs = isFieldRole ? TABS.filter(t => !SENSITIVE_TABS.includes(t.value)) : TABS
+
   const tabParam = searchParams.get('tab') as Tab | null
-  const [tab, setTab] = useState<Tab>(tabParam && TABS.some(t => t.value === tabParam) ? tabParam : 'overview')
+  const [tab, setTab] = useState<Tab>(tabParam && visibleTabs.some(t => t.value === tabParam) ? tabParam : 'overview')
   const [isLoading, setIsLoading] = useState(true)
   const [project, setProject] = useState<Project | null>(null)
   const [users, setUsers] = useState<ManagedUser[]>([])
@@ -99,6 +113,7 @@ export default function ProjectWorkspaceScreen() {
   const [showHandoverConfirm, setShowHandoverConfirm] = useState(false)
   const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [documents, setDocuments] = useState<ProjectDocument[]>([])
+  const [mrfs, setMrfs] = useState<MaterialRequestForm[]>([])
   const [documentVersions, setDocumentVersions] = useState<ProjectDocumentVersion[]>([])
   const [selectedDocument, setSelectedDocument] = useState<ProjectDocument | null>(null)
   const [showNewDocument, setShowNewDocument] = useState(false)
@@ -108,6 +123,7 @@ export default function ProjectWorkspaceScreen() {
   const [docVersionNote, setDocVersionNote] = useState('')
   const [showNewTask, setShowNewTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskAssigneeId, setNewTaskAssigneeId] = useState('')
   const [showNewDiary, setShowNewDiary] = useState(false)
   const [diaryDate, setDiaryDate] = useState(todayISO())
   const [diaryWorkDone, setDiaryWorkDone] = useState('')
@@ -118,7 +134,7 @@ export default function ProjectWorkspaceScreen() {
   useEffect(() => {
     async function load() {
       setIsLoading(true)
-      const [projects, dirUsers, reqs, quotes, pkgs, versions, allTasks, allDeps, allDiary, allExpenses, allMilestones, allReceipts, allSiteVisits, allPunchItems, allDocuments, allDocumentVersions] = await Promise.all([
+      const [projects, dirUsers, reqs, quotes, pkgs, versions, allTasks, allDeps, allDiary, allExpenses, allMilestones, allReceipts, allSiteVisits, allPunchItems, allDocuments, allDocumentVersions, allMrfs] = await Promise.all([
         getAllProjects(),
         getManagedUsersDirectory(),
         getAllRequirements(),
@@ -135,6 +151,7 @@ export default function ProjectWorkspaceScreen() {
         getAllPunchListItems(),
         getAllDocuments(),
         getAllDocumentVersions(),
+        getAllMRFs(),
       ])
       setProject(projects.find(p => p.id === id) ?? null)
       setUsers(dirUsers)
@@ -152,6 +169,7 @@ export default function ProjectWorkspaceScreen() {
       setPunchListItems(allPunchItems)
       setDocuments(allDocuments)
       setDocumentVersions(allDocumentVersions)
+      setMrfs(allMrfs)
       setIsLoading(false)
     }
     load()
@@ -185,6 +203,12 @@ export default function ProjectWorkspaceScreen() {
   const projectTasks = tasks.filter(t => t.projectId === project.id)
   const projectDependencies = dependencies.filter(d => d.projectId === project.id)
   const topLevelTasks = projectTasks.filter(t => !t.parentTaskId)
+  // Employees (anyone without edit_task, i.e. no manage-tasks permission) only
+  // ever see tasks assigned to themselves — matches the same rule applied in
+  // TaskDetailScreen's subtasks and TasksScreen's per-project counts. Owner/
+  // project_coordinator (who can edit_task) see and manage everything.
+  const canManageTasks = can('edit_task')
+  const visibleTopLevelTasks = canManageTasks ? topLevelTasks : topLevelTasks.filter(t => t.assigneeId === user?.id)
   const projectDiaryEntries = diaryEntries.filter(e => e.projectId === project.id)
   const projectExpenses = expenseRequests.filter(e => e.projectId === project.id && e.status === 'paid')
   const projectMilestones = milestones.filter(m => m.projectId === project.id)
@@ -206,12 +230,17 @@ export default function ProjectWorkspaceScreen() {
   const teamMembers = users.filter(u => u.id === project.coordinatorId || assigneeIds.includes(u.id))
 
   async function handleAddTask() {
-    if (!project || !user || !newTaskTitle.trim()) return
-    const task = { ...emptyTask(project.id, user.id), title: newTaskTitle.trim() }
+    if (!project || !user || !newTaskTitle.trim() || !newTaskAssigneeId) return
+    const assignee = users.find(u => u.id === newTaskAssigneeId)
+    const task: Task = {
+      ...emptyTask(project.id, user.id), title: newTaskTitle.trim(),
+      assigneeId: newTaskAssigneeId, assigneeName: assignee?.fullName,
+    }
     const result = await upsertTask(task)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to add task.', type: 'error' }); return }
     setTasks(prev => [task, ...prev])
     setNewTaskTitle('')
+    setNewTaskAssigneeId('')
     setShowNewTask(false)
     setSnack({ open: true, msg: 'Task added.', type: 'success' })
   }
@@ -333,9 +362,9 @@ export default function ProjectWorkspaceScreen() {
       <AppHeader />
 
       <div className="bg-white px-4 pt-3 pb-3 border-b border-slate-200 sticky top-14 z-20">
-        <button onClick={() => navigate('/projects')}
+        <button onClick={() => navigate(can('view_projects') ? '/projects' : '/tasks')}
           className="flex items-center gap-1 text-xs font-semibold text-slate-500 mb-2 active:text-slate-700">
-          <ChevronLeft size={14} /> Projects
+          <ChevronLeft size={14} /> {can('view_projects') ? 'Projects' : 'Tasks'}
         </button>
         <div className="flex items-start justify-between gap-2 mb-1">
           <h1 className="text-lg font-extrabold text-slate-800">{project.name}</h1>
@@ -344,7 +373,7 @@ export default function ProjectWorkspaceScreen() {
         <p className="text-xs text-slate-500 mb-3">{project.clientName}</p>
 
         <div className="flex gap-1 overflow-x-auto scrollbar-hide -mx-4 px-4">
-          {TABS.map(t => (
+          {visibleTabs.map(t => (
             <button key={t.value} onClick={() => setTab(t.value)}
               className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${
                 tab === t.value ? 'text-white' : 'bg-slate-100 text-slate-500'
@@ -375,6 +404,29 @@ export default function ProjectWorkspaceScreen() {
                 </button>
               </div>
             )}
+            <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3 mb-4">
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Material Requests (MRF)</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {mrfs.filter(m => m.projectId === project.id).length === 0
+                    ? 'No MRFs raised for this project yet.'
+                    : `${mrfs.filter(m => m.projectId === project.id).length} MRF${mrfs.filter(m => m.projectId === project.id).length !== 1 ? 's' : ''} raised.`}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <PermissionGate permission="create_mrf">
+                  <button onClick={() => navigate('/mrf', { state: { projectId: project.id } })}
+                    className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold active:opacity-90"
+                    style={{ background: '#0F2A4A' }}>
+                    Send to QS for MRF
+                  </button>
+                </PermissionGate>
+                <button onClick={() => navigate('/mrf')}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
+                  View MRFs →
+                </button>
+              </div>
+            </div>
           <Accordion
             defaultOpen="details"
             items={[
@@ -435,10 +487,12 @@ export default function ProjectWorkspaceScreen() {
                 <Plus size={14} /> Add Task
               </button>
             </PermissionGate>
-            {topLevelTasks.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-10">No tasks yet.</p>
+            {visibleTopLevelTasks.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-10">
+                {topLevelTasks.length === 0 ? 'No tasks yet.' : 'No tasks assigned to you yet.'}
+              </p>
             ) : (
-              topLevelTasks.map(t => (
+              visibleTopLevelTasks.map(t => (
                 <button key={t.id} onClick={() => navigate(`/projects/${project.id}/tasks/${t.id}`)}
                   className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50">
                   <div className="flex items-start justify-between gap-2">
@@ -694,13 +748,23 @@ export default function ProjectWorkspaceScreen() {
         )}
       </div>
 
-      <BottomSheet isOpen={showNewTask} onClose={() => setShowNewTask(false)} title="New Task">
+      <BottomSheet isOpen={showNewTask} onClose={() => { setShowNewTask(false); setNewTaskAssigneeId('') }} title="New Task">
         <div className="space-y-4 pb-4">
           <input
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400"
             value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} placeholder="Task title" autoFocus
           />
-          <button onClick={handleAddTask} disabled={!newTaskTitle.trim()}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Assign To *</label>
+            <select value={newTaskAssigneeId} onChange={e => setNewTaskAssigneeId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+              <option value="">— Select —</option>
+              {users.filter(u => u.status === 'active').map(u => (
+                <option key={u.id} value={u.id}>{u.fullName}</option>
+              ))}
+            </select>
+          </div>
+          <button onClick={handleAddTask} disabled={!newTaskTitle.trim() || !newTaskAssigneeId}
             className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700 disabled:opacity-40">
             Add Task
           </button>

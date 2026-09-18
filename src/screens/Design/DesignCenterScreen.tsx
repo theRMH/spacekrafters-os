@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, MessageCircle, Mail } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -15,12 +15,18 @@ import { getAllQuotations } from '../../services/quotationService'
 import { addAuditLog } from '../../services/auditLogService'
 import type { Project, DesignPackage, DesignPackageStatus, DesignVersion, AuditLog, Quotation } from '../../types'
 
-const STATUS_OPTIONS: { value: DesignPackageStatus; label: string }[] = [
-  { value: 'in_progress',       label: 'In Progress' },
-  { value: 'client_review',     label: 'Client Review' },
-  { value: 'client_approved',   label: 'Client Approved' },
-  { value: 'revision_requested',label: 'Revision Requested' },
-]
+// Same MD-approval terminology as Quotations, via StatusBadge's `label`
+// override — 'client_review' is legacy (pre-existing packages only).
+const DESIGN_STATUS_LABEL: Record<DesignPackageStatus, string> = {
+  in_progress:         'Created',
+  internal_review:     'Pending MD Approval',
+  internally_approved: 'MD Approved',
+  sent_to_client:      'Sent to Client',
+  client_approved:     'Client Approved',
+  revision_requested:  'Revision Requested',
+  rejected:            'Rejected',
+  client_review:       'Client Review',
+}
 
 function fmtDateTime(val: string): string {
   const d = new Date(val)
@@ -55,12 +61,22 @@ export default function DesignCenterScreen() {
   const [versionFiles, setVersionFiles] = useState<string[]>([])
   const [versionNote, setVersionNote] = useState('')
   const [formError, setFormError] = useState('')
+  const [showSendChoice, setShowSendChoice] = useState(false)
 
   // Design starts at the Lead's `internally_approved` stage (LeadStatusSheet.tsx),
   // before a Project exists — Projects are only created once a Lead is Won. So a
   // package must be linkable to either one; leads already Won/Lost are excluded
   // since Won leads should be linked via their resulting Project instead.
   const eligibleLeads = leads.filter(l => l.status !== 'won' && l.status !== 'lost')
+
+  // A pre-project (lead-linked) design package can't start until that lead's
+  // quotation has been client-approved AND has its advance payment recorded
+  // (see the "Record Advance Payment" action in QuotationsScreen.tsx). Won
+  // leads are exempt — a Project can't exist without already having gone
+  // through the (older) advance-payment-at-Won step in LeadStatusSheet.tsx.
+  function eligibleQuotationFor(id: string): Quotation | undefined {
+    return quotations.find(q => q.leadId === id && q.status === 'client_approved' && q.advancePaymentReceived)
+  }
 
   async function refresh() {
     setIsLoading(true)
@@ -127,10 +143,15 @@ export default function DesignCenterScreen() {
       setFormError('Package name is required.')
       return
     }
+    const eligibleQuotation = leadId ? eligibleQuotationFor(leadId) : undefined
+    if (leadId && !eligibleQuotation) {
+      setFormError("This lead's quotation must be Client Approved with the advance payment recorded (in Quotations) before design can start.")
+      return
+    }
     const now = new Date().toISOString()
     const quotationId = projectId
       ? projects.find(p => p.id === projectId)?.quotationId
-      : quotations.find(q => q.leadId === leadId && q.status === 'client_approved')?.id
+      : eligibleQuotation?.id
     const pkg: DesignPackage = {
       id: `dspkg_${Date.now()}`,
       projectId: projectId || undefined,
@@ -195,6 +216,35 @@ export default function DesignCenterScreen() {
     setSnack({ open: true, msg: 'Status updated.', type: 'success' })
   }
 
+  // Mirrors QuotationsScreen.tsx's handleSendToClient — same technical
+  // reasoning (wa.me/mailto can't attach a binary file, so the latest design
+  // version's real file URL is included as a link instead).
+  async function handleSendDesignToClient(channel: 'whatsapp' | 'email') {
+    if (!selected) return
+    const project = selected.projectId ? projects.find(p => p.id === selected.projectId) : undefined
+    const lead = selected.leadId
+      ? leads.find(l => l.id === selected.leadId)
+      : project?.leadId ? leads.find(l => l.id === project.leadId) : undefined
+    const recipientName = lead?.name ?? project?.clientName ?? ''
+    const latestVersion = versionsFor(selected.id)[0]
+    const docUrl = latestVersion?.files[0]
+    const message = `Hi ${recipientName}, please review your design "${selected.name}" from SpaceKrafters.`
+      + (docUrl ? ` View here: ${docUrl}` : '')
+
+    if (channel === 'whatsapp') {
+      const digits = (lead?.phone ?? project?.clientPhone ?? '').replace(/\D/g, '')
+      if (!digits) { setSnack({ open: true, msg: 'No phone number on file for this client.', type: 'error' }); return }
+      const intlPhone = digits.length === 10 ? `91${digits}` : digits
+      window.open(`https://wa.me/${intlPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+    } else {
+      if (!lead?.email) { setSnack({ open: true, msg: 'No email on file for this client.', type: 'error' }); return }
+      window.location.href = `mailto:${lead.email}?subject=${encodeURIComponent('Your Design from SpaceKrafters')}&body=${encodeURIComponent(message)}`
+    }
+
+    setShowSendChoice(false)
+    await handleStatusChange('sent_to_client')
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
       <AppHeader />
@@ -221,7 +271,7 @@ export default function DesignCenterScreen() {
                 <p className="text-xs text-slate-500 mt-0.5">{packageLinkLabel(pkg)}</p>
                 <p className="text-xs text-slate-400 mt-1">{versionsFor(pkg.id).length} version{versionsFor(pkg.id).length !== 1 ? 's' : ''}</p>
               </div>
-              <StatusBadge status={pkg.status} />
+              <StatusBadge status={pkg.status} label={DESIGN_STATUS_LABEL[pkg.status]} />
             </div>
           </div>
         ))}
@@ -241,7 +291,7 @@ export default function DesignCenterScreen() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs text-slate-500">{packageLinkLabel(selected)}</p>
-                <StatusBadge status={selected.status} />
+                <StatusBadge status={selected.status} label={DESIGN_STATUS_LABEL[selected.status]} />
               </div>
               {canUpload && (
                 <button onClick={openVersionUpload}
@@ -258,23 +308,57 @@ export default function DesignCenterScreen() {
               </div>
             )}
 
-            {(canApprove || canRequestRevision) && (
-              <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Status</p>
-                <div className="flex flex-wrap gap-2">
-                  {STATUS_OPTIONS.filter(opt => opt.value !== 'revision_requested' || canRequestRevision)
-                    .filter(opt => opt.value === 'revision_requested' || canApprove)
-                    .map(opt => (
-                    <button key={opt.value} onClick={() => handleStatusChange(opt.value)}
-                      className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold active:opacity-80 ${
-                        selected.status === opt.value ? 'border-brand-primary bg-slate-50 text-slate-800' : 'border-slate-200 text-slate-600'
-                      }`}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
+            <div className="space-y-2">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status Actions</p>
+              <div className="flex flex-wrap gap-2">
+                {selected.status === 'in_progress' && canApprove && (
+                  <button onClick={() => handleStatusChange('internal_review')}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
+                    Submit for MD Approval
+                  </button>
+                )}
+                {selected.status === 'internal_review' && canApprove && (
+                  <button onClick={() => handleStatusChange('internally_approved')}
+                    className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
+                    MD Approve
+                  </button>
+                )}
+                {selected.status === 'internally_approved' && canApprove && (
+                  <button onClick={() => setShowSendChoice(true)}
+                    className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
+                    Send Design to Client
+                  </button>
+                )}
+                {selected.status === 'sent_to_client' && (canApprove || canRequestRevision) && (
+                  <>
+                    {canApprove && (
+                      <button onClick={() => handleStatusChange('client_approved')}
+                        className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
+                        Client Approved
+                      </button>
+                    )}
+                    {canRequestRevision && (
+                      <button onClick={() => handleStatusChange('revision_requested')}
+                        className="px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-700 active:bg-amber-100">
+                        Revision Requested
+                      </button>
+                    )}
+                    {canApprove && (
+                      <button onClick={() => handleStatusChange('rejected')}
+                        className="px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-xs font-semibold text-red-700 active:bg-red-100">
+                        Client Rejected
+                      </button>
+                    )}
+                  </>
+                )}
+                {selected.status === 'revision_requested' && canApprove && (
+                  <button onClick={() => handleStatusChange('in_progress')}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
+                    Back to In Progress
+                  </button>
+                )}
               </div>
-            )}
+            </div>
 
             <div>
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Version History</p>
@@ -311,6 +395,11 @@ export default function DesignCenterScreen() {
               <option value="">— None —</option>
               {eligibleLeads.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
+            {leadId && !eligibleQuotationFor(leadId) && (
+              <p className="text-[11px] text-amber-600 font-semibold mt-1">
+                This lead's quotation must be Client Approved with the advance payment recorded before design can start — check Quotations.
+              </p>
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Project</label>
@@ -358,6 +447,22 @@ export default function DesignCenterScreen() {
             className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
             style={{ background: '#C9A24B' }}>
             Add Version
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Send Design to Client — choose channel */}
+      <BottomSheet isOpen={showSendChoice} onClose={() => setShowSendChoice(false)} title="Send Design to Client">
+        <div className="space-y-3 pb-4">
+          <p className="text-xs text-slate-500">Opens the client's WhatsApp or email with a link to the latest design version pre-filled.</p>
+          <button onClick={() => handleSendDesignToClient('whatsapp')}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-emerald-600 text-white text-sm font-bold active:bg-emerald-700">
+            <MessageCircle size={16} /> Send via WhatsApp
+          </button>
+          <button onClick={() => handleSendDesignToClient('email')}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white text-sm font-bold active:opacity-90"
+            style={{ background: '#0F2A4A' }}>
+            <Mail size={16} /> Send via Email
           </button>
         </div>
       </BottomSheet>

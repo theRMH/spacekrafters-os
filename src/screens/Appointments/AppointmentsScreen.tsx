@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, MapPin } from 'lucide-react'
+import { Plus, MapPin, CheckSquare, Square } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -13,7 +13,10 @@ import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllAppointments, upsertAppointment, deleteAppointment } from '../../services/appointmentService'
 import { addAuditLog } from '../../services/auditLogService'
-import type { Appointment, AppointmentStatus, AuditLog } from '../../types'
+import { getManagedUsersDirectory } from '../../services/userService'
+import { getRoleDisplayLabel } from '../../data/permissions'
+import { sendNotification } from '../../utils/notifications'
+import type { Appointment, AppointmentStatus, AuditLog, ManagedUser } from '../../types'
 
 type Filter = 'all' | AppointmentStatus
 
@@ -44,6 +47,15 @@ function todayInputValue(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+// Older appointments only ever had a single coordinator — fall back to that
+// when assignedToNames isn't there.
+function assigneeSummary(appt: Appointment): string {
+  const names = appt.assignedToNames && appt.assignedToNames.length > 0 ? appt.assignedToNames : [appt.coordinatorName]
+  if (names.length === 1) return `Coordinator: ${names[0]}`
+  if (names.length <= 3) return `Assigned to: ${names.join(', ')}`
+  return `Assigned to: ${names.slice(0, 2).join(', ')} +${names.length - 2} more`
+}
+
 export default function AppointmentsScreen() {
   const { user } = useAuth()
   const { leads } = useCRM()
@@ -68,6 +80,8 @@ export default function AppointmentsScreen() {
   const [status, setStatus] = useState<AppointmentStatus>('scheduled')
   const [notes, setNotes] = useState('')
   const [formError, setFormError] = useState('')
+  const [assignableMembers, setAssignableMembers] = useState<ManagedUser[]>([])
+  const [assignedToIds, setAssignedToIds] = useState<string[]>([])
 
   async function refresh() {
     setIsLoading(true)
@@ -76,6 +90,20 @@ export default function AppointmentsScreen() {
   }
 
   useEffect(() => { refresh() }, [])
+
+  useEffect(() => {
+    getManagedUsersDirectory().then(users => setAssignableMembers(users.filter(u => u.status === 'active')))
+  }, [])
+
+  function toggleAssignee(id: string) {
+    setAssignedToIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
+  }
+
+  function toggleSelectAllAssignees() {
+    setAssignedToIds(prev =>
+      prev.length === assignableMembers.length ? [] : assignableMembers.map(m => m.id)
+    )
+  }
 
   useEffect(() => {
     const state = routerLocation.state as { leadId?: string } | null
@@ -89,6 +117,7 @@ export default function AppointmentsScreen() {
   function resetForm() {
     setLeadId(''); setClientName(''); setScheduledAt(`${todayInputValue()}T`); setLocation('')
     setStatus('scheduled'); setNotes(''); setFormError('')
+    setAssignedToIds(user ? [user.id] : [])
   }
 
   function openNew() {
@@ -100,8 +129,13 @@ export default function AppointmentsScreen() {
     setLeadId(appt.leadId); setClientName(appt.clientName)
     setScheduledAt(toLocalInputValue(appt.scheduledAt)); setLocation(appt.location)
     setStatus(appt.status); setNotes(appt.notes ?? '')
+    setAssignedToIds(appt.assignedToIds ?? (appt.coordinatorId ? [appt.coordinatorId] : []))
     setFormError('')
     setShowEdit(true)
+  }
+
+  function namesFor(ids: string[]): string[] {
+    return ids.map(id => assignableMembers.find(m => m.id === id)?.fullName ?? (id === user?.id ? user?.name : undefined) ?? 'Unknown')
   }
 
   function handleLeadPick(id: string) {
@@ -111,17 +145,19 @@ export default function AppointmentsScreen() {
   }
 
   async function handleAddAppointment() {
-    if (!leadId || !clientName.trim() || !scheduledAt.split('T')[1] || !location.trim()) {
-      setFormError('Lead, client name, date/time, and location are required.')
+    if (!leadId || !clientName.trim() || !scheduledAt.split('T')[1] || !location.trim() || assignedToIds.length === 0) {
+      setFormError('Lead, client name, date/time, location, and at least one assignee are required.')
       return
     }
     const now = new Date().toISOString()
+    const assignedToNames = namesFor(assignedToIds)
     const appt: Appointment = {
       id: `appt_${Date.now()}`,
       leadId, clientName: clientName.trim(),
       scheduledAt: new Date(scheduledAt).toISOString(),
       location: location.trim(),
-      coordinatorId: user?.id, coordinatorName: user?.name ?? 'Unassigned',
+      coordinatorId: assignedToIds[0], coordinatorName: assignedToNames[0],
+      assignedToIds, assignedToNames,
       status: 'scheduled', notes: notes.trim() || undefined,
       createdAt: now, updatedAt: now,
     }
@@ -130,18 +166,31 @@ export default function AppointmentsScreen() {
     setAppointments(prev => [appt, ...prev])
     setShowNew(false)
     setSnack({ open: true, msg: 'Appointment scheduled!', type: 'success' })
+
+    const notifyIds = assignedToIds.filter(id => id !== user?.id)
+    if (notifyIds.length > 0) {
+      sendNotification(
+        notifyIds,
+        'Site Visit Assigned',
+        `${clientName.trim()} — ${fmtDateTime(appt.scheduledAt)} at ${appt.location}`,
+        '/appointments',
+      )
+    }
   }
 
   async function handleUpdateAppointment() {
     if (!selected) return
-    if (!clientName.trim() || !scheduledAt.split('T')[1] || !location.trim()) {
-      setFormError('Client name, date/time, and location are required.')
+    if (!clientName.trim() || !scheduledAt.split('T')[1] || !location.trim() || assignedToIds.length === 0) {
+      setFormError('Client name, date/time, location, and at least one assignee are required.')
       return
     }
+    const assignedToNames = namesFor(assignedToIds)
     const updated: Appointment = {
       ...selected, leadId, clientName: clientName.trim(),
       scheduledAt: new Date(scheduledAt).toISOString(),
       location: location.trim(), status, notes: notes.trim() || undefined,
+      coordinatorId: assignedToIds[0], coordinatorName: assignedToNames[0],
+      assignedToIds, assignedToNames,
       updatedAt: new Date().toISOString(),
     }
     const result = await upsertAppointment(updated)
@@ -213,7 +262,7 @@ export default function AppointmentsScreen() {
                 <p className="text-xs text-slate-600 flex items-center gap-1 mb-1">
                   <MapPin size={12} className="text-slate-400" /> {appt.location}
                 </p>
-                <p className="text-[11px] text-slate-400">Coordinator: {appt.coordinatorName}</p>
+                <p className="text-[11px] text-slate-400">{assigneeSummary(appt)}</p>
               </div>
               <StatusBadge status={appt.status} size="xs" />
             </div>
@@ -247,7 +296,7 @@ export default function AppointmentsScreen() {
                 { label: 'Lead',        value: leads.find(l => l.id === selected.leadId)?.name ?? selected.leadId },
                 { label: 'Date & Time', value: fmtDateTime(selected.scheduledAt) },
                 { label: 'Location',    value: selected.location },
-                { label: 'Coordinator', value: selected.coordinatorName },
+                { label: 'Assigned To', value: (selected.assignedToNames && selected.assignedToNames.length > 0 ? selected.assignedToNames : [selected.coordinatorName]).join(', ') },
                 { label: 'Notes',       value: selected.notes ?? '—' },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between gap-3">
@@ -304,6 +353,31 @@ export default function AppointmentsScreen() {
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Location *</label>
             <input value={location} onChange={e => setLocation(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-slate-500 block">Assign To *</label>
+              <button type="button" onClick={toggleSelectAllAssignees}
+                className="text-[11px] font-semibold text-indigo-600 active:opacity-70">
+                {assignedToIds.length === assignableMembers.length && assignableMembers.length > 0 ? 'Clear all' : 'Select Everyone'}
+              </button>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 max-h-56 overflow-y-auto">
+              {assignableMembers.map(m => {
+                const isChecked = assignedToIds.includes(m.id)
+                return (
+                  <button type="button" key={m.id} onClick={() => toggleAssignee(m.id)}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left active:bg-slate-100">
+                    {isChecked ? <CheckSquare size={17} className="text-indigo-600 shrink-0" /> : <Square size={17} className="text-slate-300 shrink-0" />}
+                    <span className="text-sm text-slate-700 truncate">{m.fullName}</span>
+                    <span className="text-[11px] text-slate-400 ml-auto shrink-0">{getRoleDisplayLabel(m.role, m.displayRole)}</span>
+                  </button>
+                )
+              })}
+              {assignableMembers.length === 0 && (
+                <p className="text-xs text-slate-400 text-center py-4">No active team members found</p>
+              )}
+            </div>
           </div>
           {showEdit && (
             <div>

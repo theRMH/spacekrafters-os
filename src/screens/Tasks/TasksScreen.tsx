@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
@@ -9,6 +10,12 @@ import type { Project, Task } from '../../types'
 
 export default function TasksScreen() {
   const navigate = useNavigate()
+  const { user, can } = useAuth()
+  // Same visibility rule as the project workspace's Tasks tab — managers
+  // (anyone who can edit_task) see the whole team's counts; everyone else
+  // only ever counts tasks assigned to themselves, so what's shown here
+  // matches exactly what they'll find once they tap into a project.
+  const canManageTasks = can('edit_task')
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -37,7 +44,8 @@ export default function TasksScreen() {
 
       <div className="px-4 pt-4 space-y-2.5">
         {!isLoading && filtered.map(project => {
-          const projectTasks = tasks.filter(t => t.projectId === project.id)
+          const allProjectTasks = tasks.filter(t => t.projectId === project.id)
+          const projectTasks = canManageTasks ? allProjectTasks : allProjectTasks.filter(t => t.assigneeId === user?.id)
           const openCount = projectTasks.filter(t => t.status !== 'completed').length
           return (
             <button key={project.id} onClick={() => navigate(`/projects/${project.id}?tab=tasks`)}

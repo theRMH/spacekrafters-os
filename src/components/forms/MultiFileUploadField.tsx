@@ -16,12 +16,19 @@ interface Props {
   helperText?: string
   maxFiles?: number
   uploadButtonLabel?: string
+  // For view-only contexts (a detail sheet showing files that were already
+  // submitted elsewhere) that pass a no-op onChange. Hides Upload and the
+  // remove (X) button — without this, remove still calls deleteRemoteFile()
+  // against the real file even though the no-op onChange makes the list look
+  // unchanged, permanently deleting a file the "read-only" view never should
+  // have been able to touch.
+  readOnly?: boolean
 }
 
 function isImageName(name: string) { return /\.(jpg|jpeg|png|gif|webp)$/i.test(name) }
 function isPdfName(name: string)   { return /\.pdf$/i.test(name) }
 
-export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_ACCEPT, required, error, helperText, maxFiles, uploadButtonLabel = 'Upload File' }: Props) {
+export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_ACCEPT, required, error, helperText, maxFiles, uploadButtonLabel = 'Upload File', readOnly }: Props) {
   const inputRef  = useRef<HTMLInputElement>(null)
   const atMax = maxFiles != null && files.length >= maxFiles
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
@@ -79,32 +86,36 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
       )}
 
       {/* Upload button */}
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        disabled={uploading || atMax}
-        className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed
-          text-sm font-semibold transition-colors active:opacity-70 disabled:opacity-50 disabled:cursor-not-allowed
-          ${error || uploadError
-            ? 'border-red-300 text-red-500 bg-red-50'
-            : 'border-slate-300 text-slate-500 bg-slate-50 hover:border-blue-400 hover:text-blue-500'
-          }`}
-      >
-        <Upload size={15} />
-        {uploading ? 'Uploading…' : uploadButtonLabel}
-      </button>
-      {atMax && (
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading || atMax}
+          className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed
+            text-sm font-semibold transition-colors active:opacity-70 disabled:opacity-50 disabled:cursor-not-allowed
+            ${error || uploadError
+              ? 'border-red-300 text-red-500 bg-red-50'
+              : 'border-slate-300 text-slate-500 bg-slate-50 hover:border-blue-400 hover:text-blue-500'
+            }`}
+        >
+          <Upload size={15} />
+          {uploading ? 'Uploading…' : uploadButtonLabel}
+        </button>
+      )}
+      {atMax && !readOnly && (
         <p className="text-[11px] text-amber-600 font-semibold mt-1">Remove the current file to upload a different one.</p>
       )}
 
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        accept={accept}
-        onChange={handleFileChange}
-        className="hidden"
-      />
+      {!readOnly && (
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept={accept}
+          onChange={handleFileChange}
+          className="hidden"
+        />
+      )}
 
       {helperText && !error && !uploadError && (
         <p className="text-[11px] text-slate-400 mt-1">{helperText}</p>
@@ -143,10 +154,12 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
                     </a>
                   </>
                 )}
-                <button type="button" onClick={() => removeFile(i)}
-                  className="w-6 h-6 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0 active:bg-red-100">
-                  <X size={11} className="text-red-500" />
-                </button>
+                {!readOnly && (
+                  <button type="button" onClick={() => removeFile(i)}
+                    className="w-6 h-6 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0 active:bg-red-100">
+                    <X size={11} className="text-red-500" />
+                  </button>
+                )}
               </div>
             )
           })}
