@@ -6,6 +6,78 @@ User flagged that the New Site Visit date picker allowed past dates and asked fo
 - **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — added the same `todayStr()` + `min` + `onChange` clamp + submit-validation pattern already used elsewhere in the app (e.g. Daily Task, Procurement dates). Applied **create-only** (`!showEdit`): the Visit Date input gets `min={todayStr()}` and clamps typed/pasted past dates back to today, and `handleAddVisit()` rejects a past date with an inline error. Editing an existing site visit remains unrestricted, consistent with how other "created historically, edited later" fields are already handled in this app (Project Expected Handover, Follow-up Due Date) — an existing record may legitimately have a past date.
 - **Verified live**: confirmed the date input's `min` attribute correctly reads today's date (2026-09-19) in the running app; `tsc --noEmit` and `npm run build` both clean.
 
+### UI: Leads bulk-delete bar restyled to a top banner
+**Commit:** Uncommitted
+User shared a reference screenshot (pink top banner, bold "N selected" + "Delete Selected" button) and asked for the Leads bulk-select delete bar to look like it.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — replaced the floating white pill with a full-width `bg-red-50` banner: "Select all (N)" link on the left, bold red "N selected" + a red "Delete Selected" button (with trash icon) on the right. Followed up per user feedback to move it from under the filter chips to a fixed bar pinned at the bottom of the screen (above the nav bar), matching the original bar's position. Same `toggleSelectAll`/`selectedIds`/`showBulkDeleteConfirm` state and logic throughout — visual restyle only, no behavior change.
+- **Verified live**: entered select mode, selected a lead — banner renders correctly at the bottom, matching the reference style, zero console errors, `tsc --noEmit` clean.
+
+### UI: New/Edit Lead form restyled to match reference
+**Commit:** Uncommitted
+User shared a reference screenshot of a cleaner "Add New Lead" form and asked to match it. Clarified scope first (style only vs. also dropping fields) — confirmed style only, all existing fields kept.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — Lead Interest changed from a `<select>` dropdown to a 3-button segmented control (Hot/Medium/Cold, active one highlighted amber), matching the reference. Added "(optional)" suffixes to non-required field labels (Site No., Email, Company/Business Division, Requirement, Notes) and placeholder text to Client Name, Phone Number, Location/City, Email, and Notes, matching the reference's copy. Relabeled a few fields to match the reference's wording (Name → Client Name, City → Location/City, Source → Lead Source, Interest → Lead Interest, Lead Owner/Assigned To → Assign To). Kept the existing gold `#C9A24B` submit button color — it's the shared primary-action color used on 13 other forms across the app, so changing it here only would break consistency.
+- **Verified live**: opened New Lead, confirmed the segmented Interest control renders and toggles correctly, all labels/placeholders match, zero console errors, `tsc --noEmit` clean.
+
+### Add more Lead Source options
+**Commit:** Uncommitted
+User provided the client's full Lead Source list and asked to add it (in addition to existing options, not replacing them).
+- **Changed:** `src/types/index.ts` — `LeadSource` gains 10 new values: `existing_client`, `md_reference`, `ed_reference`, `google`, `instagram`, `facebook`, `client_reference`, `bni`, `whatsapp`, `online`. Purely additive to the union, no migration — existing leads' stored `source` values are unaffected.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — `SOURCE_OPTIONS` reordered/extended to the client's given order (Existing Client, MD Reference, ED Reference, Google, Instagram, Facebook, Walk In, Client Reference, Cold Call, BNI, Referral, WhatsApp, Online), with the app's existing Website/Social Media/Exhibition options (not in the client's list, kept rather than removed) appended before Other.
+- **Verified live**: New Lead's Lead Source dropdown shows all 17 options in the correct order, zero console errors, `tsc --noEmit` clean.
+
+### UI: Lead Source changed from native select to a scrollable custom dropdown
+**Commit:** Uncommitted
+Now that Lead Source has 17 options (previous change), the native `<select>` dropdown expanded to fill the whole screen when opened. User asked for a "scrolling type" list instead.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — Lead Source is now a custom button + absolute dropdown panel (`max-h-60 overflow-y-auto`), same popup-menu pattern already used for the per-lead "⋮" menu in this file (click-outside-to-close via a `document` click listener, `stopPropagation` on the panel). Selected option is highlighted; clicking an option selects it and closes the panel. No change to the underlying `source`/`onSourceChange` state or the "Other" free-text follow-up field.
+- **Verified live**: opened the panel, selected "BNI" — button updates to show "BNI" and the panel closes correctly. Zero console errors, `tsc --noEmit` clean.
+
+### UI: Appointment form — moved Assign To above Date/Time & Location
+**Commit:** Uncommitted
+User asked for the "Assign To" checkbox list to appear directly below Client Name.
+- **Changed:** `src/screens/Appointments/AppointmentsScreen.tsx` — reordered the New/Edit Appointment form fields: Lead → Client Name → **Assign To** → Date & Time → Location → Notes (previously Assign To came after Date & Time and Location). No logic change — same `assignedToIds`/`toggleAssignee`/`toggleSelectAllAssignees` state, purely a field-order move.
+- **Verified live**: opened New Appointment — Assign To's checkbox list (with "Select Everyone") now renders right under Client Name. Zero console errors, `tsc --noEmit` clean.
+
+### Feature: Appointment Confirmed / Rescheduled flow at the Qualified stage, with MD accept
+**Commit:** Uncommitted
+User no longer wanted "Confirm Site Visit Scheduled" to appear immediately once an appointment exists at the Qualified stage — wanted an explicit Appointment Confirmed / Rescheduled choice, with Rescheduled going through a reason → MD notification → MD Accept flow. Clarified one open design decision first (there's no existing Notifications/Tasks inbox screen in this app) — confirmed the MD review happens inline in the Lead's Update Status sheet, same place as today's screenshot, matching the existing MRF/Daily Report approval pattern rather than building a new inbox screen.
+- **Changed:** `src/types/index.ts` — `Appointment` gains `rescheduleReason`, `rescheduledDate` (optional new proposed date), `rescheduleRequestStatus` (`'requested' | 'accepted'`), and requested/accepted by+at fields. Only the latest request's details live on the appointment — the running history lives in the lead's own `activity` log (reused, not a parallel history array), same convention already used for every other Lead-status transition.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the `qualified` stage now: (1) shows **Appointment Confirmed** / **Rescheduled** buttons once an appointment exists (Appointment Confirmed does what "Confirm Site Visit Scheduled" used to — advances the lead to `site_visit_scheduled`; Site Visit is never reachable without it). (2) **Rescheduled** opens a reason textarea (required) + optional new date/time, sets the appointment to `status: 'rescheduled'` with `rescheduleRequestStatus: 'requested'`, sends a push/SMS/WhatsApp notification to every `owner`-role (MD) user via the existing `sendNotification` util with the lead name, Lead ID, contact, appointment details, reason, and the requested new date if given, and appends an activity-log entry to the lead ("Appointment rescheduled: {reason}"). (3) While a request is pending, the MD (owner role) sees a review card with all of the above plus who/when it was requested, and an **Accept** button; anyone else sees a read-only "waiting on MD review" message instead of being able to re-request. (4) Accepting sets `rescheduleRequestStatus: 'accepted'`, reverts the appointment to `status: 'scheduled'` (updated to the requested new date if one was given), and appends a second activity-log entry ("MD accepted the appointment reschedule") — the sheet then returns to the normal Appointment Confirmed/Rescheduled choice so the coordinator can proceed.
+- No migration needed — both `Appointment` and `Lead` are JSONB-backed, purely additive fields.
+- **Verified live end-to-end, not simulated**: created a real lead, qualified it, scheduled a real appointment, requested a reschedule with a reason — confirmed the two-button state, the reschedule form, and that the request landed correctly; reopened as the owner (MD) — confirmed the review card renders the lead name/ID, contact, appointment details, and reason exactly as specified; clicked Accept — confirmed the sheet returns to the normal two-button state and the lead's Activity Log shows both "Appointment rescheduled: ..." and "MD accepted the appointment reschedule" in order, persisted (reloaded the page and re-confirmed). Zero console errors. Test lead/appointment deleted afterward. `tsc --noEmit` and `npm run build` both clean.
+
+### Feature: MD Task tab — Rescheduled Appointment approvals (Accept/Reject)
+**Commit:** Uncommitted
+Follow-up to the reschedule flow added earlier today. User shared a reference app's "Task" tab (stat banner + pending-approval cards with a Pending pill and Update Status button) and asked for the same pattern here, with Rescheduled appointments auto-creating an MD-only task, and Reject added alongside Accept. Clarified two open decisions first: (1) build a focused screen (just the pending list + a count banner) rather than the reference's full 4-stat dashboard, since this app only has one task type today; (2) this new screen replaces the inline Accept-only review card added to the Lead's Update Status sheet earlier today, rather than keeping both.
+- **Added:** `Permission` gains `view_md_tasks`, granted to `owner` only (`src/types/index.ts`, `src/data/permissions.ts`) — same "MD-only" gate used elsewhere (e.g. `assign_daily_task`). Screen route `md-tasks` mapped in `SCREEN_PERMISSIONS`.
+- **Added:** `src/screens/MDTasks/MDTasksScreen.tsx`, new route `/md-tasks`, new nav item "Task" (Wrench icon) in the CRM section of `navItems.ts` — visible only to owner since `view_md_tasks` isn't granted to any other role. Shows a pink stat banner ("Rescheduled Appointments — N waiting for your review") and a card per pending reschedule request (title, "Reschedule Request" tag, client name, Lead ID, contact, appointment date, reason, a Pending pill, and an Update Status button) — same card/badge/Pending-pill/Update-Status pattern as the reference. Update Status opens a sheet with the full request details, an optional MD Notes field, and **Accept**/**Reject** buttons.
+  - Accept: appointment reverts to `status: 'scheduled'` (updated to the requested new date if one was given), `rescheduleRequestStatus: 'accepted'`; Reject: `rescheduleRequestStatus: 'rejected'`, appointment stays as-is otherwise (unblocked either way — the coordinator isn't left stuck). Both append an activity-log entry to the lead (with MD notes folded in if given) and push/SMS/WhatsApp-notify the lead's owner via the existing `sendNotification` util.
+- **Changed:** `src/types/index.ts` — `Appointment.rescheduleRequestStatus` gains `'rejected'`; added `rescheduleMdNotes`.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — removed the inline Accept-only review card added earlier today; a pending reschedule now shows a simple "waiting on MD review" message with a "Go to Task tab →" link for the owner, and the read-only reason line for everyone else. Removed the now-dead `submitAcceptReschedule` (superseded by the Task tab's own accept/reject handler).
+- No migration needed — `Appointment` is JSONB-backed, purely additive fields.
+- **Verified live end-to-end, not simulated**: created a real lead, qualified it, scheduled an appointment, submitted a reschedule request with a reason — opened the Task tab as MD and confirmed the banner count, card details (client, Lead ID, contact, appointment, reason, Pending pill) all render correctly; opened Update Status, added MD notes, clicked Accept — confirmed the card disappeared, the banner count dropped to 0, and a confirmation snackbar showed. Confirmed directly in the database that the appointment reverted to `scheduled` with `rescheduleRequestStatus: 'accepted'` and the MD notes saved, and that the lead's Activity Log has both the reschedule-request and MD-accepted entries in order with the notes folded in. Zero console errors throughout. Test lead/appointment deleted afterward. `tsc --noEmit` and `npm run build` both clean.
+
+### UI: MD Task tab banner/tag color changed to blue
+**Commit:** Uncommitted
+- **Changed:** `src/screens/MDTasks/MDTasksScreen.tsx` — the stat banner and each card's "Reschedule Request" tag changed from pink/fuchsia to blue (`#DBEAFE`/`#1D4ED8`/`#3B82F6`).
+- **Verified live**: screenshot confirms the banner and icon now render blue. `tsc --noEmit` clean.
+
+### UI: Leads list card — fixed interest badge wrapping onto its own line
+**Commit:** Uncommitted
+User flagged the card header looked misaligned — on phone-width screens the Interest badge (Hot/Medium/Cold) was wrapping onto its own line below the name/city, out of step with the Status badge/menu on the right.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — moved the interest badge out of the left text row (leadNumber/name/siteNo/city) into the right-hand column, stacked above the Status badge/menu. Groups the two badge-like indicators together and lets the left text wrap on its own without an orphaned badge falling to a second line.
+- **Verified live**: card now stays on one line at phone width with Interest, Status, and menu all aligned top-right. `tsc --noEmit` clean.
+
+### UI: Leads list card — added location pin icon before city
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — added a `MapPin` icon before the city text in each lead card, same size/color convention already used for location in Appointments and Site Visit Report (`size=12`, `text-slate-400`).
+- **Verified live**: icon renders correctly aligned with the city text. `tsc --noEmit` clean.
+
+### UI: Leads list card — moved Interest badge back to the left
+**Commit:** Uncommitted
+User asked to move the Interest (Hot/Medium/Cold) badge from the right side back to the left, alongside Lead ID/Name/City, keeping Status + the 3-dot menu on the right — reversing the alignment change made two turns ago now that the location icon addition freed up room on the left.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — Interest badge moved back into the left text row (after the city), removed from the right-hand column. No logic/functionality change.
+- **Verified live**: at desktop width, matches the reference exactly (badge inline with Lead ID/Name/City, Status+menu on the right); at phone width, it wraps gracefully alongside the city on a second line rather than floating alone. `tsc --noEmit` clean.
+
 ## 2026-09-18
 
 ### Feature: Procurement Status on MRF, Vendors/Labour Listing, Site Engineer Daily Report (locked + LO-approved edits)

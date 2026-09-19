@@ -6,7 +6,7 @@ import {
   Truck, Wallet, Landmark, Receipt, CreditCard, BarChart2, ClipboardCheck,
   CalendarOff, UserCog, File, Settings, UploadCloud, History,
   PiggyBank, Tags, BellRing, TrendingUp, PieChart, CalendarDays, Scale, LineChart,
-  CalendarClock, LocateFixed, ListChecks, FileSearch, Hammer, FileEdit,
+  CalendarClock, LocateFixed, ListChecks, FileSearch, Hammer, FileEdit, Wrench,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -32,6 +32,7 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { icon: Users,         label: 'Leads',        path: '/leads',        permission: 'view_leads'        },
       { icon: Calendar,      label: 'Appointments', path: '/appointments', permission: 'view_appointments' },
       { icon: ClipboardList, label: 'Follow-ups',   path: '/follow-ups',   permission: 'view_activity'     },
+      { icon: Wrench,        label: 'Task',         path: '/md-tasks',     permission: 'view_md_tasks'     },
     ],
   },
   {

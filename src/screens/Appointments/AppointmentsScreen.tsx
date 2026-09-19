@@ -339,22 +339,6 @@ export default function AppointmentsScreen() {
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Date & Time *</label>
-            <div className="grid grid-cols-2 gap-2">
-              <input type="date" value={scheduledAt.split('T')[0] || ''} min={todayInputValue()}
-                onChange={e => setScheduledAt(`${e.target.value}T${scheduledAt.split('T')[1] || '09:00'}`)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-              <input type="time" value={scheduledAt.split('T')[1] || ''}
-                onChange={e => setScheduledAt(`${scheduledAt.split('T')[0] || new Date().toISOString().slice(0, 10)}T${e.target.value}`)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Location *</label>
-            <input value={location} onChange={e => setLocation(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-          </div>
-          <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-semibold text-slate-500 block">Assign To *</label>
               <button type="button" onClick={toggleSelectAllAssignees}
@@ -378,6 +362,22 @@ export default function AppointmentsScreen() {
                 <p className="text-xs text-slate-400 text-center py-4">No active team members found</p>
               )}
             </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Date & Time *</label>
+            <div className="grid grid-cols-2 gap-2">
+              <input type="date" value={scheduledAt.split('T')[0] || ''} min={todayInputValue()}
+                onChange={e => setScheduledAt(`${e.target.value}T${scheduledAt.split('T')[1] || '09:00'}`)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+              <input type="time" value={scheduledAt.split('T')[1] || ''}
+                onChange={e => setScheduledAt(`${scheduledAt.split('T')[0] || new Date().toISOString().slice(0, 10)}T${e.target.value}`)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Location *</label>
+            <input value={location} onChange={e => setLocation(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
           {showEdit && (
             <div>

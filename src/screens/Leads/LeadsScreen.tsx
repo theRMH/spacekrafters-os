@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Phone, Trash2, MoreVertical, CheckSquare, Square, X, ListChecks } from 'lucide-react'
+import { Plus, Phone, Trash2, MoreVertical, CheckSquare, Square, X, ListChecks, ChevronDown, MapPin } from 'lucide-react'
 import { useCRM } from '../../context/CRMContext'
 import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -52,13 +52,23 @@ const CHIPS: { value: Filter; label: string }[] = [
 ]
 
 const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
-  { value: 'referral',      label: 'Referral'      },
-  { value: 'walk_in',       label: 'Walk In'       },
-  { value: 'website',       label: 'Website'       },
-  { value: 'social_media',  label: 'Social Media'  },
-  { value: 'cold_call',     label: 'Cold Call'     },
-  { value: 'exhibition',    label: 'Exhibition'    },
-  { value: 'other',         label: 'Other'         },
+  { value: 'existing_client',  label: 'Existing Client'  },
+  { value: 'md_reference',     label: 'MD Reference'     },
+  { value: 'ed_reference',     label: 'ED Reference'     },
+  { value: 'google',           label: 'Google'           },
+  { value: 'instagram',        label: 'Instagram'        },
+  { value: 'facebook',         label: 'Facebook'         },
+  { value: 'walk_in',          label: 'Walk In'          },
+  { value: 'client_reference', label: 'Client Reference' },
+  { value: 'cold_call',        label: 'Cold Call'        },
+  { value: 'bni',              label: 'BNI'              },
+  { value: 'referral',         label: 'Referral'         },
+  { value: 'whatsapp',         label: 'WhatsApp'         },
+  { value: 'online',           label: 'Online'           },
+  { value: 'website',          label: 'Website'          },
+  { value: 'social_media',     label: 'Social Media'     },
+  { value: 'exhibition',       label: 'Exhibition'       },
+  { value: 'other',            label: 'Other'            },
 ]
 const SOURCE_LABEL: Record<LeadSource, string> = Object.fromEntries(SOURCE_OPTIONS.map(o => [o.value, o.label])) as Record<LeadSource, string>
 
@@ -104,6 +114,7 @@ export default function LeadsScreen() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  const [sourceMenuOpen, setSourceMenuOpen] = useState(false)
 
   const [name, setName] = useState('')
   const [leadCodePrefix, setLeadCodePrefix] = useState<LeadCodePrefix | ''>('')
@@ -145,6 +156,13 @@ export default function LeadsScreen() {
     document.addEventListener('click', close)
     return () => document.removeEventListener('click', close)
   }, [menuOpenFor])
+
+  useEffect(() => {
+    if (!sourceMenuOpen) return
+    const close = () => setSourceMenuOpen(false)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [sourceMenuOpen])
 
   function onOwnerChange(id: string) {
     if (id === CUSTOM_OWNER_VALUE) {
@@ -359,9 +377,11 @@ export default function LeadsScreen() {
                       <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{lead.siteNo}</span>
                     )}
                     <span className="text-slate-300 text-xs">|</span>
-                    <span className="text-xs text-slate-500">{lead.city}</span>
+                    <span className="flex items-center gap-1 text-xs text-slate-500">
+                      <MapPin size={12} className="text-slate-400" /> {lead.city}
+                    </span>
                     {interestOpt && (
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${interestOpt.badge}`}>{interestOpt.label}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${interestOpt.badge}`}>{interestOpt.label}</span>
                     )}
                   </div>
                   {lead.requirement && <p className="text-xs text-slate-600 truncate mb-1">{lead.requirement}</p>}
@@ -418,17 +438,16 @@ export default function LeadsScreen() {
       </div>
 
       {selectMode && (
-        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[390px] px-4 pb-2 z-30
-          lg:left-[260px] lg:translate-x-0 lg:w-[calc(100%-260px)] lg:max-w-none lg:bottom-6 lg:px-6">
-          <div className="bg-white rounded-2xl shadow-sheet border border-slate-100 px-4 py-3 flex items-center justify-between gap-3 lg:max-w-md lg:ml-auto lg:mr-6">
-            <button onClick={toggleSelectAll} className="text-xs font-semibold text-indigo-600 active:opacity-70">
+        <div className="fixed bottom-16 left-0 w-full z-30 lg:left-[260px] lg:w-[calc(100%-260px)] lg:bottom-0">
+          <div className="bg-red-50 border-t border-red-100 px-5 py-3 flex items-center justify-between gap-3">
+            <button onClick={toggleSelectAll} className="text-xs font-semibold text-red-600 active:opacity-70">
               {selectedIds.size === filtered.length && filtered.length > 0 ? 'Clear all' : `Select all (${filtered.length})`}
             </button>
             <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold text-slate-500">{selectedIds.size} selected</span>
+              <span className="text-sm font-bold text-red-600">{selectedIds.size} selected</span>
               <button onClick={() => setShowBulkDeleteConfirm(true)} disabled={selectedIds.size === 0}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-red-500 active:opacity-90 disabled:opacity-40">
-                <Trash2 size={13} /> Delete
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-red-500 active:opacity-90 disabled:opacity-40">
+                <Trash2 size={13} /> Delete Selected
               </button>
             </div>
           </div>
@@ -576,32 +595,32 @@ export default function LeadsScreen() {
             </div>
           )}
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Name *</label>
-            <input value={name} onChange={e => setName(e.target.value)}
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Client Name *</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Rajesh Kumar"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Site No.</label>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Site No. <span className="font-normal text-slate-400">(optional)</span></label>
             <input value={siteNo} onChange={e => setSiteNo(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Phone *</label>
-            <input value={phone} onChange={e => setPhone(e.target.value)}
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Phone Number *</label>
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="9876543210"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Email</label>
-            <input value={email} onChange={e => setEmail(e.target.value)}
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Email <span className="font-normal text-slate-400">(optional)</span></label>
+            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="optional"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">City *</label>
-            <input value={city} onChange={e => setCity(e.target.value)}
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Location / City *</label>
+            <input value={city} onChange={e => setCity(e.target.value)} placeholder="e.g. Anna Nagar, Chennai"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Company / Business Division</label>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Company / Business Division <span className="font-normal text-slate-400">(optional)</span></label>
             <select value={businessDivision} onChange={e => onBusinessDivisionChange(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
               <option value="">— Select —</option>
@@ -629,7 +648,7 @@ export default function LeadsScreen() {
             </div>
           )}
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead Owner / Assigned To *</label>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Assign To *</label>
             <select value={isCustomOwner ? CUSTOM_OWNER_VALUE : ownerId} onChange={e => onOwnerChange(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
               <option value="">— Select —</option>
@@ -645,16 +664,31 @@ export default function LeadsScreen() {
             )}
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Requirement</label>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Requirement <span className="font-normal text-slate-400">(optional)</span></label>
             <input value={requirement} onChange={e => setRequirement(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
-          <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Source</label>
-            <select value={source} onChange={e => onSourceChange(e.target.value as LeadSource)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              {SOURCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+          <div className="relative">
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead Source *</label>
+            <button type="button" onClick={e => { e.stopPropagation(); setSourceMenuOpen(o => !o) }}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-left flex items-center justify-between gap-2 focus:outline-none focus:border-indigo-400">
+              <span>{SOURCE_OPTIONS.find(o => o.value === source)?.label ?? 'Select…'}</span>
+              <ChevronDown size={15} className="text-slate-400 shrink-0" />
+            </button>
+            {sourceMenuOpen && (
+              <div onClick={e => e.stopPropagation()}
+                className="absolute left-0 right-0 top-full mt-1 z-40 bg-white rounded-xl shadow-sheet border border-slate-100 max-h-60 overflow-y-auto">
+                {SOURCE_OPTIONS.map(o => (
+                  <button key={o.value} type="button"
+                    onClick={() => { onSourceChange(o.value); setSourceMenuOpen(false) }}
+                    className={`w-full text-left px-4 py-2.5 text-sm active:bg-slate-100 ${
+                      o.value === source ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-700'
+                    }`}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
             {source === 'other' && (
               <input value={subSource} onChange={e => setSubSource(e.target.value)}
                 placeholder="Type the source…"
@@ -662,11 +696,19 @@ export default function LeadsScreen() {
             )}
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Interest</label>
-            <select value={interest} onChange={e => setInterest(e.target.value as LeadInterest)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              {INTEREST_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead Interest *</label>
+            <div className="grid grid-cols-3 gap-2">
+              {INTEREST_OPTIONS.map(o => (
+                <button key={o.value} type="button" onClick={() => setInterest(o.value)}
+                  className={`rounded-xl border px-2 py-3 text-xs font-bold active:opacity-90 ${
+                    interest === o.value
+                      ? 'border-amber-300 bg-amber-50 text-amber-700'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
           </div>
           {showEdit && (
             <div>
@@ -678,8 +720,8 @@ export default function LeadsScreen() {
             </div>
           )}
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Notes</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Notes <span className="font-normal text-slate-400">(optional)</span></label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Any additional notes…"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
           </div>
           <button

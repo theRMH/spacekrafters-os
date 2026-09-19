@@ -44,6 +44,9 @@ export type Permission =
   | 'view_attendance' | 'mark_attendance' | 'view_leave' | 'approve_leave' | 'view_weekly_planner'
   // Daily Tasks — everyone can see their own; only MD (owner) can assign
   | 'view_daily_tasks' | 'assign_daily_task'
+  // MD Task tab — owner-only inbox of pending approvals (currently just
+  // rescheduled-appointment requests; same shape can hold future task types)
+  | 'view_md_tasks'
   // Reports
   | 'view_reports' | 'view_financial_reports'
   // Admin
@@ -102,6 +105,7 @@ export type LeadStatus =
   | 'won'
   | 'lost'
 export type LeadSource = 'referral' | 'walk_in' | 'website' | 'social_media' | 'cold_call' | 'exhibition' | 'other'
+  | 'existing_client' | 'md_reference' | 'ed_reference' | 'google' | 'instagram' | 'facebook' | 'client_reference' | 'bni' | 'whatsapp' | 'online'
 export type LeadInterest = 'hot' | 'medium' | 'cold'
 export type BusinessDivision = 'fgd' | 'first_property_contractors' | 'sk_constructions' | 'sk_interiors' | 'sk_turnkey_interiors'
 export type BusinessCategory = 'residential' | 'commercial' | 'industrial'
@@ -177,6 +181,20 @@ export interface Appointment {
   assignedToNames?: string[]
   status: AppointmentStatus
   notes?: string
+  // Reschedule request/accept flow: coordinator requests a reschedule with a
+  // reason (status becomes 'rescheduled'), MD reviews and accepts it (status
+  // reverts to 'scheduled', updated to rescheduledDate if one was given).
+  // Only the latest request's details live here — the running history of
+  // every reschedule lives in the lead's own `activity` log, same as every
+  // other Lead-status transition already does, rather than a parallel array.
+  rescheduleReason?: string
+  rescheduledDate?: string
+  rescheduleRequestStatus?: 'requested' | 'accepted' | 'rejected'
+  rescheduleRequestedBy?: string
+  rescheduleRequestedAt?: string
+  rescheduleAcceptedBy?: string
+  rescheduleAcceptedAt?: string
+  rescheduleMdNotes?: string
   createdAt: string
   updatedAt: string
 }
