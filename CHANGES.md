@@ -1,3 +1,11 @@
+## 2026-09-19
+
+### Fix: Site Visit "Visit Date" restricted to today onward (new visits only)
+**Commit:** Uncommitted
+User flagged that the New Site Visit date picker allowed past dates and asked for it to start from today. Note: an earlier audit (2026-09-17) had deliberately left this field unrestricted, reasoning that visits are logged after they happen (backdated is the normal case). Flagged that conflict back to the user via AskUserQuestion; they confirmed they want the restriction anyway, accepting that this now blocks logging a visit for a date before today.
+- **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — added the same `todayStr()` + `min` + `onChange` clamp + submit-validation pattern already used elsewhere in the app (e.g. Daily Task, Procurement dates). Applied **create-only** (`!showEdit`): the Visit Date input gets `min={todayStr()}` and clamps typed/pasted past dates back to today, and `handleAddVisit()` rejects a past date with an inline error. Editing an existing site visit remains unrestricted, consistent with how other "created historically, edited later" fields are already handled in this app (Project Expected Handover, Follow-up Due Date) — an existing record may legitimately have a past date.
+- **Verified live**: confirmed the date input's `min` attribute correctly reads today's date (2026-09-19) in the running app; `tsc --noEmit` and `npm run build` both clean.
+
 ## 2026-09-18
 
 ### Feature: Procurement Status on MRF, Vendors/Labour Listing, Site Engineer Daily Report (locked + LO-approved edits)
