@@ -12,6 +12,12 @@ import { getAllAppointments, upsertAppointment } from '../../services/appointmen
 import { sendNotification } from '../../utils/notifications'
 import type { Appointment, Lead, LeadStatus, ManagedUser, UserRole } from '../../types'
 
+function todayStr(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 export const ROLE_FOR_LEAD_STATUS: Partial<Record<LeadStatus, UserRole>> = {
   new:                    'project_coordinator',
   contacted:              'project_coordinator',
@@ -308,8 +314,14 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">New date/time <span className="font-normal text-slate-400">(optional)</span></label>
-                <input type="datetime-local" value={rescheduledDateInput} onChange={e => setRescheduledDateInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="date" value={rescheduledDateInput.split('T')[0] || ''} min={todayStr()}
+                    onChange={e => setRescheduledDateInput(`${e.target.value}T${rescheduledDateInput.split('T')[1] || '09:00'}`)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+                  <input type="time" value={rescheduledDateInput.split('T')[1] || ''}
+                    onChange={e => setRescheduledDateInput(`${rescheduledDateInput.split('T')[0] || new Date().toISOString().slice(0, 10)}T${e.target.value}`)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+                </div>
               </div>
               <button disabled={saving || !rescheduleReasonText.trim()} onClick={submitReschedule} className={primaryBtn} style={{ background: '#0F2A4A' }}>
                 Submit Reschedule

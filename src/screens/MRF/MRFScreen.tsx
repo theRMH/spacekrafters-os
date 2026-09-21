@@ -29,6 +29,12 @@ function fmtDate(val?: string): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+function todayStr(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 function fmtDateTime(val: string): string {
   const d = new Date(val)
   if (isNaN(d.getTime())) return val
@@ -286,7 +292,7 @@ export default function MRFScreen() {
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-500 mb-1 block">Expected Delivery Date *</label>
-                  <input type="date" value={expectedDeliveryDate} onChange={e => setExpectedDeliveryDate(e.target.value)}
+                  <input type="date" value={expectedDeliveryDate} min={requestingDate || todayStr()} onChange={e => setExpectedDeliveryDate(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
                 </div>
                 <button onClick={handleProcurementSubmit} className="w-full py-3 rounded-xl text-white text-sm font-bold active:opacity-90" style={{ background: '#0F2A4A' }}>

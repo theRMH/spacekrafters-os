@@ -1,3 +1,105 @@
+## 2026-09-21
+
+### Quotation: "Proceed with Advance" / "Proceed without Advance" before Design (Without Advance never blocks Design)
+**Commit:** Uncommitted
+After the client approves a quotation, the single "Record Advance Payment" button is replaced by two choices. Previously Design Center refused to start a lead's design package until an advance had been recorded, which is exactly the block this removes.
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx`
+  - Client Approved quotations now show **Proceed with Advance** and **Proceed without Advance**.
+  - **Proceed with Advance** opens the existing advance sheet (amount required, reference optional) and records **Advance status: With Advance**. (Kept the amount capture rather than a bare click, since the advance amount is a real finance fact that was already being collected.)
+  - **Proceed without Advance** records **Advance status: Without Advance** immediately. Afterwards a **Record Advance Payment (when received)** button stays available, and using it switches the quotation to With Advance and logs "Advance payment received (was proceeding without advance)" — so an accidental click, or an advance that arrives later, is recoverable.
+  - Every choice is written to the quotation's Approval History **and the lead's Activity Log**, each stamped with the acting user and date/time, e.g. "Proceeding without advance payment — Advance status: Without Advance".
+  - Status box on the quotation shows "Advance status: Without Advance" (amber) or "With Advance — Payment Received" (green).
+- **Changed:** `src/screens/Design/DesignCenterScreen.tsx` — the design-package gate now needs the quotation Client Approved **and** either choice made (`advanceStatus`); `advancePaymentReceived` still counts, so quotations handled before this change keep working. Warning/error wording updated.
+- **Changed:** `src/types/index.ts` — `Quotation.advanceStatus: 'with_advance' | 'without_advance'`. JSON field, no migration.
+- **Verified live:** after Client Approved both buttons show; Design Center **blocks** the lead before a choice is made; after **Proceed without Advance** the block is gone and a design package was created; later "Record Advance Payment" switched it to With Advance; a second quotation taken through **Proceed with Advance** (₹25,000); status persisted after reload; the lead's Activity Log received each entry with user and timestamp; zero console errors. Test quotations, the test design package and the test activity entries were removed. `tsc --noEmit` and `npm run build` clean.
+- Not changed: the **Lead-level** "Client Approved → Won" step (Update Status on the lead) still asks for an advance amount before creating the project; and the **Project** "Advance Payment" stage copy still says "Advance payment is recorded". Neither blocks Design Center. Say if either should offer Without Advance too.
+
+### Quotation "Send to Client" now only records the action (no WhatsApp / email is opened or sent)
+**Commit:** Uncommitted
+No messaging provider is integrated yet, so Send to Client no longer opens `wa.me` / `mailto:` at all.
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx`
+  - After MD approval, **Send to Client** opens a sheet with two choices, **WhatsApp** and **Email**; the **Send to Client** button stays disabled until one is picked. It states clearly that nothing is actually sent.
+  - Clicking it records **"Quotation sent via WhatsApp"** / **"Quotation sent via Email"** in (1) the quotation's Approval History and (2) the **lead's Activity Log** — each with the user and date/time — then moves the quotation to Sent to Client. The badge now reads **"Awaiting Client Approval"**, and the Client Approved / Revision Requested / Client Rejected step follows ("Sent to the client — record their decision").
+  - Removed the message-building, the phone/email-on-file checks (no longer relevant) and the `window.open` / `mailto:` calls. `handleStatusChange` now returns success/failure so the lead log is only written if the status change saved.
+- **Verified live:** for both Email and WhatsApp — Send disabled until a method is chosen; **0 popups and 0 wa.me/mailto requests or navigations**; status Awaiting Client Approval with the Client decision buttons; quotation history shows "Quotation sent via …" with user + time; database confirms the lead's activity log received "Quotation sent via Email/WhatsApp" entries by the acting user with timestamps. Test quotations and the test activity entries were removed afterwards. `tsc --noEmit` and `npm run build` clean.
+- Not changed: **Design Center's** "Send Design to Client" still opens WhatsApp/email (this request was about quotations) — say if it should be record-only too.
+
+### Quotation approval workflow enforced: Created → Pending MD Approval → MD Approve/Reject → Send to Client → Client decision
+**Commit:** Uncommitted  ·  **⚠ DEPLOY** (RLS policy — already applied to the live DB, see below)
+The Pending-MD → MD-approved → Send-to-Client → client-decision statuses and badges already existed (2026-09-17/18). Gaps closed:
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx`
+  - New quotations are created directly as **Pending MD Approval** (`internal_review`) instead of Draft, and the MD(s) get a push/SMS/WhatsApp notification (`sendNotification`, best-effort). Draft is kept only for older quotations, which now show "Send to MD for Approval".
+  - MD sees **MD Approve** and a new **Reject** button. Reject opens a sheet with a **required reason**; the quotation goes to `rejected`, the reason is kept (`rejectionReason`) and shown in a red "Rejected by MD" box. Send to Client is only offered once the status is MD Approved (unchanged) — it still uses the existing WhatsApp / Email choice. Non-MD users see "Waiting for MD approval".
+  - **Approval History** section on the detail sheet: every action (created, MD approved, MD rejected + reason, sent to client via WhatsApp/Email, client approved / revision requested / rejected, edited & resubmitted) with **who (name + role) and date/time**, newest first. Stored in a new `statusHistory` array on the quotation (JSON — no migration; older quotations simply have none).
+  - **Editing** a quotation that is MD Approved, Rejected or Revision Requested now sends it **back to Pending MD Approval** (logged, MD notified) — otherwise an approved quotation could be changed and sent to the client without the MD seeing the new version. Edits to Pending / Sent / Client Approved quotations do not change status (as before).
+- **Changed:** `src/types/index.ts` — `QuotationStatusHistoryItem`, `Quotation.statusHistory`, `Quotation.rejectionReason`.
+- **Changed (behavior):** `src/data/permissions.ts` — removed `approve_quotation_internal` from the **QS** role. MD Approve/Reject is now **owner-only**; QS can still create and edit quotations. (Previously QS could also "MD Approve".)
+- **Changed:** `supabase/rls-policies.sql` — the `sks_quotations` UPDATE policy now also blocks QS / project coordinator from setting `internally_approved`, so approval is enforced in the database too, not just hidden in the UI. ⚠ DEPLOY — **already applied directly to the live database** (policy dropped/recreated in a transaction, verified via `pg_policies`).
+- **Verified live (as MD):** create → list shows "Pending MD Approval", Send to Client absent; Reject disabled until a reason is typed → Rejected + reason box + history; Edit → back to Pending MD Approval; MD Approve → Send to Client appears; Send via WhatsApp → Sent to Client (history "via WhatsApp"); Client Approved; reload → status and full 6-entry history persisted. Zero console errors. Test quotation and its audit-log rows deleted. `tsc --noEmit`, unit tests, `npm run build` clean.
+- Not tested live: the QS/coordinator side (only the owner test login exists) — that boundary rests on the UI permission change plus the RLS policy.
+
+### Quotation units renamed to lowercase (lsm, cft, kgs)
+**Commit:** Uncommitted
+The three extra units (`L.Sm`, `CFT`, `Kgs`) were already in the Quotation Unit dropdown from 2026-09-17. On clarifying, the ask was to match the other units' lowercase style.
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — `UNIT_OPTIONS` now `sqft, nos, rft, sft, lot, set, lsm, cft, kgs`. Added `normalizeUnit`/`normalizeQuotationUnits` applied when quotations load, mapping any old `L.Sm`/`CFT`/`Kgs` line units to the new names for display, the edit form, print and Excel export (saved records are only rewritten if that quotation is edited and re-saved). Checked the live database first: no saved quotation line uses the old names, so nothing was affected.
+- Not changed: the Requirements screen's own unit list (`sqft, nos, rft, sft, lot, set`) — offered, not chosen.
+- **Verified live:** New Quotation → Unit dropdown lists the nine options with lsm/cft/kgs; selecting `lsm` holds. `tsc --noEmit` clean.
+
+### Lead form: browser spellcheck (red underline) turned off
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — added `spellCheck={false}` on the New/Edit Lead form wrapper. The attribute is inherited by every descendant, so all text inputs and textareas in the form (Client Name, Site No., Phone, Email, Location/City, Requirement, Notes, the custom Lead Owner name and "Other" source fields) stop showing the browser's red "misspelled" underline; any field added to this form later is covered automatically. Validation is untouched.
+- **Verified live:** all 9 text fields in the form report `spellcheck = false` (including the two that only appear for "Lead Owner: Other" and "Source: Other"); submitting an empty form still shows the required-fields message. `tsc --noEmit` clean.
+- Scope: Lead form only, as requested. Other forms (Appointments, Site Visits, etc.) still use the browser default.
+
+### UI: Removed the three-dot menu from lead cards
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — removed the ⋮ button and its single "Delete" popup from each lead card, plus the now-unused `menuOpenFor` state, click-away listener and `MoreVertical` import. Deleting a lead is unchanged and still available from the lead's detail sheet ("Delete Lead") and from Select mode (bulk delete). The Status badge now sits alone at the top right.
+- **Verified live:** no "More actions" buttons on the cards; "Delete Lead" still present in the detail sheet. `tsc --noEmit` clean.
+- Answered a question, no code change: the grey number next to the lead name (e.g. "010") is the lead's optional **Site No.** field.
+
+### Project "Designing" stage — verified, dropdown made order-configurable, stage history now recorded and shown
+**Commit:** Uncommitted
+The Designing stage itself was added earlier (2026-09-18): `ProjectStage` value, label, badge colour, responsible role (designer), and the workflow step Advance Payment → Designing → Execution. Re-audited against this request and closed three gaps:
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — the Stage dropdown was a second hand-maintained list that had to be edited in step with `PROJECT_STAGE_ORDER`. It's now built from `PROJECT_STAGE_ORDER` + `PROJECT_STAGE_LABEL`, so reordering that one array (in `ProjectStatusSheet.tsx`) changes the dropdown, the workflow's "next stage", and the labels together.
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — saving a project now appends a status-history entry when it's created ("Project created at Designing") or its stage is changed in the form ("Stage changed from X to Y"). Previously only the Update Status workflow wrote history, so a project created at, or edited to, Designing left no trace.
+- **Added:** `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` — a "Stage History" card on the project Overview (newest first: stage, note, who, when). History was being stored but was never displayed anywhere.
+- No existing stage was removed or changed; no migration (history is part of the existing project JSON).
+- **Verified live:** New Project → Stage dropdown lists Advance Payment, **Designing**, Execution, Procurement, Handover Prep, Final Payment, Reconciliation, Closed; created a project at Designing → saved, shows "Designing" on the list card after a reload, workspace shows Current Stage Designing (responsible: Designer) with a "Project created at Designing" history entry; Update Status → Confirm Design Finalized moved it to Execution and added a second history entry, both persisted after reload. Test project and its audit-log row deleted. `tsc --noEmit` and `npm run build` clean. (Editing the stage through the form uses the same code path but wasn't separately run.)
+
+### Multi-file uploads: New Design Package files + consistent behavior across every upload field
+**Commit:** Uncommitted
+**Audit result.** The shared `MultiFileUploadField` already accepted several files at once and every record type already stores files as an array, so existing single-file data needs no migration. Every upload field in the app goes through it (Site Visits, Requirements, Quotations, Project Diary/Documents/Punch List, Daily Diary, Procurement bills, Expenses receipts/proof, Design). Gaps found and fixed below. Deliberately left single-file (not document uploads): profile photo (Settings), the live attendance camera capture, and the bank-statement CSV import (parses one file at a time).
+- **Added (New Design Package):** `src/screens/Design/DesignCenterScreen.tsx` — the New Design Package form now has an optional "Design Files" multi-upload (several PDFs/images/docs at once, add more, remove before creating). Files become the package's **Version 1** ("Initial upload") so they share the existing version-history list with open/download. If saving the files fails after the package is created, the package is kept and the user is told to add them via "+ Add Version".
+- **Changed (all upload fields):** `src/components/forms/MultiFileUploadField.tsx` — each file row now shows **name, file type (PDF/Image/Word/Excel/CSV…) and upload date/time** (read back from the timestamp our upload already puts in the stored filename — no stored metadata, works for files already saved); a multi-select where one file fails no longer throws away the ones that succeeded (they're added, and the failure is listed); new files always append, never replace. **Delete is permission-gated:** new permission `delete_uploaded_file` (owner + project coordinator); anyone can still remove a file *they just added* in the form they're filling in, before submitting.
+- **Fixed:** six view-only file lists (Design version history, Project documents, Files, Requirements detail, Daily Diary detail, Expense proof of payment) passed a no-op `onChange` without `readOnly`, so they showed an Upload button and a Remove button that deleted the real file from the server without updating the record. All now `readOnly` (view + download only).
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — removed the one-file limit on the quotation document (label now "Quotation Documents (PDF)", still PDF-only); "Send to Client" and Design "Send to Client" now include links to **all** files instead of only the first.
+- **Changed:** `src/utils/fileStorage.ts` (`getUploadedAt`, `getFileTypeLabel`), `src/types/index.ts` + `src/data/permissions.ts` (new permission).
+- **Verified live (real uploads to the upload server):** picked 3 files at once on New Design Package (2 PDFs + 1 PNG) → all listed with type + upload time; removed one before submitting; added another → the earlier ones were kept; created the package; reloaded the page → all files present under Version 1; saved list is view/download only. Test package, version and the uploaded files deleted afterward (server deletes returned 200). `tsc --noEmit`, unit tests (11) and `npm run build` clean.
+
+### Lead ID numbering made duplicate-proof (server-side, safe for simultaneous creates)
+**Commit:** Uncommitted
+The SK/FGD Type picker and auto-generated Lead ID already existed (required Type, read-only ID, separate SK/FGD counters, 3-digit padding). The weak spot was *how* the next number was picked: from each user's locally-loaded lead list, so two users creating at once (or a user with a stale list / limited row visibility) could get the same ID, with nothing in the database to stop it.
+- **Added:** `supabase/schema.sql` — unique index `sks_leads_lead_number_uniq` on `data->>'leadNumber'` (the real duplicate guard) and function `sks_next_lead_number(p_prefix)` (SECURITY DEFINER, only accepts `SK`/`FGD`; returns highest existing + 1 across *all* leads, zero-padded; SK and FGD independent). **✅ Applied directly to the live database** (checked first: no existing duplicates), PostgREST schema cache reloaded, and confirmed `SK → SK003`, `FGD → FGD001` from the existing data.
+- **Changed:** `src/services/leadService.ts` — new `getNextLeadNumber()` (calls the function) and `insertLead()` (plain insert, flags a Lead-ID unique violation as `duplicate`).
+- **Changed:** `src/context/CRMContext.tsx` — `addLead` now assigns the Lead ID itself (the caller can no longer pass one): asks the DB for the next number, inserts, and if another user grabbed that number first the unique index rejects it and it fetches the next one and retries (up to 5 times). Also fixed a second same-instant collision: the internal record id `lead_<ms>` now has a random suffix, since two saves in the same millisecond were failing with a primary-key conflict.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — removed the client-side `nextLeadNumber()`; the "Lead ID: SKxxx (auto-generated)" preview under the Type picker now comes from the DB function; success message shows the assigned ID ("Lead SK005 created successfully!"). Type stays required (only SK/FGD offered) and there is no field to type/edit the ID.
+- **Verified live**: creating without a Type is blocked; 5 SK + 2 FGD leads saved at the same instant from 7 separate sessions all succeeded as SK003–SK007 and FGD001–FGD002 — no gaps, no duplicates, no errors; whole table has no duplicate Lead IDs. Test leads deleted afterward. `tsc --noEmit` and `npm run build` clean.
+- Note: numbering is "highest existing + 1", so deleting the newest lead frees its number for the next one (same as before). Leads created before numbering existed have no Lead ID and are unaffected.
+
+### UI: Quotation "MD Approve" button — larger, red, centered
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — the MD Approve action (Internal Review stage) is now a larger solid-red button (`px-10 py-3.5`, `text-sm font-bold`) centered in its row, instead of a small green outline button. Same `handleStatusChange(selected, 'internally_approved')` action, no logic change. Clarified with the user that "red" meant MD Approve itself, not a new Reject button.
+
+### UI: File upload "max files reached" hint no longer looks like an error
+**Commit:** Uncommitted
+User reported "uploaded the PDF but showing errors" on New Quotation. The upload itself had succeeded (file listed with preview/download); the "error" was the amber "Remove the current file to upload a different one." hint that shows once a `maxFiles` limit is hit.
+- **Changed:** `src/components/forms/MultiFileUploadField.tsx` — that hint is now a neutral grey note reading "File uploaded. Remove it below to upload a different one." instead of bold amber warning text. Shared component, so this applies wherever `maxFiles` is used; behavior/limits unchanged.
+
+### UI: Appointment form — Assign To rows aligned (name + role side by side)
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Appointments/AppointmentsScreen.tsx` — in the Assign To checkbox list, the role label was pushed to the far right (`ml-auto`), leaving 1000+px between a person's name and their role on wide screens. Name now has a fixed-width column (`w-40 sm:w-64`, truncates) with the role right beside it, so roles line up in a clean column at every width. No logic change.
+- **Verified live**: wide (1600px) and phone (420px) widths both render aligned. `tsc --noEmit` clean.
+
 ## 2026-09-19
 
 ### Fix: Site Visit "Visit Date" restricted to today onward (new visits only)
@@ -77,6 +179,34 @@ User flagged the card header looked misaligned — on phone-width screens the In
 User asked to move the Interest (Hot/Medium/Cold) badge from the right side back to the left, alongside Lead ID/Name/City, keeping Status + the 3-dot menu on the right — reversing the alignment change made two turns ago now that the location icon addition freed up room on the left.
 - **Changed:** `src/screens/Leads/LeadsScreen.tsx` — Interest badge moved back into the left text row (after the city), removed from the right-hand column. No logic/functionality change.
 - **Verified live**: at desktop width, matches the reference exactly (badge inline with Lead ID/Name/City, Status+menu on the right); at phone width, it wraps gracefully alongside the city on a second line rather than floating alone. `tsc --noEmit` clean.
+
+### UI: Date/date-time inputs now open the picker when clicked anywhere
+**Commit:** Uncommitted
+User flagged that date inputs only opened the calendar when the small calendar icon was clicked, not the rest of the field. Native `<input type="date">` only opens on the icon by default; the fix is the browser's `showPicker()` API called from the field's own `onClick`.
+- **Changed:** added `onClick={e => e.currentTarget.showPicker?.()}` to all 24 `type="date"`/`type="datetime-local"` inputs across the app (Site Visits, Follow-ups, Receivables, Payables, Project Workspace diary, Daily Report, Gantt deadline, Daily Diary, Projects start/handover dates, Expense Request, Leave from/to, Attendance, Appointments, Daily Tasks, Lead reschedule date, Procurement, MRF requesting/delivery dates, Personal Commitments/Investments/Finance). `?.()` guards browsers without `showPicker` support (falls back to the old icon-only behavior there, no breakage). No other logic touched — `min`/`max`/`onChange`/validation on every field is unchanged.
+- **Verified live**: clicked the text area (not the icon) of a date input — `showPicker()` fired with zero console errors. `tsc --noEmit` and `npm run build` both clean.
+
+### UI: Reschedule form — split combined date/time field into two
+**Commit:** Uncommitted
+User asked for the Reschedule form's single "New date/time" (`datetime-local`) field to be split into separate date and time inputs.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — "New date/time" is now two side-by-side inputs (`type="date"` + `type="time"`), combined into the same `rescheduledDateInput` state string on change — same split/join pattern the Appointment form already uses for `scheduledAt`. No change to what's stored/sent (`rescheduledDate` on the appointment, shown on the MD Task tab) — still the same combined ISO-ish datetime string.
+- **Verified live**: opened the Reschedule form — date and time now render as two separate fields side by side, matching the Appointment form's convention. Zero new console errors (only the pre-existing, unrelated send-push/send-notification CORS warnings also seen elsewhere in this session). `tsc --noEmit` clean.
+
+### Date picker: today-onward consistency pass + explained native picker limits
+**Commit:** Uncommitted
+User asked for the native date picker's month-header/calendar-icon click behavior to be customized and for a "today onward" restriction pass. Explained first that the calendar shown in their screenshot is the browser's own native `<input type="date">` popup — its internal navigation is rendered by the OS/browser and can't be customized by web code at all (only which field opens it, via `showPicker()`, already done, and `min`/`max`). Confirmed with the user to skip that and just do the min-date consistency pass, respecting the explicit exceptions (attendance history, leave history, reports, existing records).
+- **Changed:** `src/screens/PersonalFinance/PersonalCommitmentsScreen.tsx` — "Due Date" (recurring commitment) now `min={todayStr()}` on create only (`isEditing` already existed), matching the create-only-restriction pattern used elsewhere (Project Expected Handover, Follow-up Due Date, Site Visit date).
+- **Changed:** `src/screens/MRF/MRFScreen.tsx` — added a `todayStr()` helper; "Expected Delivery Date" now `min={requestingDate || todayStr()}` (can't expect delivery before the request date or before today) — same relational-min pattern Leave's To Date already uses against From Date. "Requesting Date" left unrestricted (Procurement may legitimately log the date they actually raised the request, even if entering it a day later).
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — added a `todayStr()` helper; the Reschedule form's new-date field now has `min={todayStr()}` (can't propose rescheduling to a date that's already past).
+- **Left unrestricted, deliberately** (per the stated exceptions): Attendance "Mark Absent", Daily Diary / Project Diary entries (logged after the work happens, same reasoning as Site Visit dates), Daily Report (already has the opposite restriction — `max={todayISO()}`, correct as-is), Personal Finance transaction/investment-purchase dates, Receivables/Payables due dates (finance records routinely need entry to match a real invoice date already in the past).
+- Every other date field already had the correct `min` from earlier sessions' audits — no change needed there.
+- **Verified live**: Personal Commitments' Due Date field now shows `min="2026-09-19"` (today) when creating a new commitment. Zero console errors. `tsc --noEmit` and `npm run build` both clean.
+
+### UI: Reverted "click anywhere opens date picker" — icon-only again
+**Commit:** Uncommitted
+User reversed their earlier request — date/time inputs should only open the picker when the calendar/clock icon itself is clicked, not the whole field.
+- **Changed:** removed the `onClick={e => e.currentTarget.showPicker?.()}` handler added earlier today from all 24 `type="date"`/`type="datetime-local"` inputs across the same 20 files, restoring native default behavior (icon-only opens the picker; clicking elsewhere in the field just places the text cursor). No other change — `min`/`max`/`onChange`/validation on every field untouched.
+- **Verified**: `tsc --noEmit` and `npm run build` both clean; confirmed no `showPicker` references remain anywhere in `src`.
 
 ## 2026-09-18
 

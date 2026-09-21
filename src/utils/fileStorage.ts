@@ -72,6 +72,32 @@ export function getDisplayFileName(nameOrUrl: string): string {
   return raw
 }
 
+// When a file was uploaded, read back from the `<timestamp>_<random>_` prefix
+// our own upload adds to every remote filename — so already-saved files show
+// their upload time with no stored metadata or data migration. Returns null for
+// files without that prefix (older/bare names).
+export function getUploadedAt(nameOrUrl: string): Date | null {
+  if (!isRemoteFileRef(nameOrUrl)) return null
+  let raw: string
+  try { raw = decodeURIComponent(nameOrUrl.split('/').pop() ?? '') } catch { return null }
+  raw = raw.replace(/^[a-f0-9]{10,20}\.\d{4,12}_/i, '')
+  const m = raw.match(/^(\d{13})_[a-z0-9]{1,8}_/i)
+  if (!m) return null
+  const d = new Date(Number(m[1]))
+  return isNaN(d.getTime()) ? null : d
+}
+
+export function getFileTypeLabel(nameOrUrl: string): string {
+  if (nameOrUrl.startsWith('data:')) return 'Audio'
+  const ext = getDisplayFileName(nameOrUrl).split('.').pop()?.toLowerCase() ?? ''
+  if (ext === 'pdf') return 'PDF'
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(ext)) return 'Image'
+  if (['doc', 'docx'].includes(ext)) return 'Word'
+  if (['xls', 'xlsx'].includes(ext)) return 'Excel'
+  if (ext === 'csv') return 'CSV'
+  return ext && ext.length <= 5 ? ext.toUpperCase() : 'File'
+}
+
 export function getFileUrl(nameOrUrl: string): string | undefined {
   if (isRemoteFileRef(nameOrUrl)) return nameOrUrl
   return undefined

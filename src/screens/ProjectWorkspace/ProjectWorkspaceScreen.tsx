@@ -404,6 +404,25 @@ export default function ProjectWorkspaceScreen() {
                 </button>
               </div>
             )}
+            {(project.statusHistory?.length ?? 0) > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-100 p-4 mb-4">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Stage History</p>
+                <div className="space-y-2.5">
+                  {[...(project.statusHistory ?? [])].reverse().map((h, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-800 mt-1.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800">{(PROJECT_STAGE_LABEL as Record<string, string>)[h.stage] ?? h.stage}</p>
+                        <p className="text-[11px] text-slate-500">{h.note}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {h.updatedBy} · {new Date(h.updatedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3 mb-4">
               <div>
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Material Requests (MRF)</p>
@@ -816,7 +835,7 @@ export default function ProjectWorkspaceScreen() {
                     </div>
                     {v.note && <p className="text-[11px] text-slate-500 mt-1">{v.note}</p>}
                     <p className="text-[11px] text-slate-400 mt-1 mb-1.5">by {v.createdBy}</p>
-                    <MultiFileUploadField label="" files={v.files} onChange={() => {}} />
+                    <MultiFileUploadField label="" files={v.files} onChange={() => {}} readOnly />
                   </div>
                 ))}
                 {docVersionsFor(selectedDocument.id).length === 0 && (

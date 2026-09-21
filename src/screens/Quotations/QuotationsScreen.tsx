@@ -18,9 +18,26 @@ import { getAllQuotations, upsertQuotation, deleteQuotation } from '../../servic
 import { getAllProjects, upsertProject } from '../../services/projectService'
 import { addAuditLog } from '../../services/auditLogService'
 import { downloadQuotationExcel } from '../../utils/quotationExport'
-import type { Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem, Project, AuditLog, DiscountType, QuotationStatus } from '../../types'
+import { getManagedUsersDirectory } from '../../services/userService'
+import { sendNotification } from '../../utils/notifications'
+import { ROLE_LABELS } from '../../data/permissions'
+import type { Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem, Project, AuditLog, DiscountType, QuotationStatus, QuotationStatusHistoryItem } from '../../types'
 
-const UNIT_OPTIONS = ['sqft', 'nos', 'rft', 'sft', 'lot', 'set', 'L.Sm', 'CFT', 'Kgs']
+const UNIT_OPTIONS = ['sqft', 'nos', 'rft', 'sft', 'lot', 'set', 'lsm', 'cft', 'kgs']
+
+// Quotations saved before the units were renamed to lowercase carry 'L.Sm' /
+// 'CFT' / 'Kgs'. Map those to the current names at load time (display, edit
+// form, print and Excel all read the loaded list) — the saved records are only
+// rewritten if someone edits and re-saves that quotation.
+function normalizeUnit(unit: string): string {
+  const lower = unit.toLowerCase()
+  const mapped = lower === 'l.sm' ? 'lsm' : lower
+  return UNIT_OPTIONS.includes(mapped) ? mapped : unit
+}
+
+function normalizeQuotationUnits(q: Quotation): Quotation {
+  return { ...q, sections: q.sections.map(s => ({ ...s, items: s.items.map(i => ({ ...i, unit: normalizeUnit(i.unit) })) })) }
+}
 
 // Client asked for this exact terminology ("MD Approval" / "MD Approved") in
 // the quotation flow specifically. Passed via StatusBadge's `label` override
@@ -30,10 +47,20 @@ const QUOTATION_STATUS_LABEL: Record<QuotationStatus, string> = {
   draft:               'Draft',
   internal_review:     'Pending MD Approval',
   internally_approved: 'MD Approved',
-  sent_to_client:      'Sent to Client',
+  sent_to_client:      'Awaiting Client Approval',
   revision_requested:  'Revision Requested',
   client_approved:     'Client Approved',
   rejected:            'Rejected',
+}
+
+// Wording for each approval-history entry (rejections are labelled separately —
+// they depend on whether the MD or the client rejected).
+const STATUS_HISTORY_LABEL: Partial<Record<QuotationStatus, string>> = {
+  internal_review:     'Sent to MD for approval',
+  internally_approved: 'MD approved',
+  sent_to_client:      'Sent to client',
+  client_approved:     'Client approved',
+  revision_requested:  'Client requested a revision',
 }
 
 function fmtDate(val: string): string {
@@ -92,7 +119,7 @@ function computeTotals(sections: BOQSection[], discountType: DiscountType, disco
 
 export default function QuotationsScreen() {
   const { user, can } = useAuth()
-  const { leads } = useCRM()
+  const { leads, updateLead } = useCRM()
   const routerLocation = useLocation()
   const navigate = useNavigate()
 
@@ -109,9 +136,12 @@ export default function QuotationsScreen() {
   const [showPrint, setShowPrint] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showSendChoice, setShowSendChoice] = useState(false)
+  const [sendChannel, setSendChannel] = useState<'whatsapp' | 'email' | null>(null)
   const [showAdvancePayment, setShowAdvancePayment] = useState(false)
   const [advanceAmount, setAdvanceAmount] = useState('')
   const [advanceRef, setAdvanceRef] = useState('')
+  const [showReject, setShowReject] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   const [leadId, setLeadId] = useState('')
@@ -124,12 +154,22 @@ export default function QuotationsScreen() {
   const [paymentTerms, setPaymentTerms] = useState('')
   const [formError, setFormError] = useState('')
 
+  function makeHistory(status: QuotationStatus, label: string, note?: string): QuotationStatusHistoryItem {
+    return { status, label, note: note || undefined, by: user?.name ?? 'Unknown', byRole: user?.role, at: new Date().toISOString() }
+  }
+
+  // Best-effort heads-up to the MD(s) that a quotation is waiting on them.
+  async function notifyMdPending(q: Quotation, what: string) {
+    const mdIds = (await getManagedUsersDirectory()).filter(u => u.role === 'owner' && u.id !== user?.id).map(u => u.id)
+    await sendNotification(mdIds, 'Quotation Pending MD Approval', `${leadName(q.leadId)} — ${fmtCurrency(q.netAmount)}. ${what}`)
+  }
+
   async function refresh() {
     setIsLoading(true)
     const [reqs, visits, quotes, projs] = await Promise.all([getAllRequirements(), getAllSiteVisits(), getAllQuotations(), getAllProjects()])
     setRequirements(reqs)
     setSiteVisits(visits)
-    setQuotations(quotes)
+    setQuotations(quotes.map(normalizeQuotationUnits))
     setProjects(projs)
     setIsLoading(false)
   }
@@ -236,7 +276,9 @@ export default function QuotationsScreen() {
     const quotation: Quotation = {
       id: `quo_${Date.now()}`,
       leadId, requirementId: requirementId || undefined,
-      version: 1, status: 'draft',
+      // A new quotation never goes straight to the client: it starts out waiting for MD approval.
+      version: 1, status: 'internal_review',
+      statusHistory: [makeHistory('internal_review', 'Created — sent to MD for approval')],
       sections: valid, totalAmount, taxAmount,
       discountType, discountValue, discountAmount, netAmount,
       documentFiles: documentFiles.length > 0 ? documentFiles : undefined,
@@ -247,7 +289,8 @@ export default function QuotationsScreen() {
     if (!result.ok) { setFormError(result.error ?? 'Could not save quotation.'); return }
     setQuotations(prev => [quotation, ...prev])
     setShowNew(false)
-    setSnack({ open: true, msg: 'Quotation created!', type: 'success' })
+    setSnack({ open: true, msg: 'Quotation created and sent to MD for approval.', type: 'success' })
+    notifyMdPending(quotation, 'New quotation created.')
   }
 
   async function handleUpdateQuotation() {
@@ -258,12 +301,21 @@ export default function QuotationsScreen() {
       return
     }
     const { totalAmount, taxAmount, discountAmount, netAmount } = computeTotals(valid, discountType, discountValue)
+    // Changing an MD-approved (or rejected / revision-requested) quotation means
+    // the version the MD approved is no longer the one on screen — it must be
+    // approved again before it can be sent to the client.
+    const needsReapproval = selected.status === 'internally_approved' || selected.status === 'rejected' || selected.status === 'revision_requested'
     const updated: Quotation = {
       ...selected, leadId, requirementId: requirementId || undefined,
       sections: valid, totalAmount, taxAmount,
       discountType, discountValue, discountAmount, netAmount,
       documentFiles: documentFiles.length > 0 ? documentFiles : undefined,
       terms: terms.trim() || undefined, paymentTerms: paymentTerms.trim() || undefined,
+      ...(needsReapproval ? {
+        status: 'internal_review' as const,
+        rejectionReason: undefined,
+        statusHistory: [...(selected.statusHistory ?? []), makeHistory('internal_review', 'Edited — sent back to MD for approval')],
+      } : {}),
       updatedAt: new Date().toISOString(),
     }
     const result = await upsertQuotation(updated)
@@ -271,21 +323,29 @@ export default function QuotationsScreen() {
     setQuotations(prev => prev.map(q => (q.id === updated.id ? updated : q)))
     setShowEdit(false)
     setSelected(null)
-    setSnack({ open: true, msg: 'Quotation updated.', type: 'success' })
+    setSnack({ open: true, msg: needsReapproval ? 'Quotation updated and sent back to MD for approval.' : 'Quotation updated.', type: 'success' })
+    if (needsReapproval) notifyMdPending(updated, 'Quotation was edited and needs approval again.')
   }
 
-  async function handleStatusChange(q: Quotation, status: Quotation['status']) {
+  async function handleStatusChange(q: Quotation, status: Quotation['status'], note?: string, labelOverride?: string): Promise<boolean> {
+    // 'rejected' is used both by the MD (while pending approval) and by the client (after sending).
+    const label = labelOverride ?? (status === 'rejected'
+      ? (q.status === 'internal_review' ? 'MD rejected' : 'Client rejected')
+      : STATUS_HISTORY_LABEL[status] ?? status)
     const updated: Quotation = {
       ...q, status,
       sentAt: status === 'sent_to_client' ? new Date().toISOString() : q.sentAt,
       approvedAt: status === 'client_approved' ? new Date().toISOString() : q.approvedAt,
+      rejectionReason: status === 'rejected' ? note : undefined,
+      statusHistory: [...(q.statusHistory ?? []), makeHistory(status, label, note)],
       updatedAt: new Date().toISOString(),
     }
     const result = await upsertQuotation(updated)
-    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update status.', type: 'error' }); return }
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update status.', type: 'error' }); return false }
     setQuotations(prev => prev.map(x => (x.id === updated.id ? updated : x)))
     setSelected(updated)
     setSnack({ open: true, msg: 'Status updated.', type: 'success' })
+    if (status === 'internal_review') notifyMdPending(updated, 'Sent to MD for approval.')
 
     // Project already exists (this is a later revision, not the initial project-creation flow
     // in ProjectsScreen) — sync its contract value to the newly approved amount.
@@ -310,55 +370,81 @@ export default function QuotationsScreen() {
       }
       addAuditLog(log)
     }
+    return true
   }
 
-  // Opens the client's own WhatsApp/email with a pre-filled message (deep
-  // links can't attach a binary file — the uploaded PDF's real, publicly
-  // fetchable URL is included in the text instead, same as how every other
-  // file this app stores is shared/viewed). Only moves the quotation to
-  // 'sent_to_client' once the share sheet has actually been opened.
-  async function handleSendToClient(channel: 'whatsapp' | 'email') {
-    if (!selected) return
-    const lead = leads.find(l => l.id === selected.leadId)
-    const docUrl = selected.documentFiles?.[0]
-    const message = `Hi ${lead?.name ?? ''}, please find your quotation from SpaceKrafters — Net Amount: ${fmtCurrency(selected.netAmount)}.`
-      + (docUrl ? ` View/download here: ${docUrl}` : '')
-
-    if (channel === 'whatsapp') {
-      const digits = (lead?.phone ?? '').replace(/\D/g, '')
-      if (!digits) { setSnack({ open: true, msg: 'This lead has no phone number on file.', type: 'error' }); return }
-      const intlPhone = digits.length === 10 ? `91${digits}` : digits
-      window.open(`https://wa.me/${intlPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
-    } else {
-      if (!lead?.email) { setSnack({ open: true, msg: 'This lead has no email on file.', type: 'error' }); return }
-      window.location.href = `mailto:${lead.email}?subject=${encodeURIComponent('Your Quotation from SpaceKrafters')}&body=${encodeURIComponent(message)}`
-    }
-
+  // "Send to Client" only RECORDS the send — it does not open WhatsApp or an
+  // email, and nothing is sent anywhere (no provider is integrated yet). The
+  // chosen method is stored in the quotation's approval history and in the
+  // lead's activity log (who + when), and the quotation moves to Sent to Client
+  // / Awaiting Client Approval.
+  async function handleSendToClient() {
+    if (!selected || !sendChannel) return
+    const channelLabel = sendChannel === 'whatsapp' ? 'WhatsApp' : 'Email'
+    const activity = `Quotation sent via ${channelLabel}`
     setShowSendChoice(false)
-    await handleStatusChange(selected, 'sent_to_client')
+    const ok = await handleStatusChange(selected, 'sent_to_client', undefined, activity)
+    if (!ok) return
+    const lead = leads.find(l => l.id === selected.leadId)
+    if (lead) await updateLead(lead.id, {}, activity)
+    setSnack({ open: true, msg: `${activity} — recorded in the activity log (nothing was actually sent).`, type: 'success' })
   }
 
-  // Design Center checks advancePaymentReceived on this quotation before a
-  // new design package can be started for this lead — see DesignCenterScreen.tsx.
+  // Saves an advance decision on a client-approved quotation, adds it to the
+  // quotation's approval history AND the lead's Activity Log (action, date/time
+  // and user are stamped on both), and unlocks Design Center for the lead.
+  async function saveAdvanceDecision(patch: Partial<Quotation>, label: string, note: string, successMsg: string): Promise<boolean> {
+    if (!selected) return false
+    const updated: Quotation = {
+      ...selected, ...patch,
+      statusHistory: [...(selected.statusHistory ?? []), makeHistory(selected.status, label, note)],
+      updatedAt: new Date().toISOString(),
+    }
+    const result = await upsertQuotation(updated)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not save.', type: 'error' }); return false }
+    setQuotations(prev => prev.map(q => (q.id === updated.id ? updated : q)))
+    setSelected(updated)
+    const lead = leads.find(l => l.id === selected.leadId)
+    if (lead) await updateLead(lead.id, {}, `${label} — ${note}`)
+    setSnack({ open: true, msg: successMsg, type: 'success' })
+    return true
+  }
+
+  // "Proceed with Advance": records the advance received (amount required,
+  // reference optional) and Advance status: With Advance. Also used later to
+  // record an advance that arrives after "Proceed without Advance".
   async function handleRecordAdvancePayment() {
     if (!selected) return
     const amount = Number(advanceAmount)
     if (!amount || amount <= 0) { setSnack({ open: true, msg: 'Enter a valid advance payment amount.', type: 'error' }); return }
-    const updated: Quotation = {
-      ...selected,
-      advancePaymentReceived: true,
-      advancePaymentAmount: amount,
-      advancePaymentRef: advanceRef.trim() || undefined,
-      advancePaymentAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-    const result = await upsertQuotation(updated)
-    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not record advance payment.', type: 'error' }); return }
-    setQuotations(prev => prev.map(q => (q.id === updated.id ? updated : q)))
-    setSelected(updated)
+    const laterPayment = selected.advanceStatus === 'without_advance'
+    const detail = `${fmtCurrency(amount)}${advanceRef.trim() ? ` · Ref: ${advanceRef.trim()}` : ''}`
+    const ok = await saveAdvanceDecision(
+      {
+        advanceStatus: 'with_advance',
+        advancePaymentReceived: true,
+        advancePaymentAmount: amount,
+        advancePaymentRef: advanceRef.trim() || undefined,
+        advancePaymentAt: new Date().toISOString(),
+      },
+      laterPayment ? 'Advance payment received (was proceeding without advance)' : 'Proceeding with advance payment',
+      `Advance status: With Advance (${detail})`,
+      'Proceeding with advance — recorded in the activity log.',
+    )
+    if (!ok) return
     setShowAdvancePayment(false)
     setAdvanceAmount(''); setAdvanceRef('')
-    setSnack({ open: true, msg: 'Advance payment recorded.', type: 'success' })
+  }
+
+  // "Proceed without Advance": the client hasn't paid yet. Recorded, and Design
+  // is NOT blocked.
+  async function handleProceedWithoutAdvance() {
+    await saveAdvanceDecision(
+      { advanceStatus: 'without_advance' },
+      'Proceeding without advance payment',
+      'Advance status: Without Advance',
+      'Proceeding without advance — recorded in the activity log. Design can start.',
+    )
   }
 
   async function confirmDelete() {
@@ -515,26 +601,37 @@ export default function QuotationsScreen() {
             <div className="space-y-2">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status Actions</p>
               <div className="flex flex-wrap gap-2">
-                {selected.status === 'draft' && can('approve_quotation_internal') && (
+                {/* Quotations created before the approval flow was enforced can still be sitting in Draft. */}
+                {selected.status === 'draft' && can('create_quotation') && (
                   <button onClick={() => handleStatusChange(selected, 'internal_review')}
                     className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
-                    Submit for MD Approval
+                    Send to MD for Approval
                   </button>
+                )}
+                {selected.status === 'internal_review' && !can('approve_quotation_internal') && (
+                  <p className="text-xs text-slate-500">Waiting for MD approval.</p>
                 )}
                 {selected.status === 'internal_review' && can('approve_quotation_internal') && (
-                  <button onClick={() => handleStatusChange(selected, 'internally_approved')}
-                    className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
-                    MD Approve
-                  </button>
+                  <div className="w-full flex justify-center gap-3">
+                    <button onClick={() => handleStatusChange(selected, 'internally_approved')}
+                      className="px-10 py-3.5 rounded-xl bg-red-500 text-sm font-bold text-white active:bg-red-600">
+                      MD Approve
+                    </button>
+                    <button onClick={() => { setRejectReason(''); setShowReject(true) }}
+                      className="px-10 py-3.5 rounded-xl border border-red-300 bg-white text-sm font-bold text-red-600 active:bg-red-50">
+                      Reject
+                    </button>
+                  </div>
                 )}
                 {selected.status === 'internally_approved' && can('send_quotation_client') && (
-                  <button onClick={() => setShowSendChoice(true)}
+                  <button onClick={() => { setSendChannel(null); setShowSendChoice(true) }}
                     className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
                     Send to Client
                   </button>
                 )}
                 {selected.status === 'sent_to_client' && can('send_quotation_client') && (
                   <>
+                    <p className="w-full text-xs text-slate-500">Sent to the client — record their decision:</p>
                     <button onClick={() => handleStatusChange(selected, 'client_approved')}
                       className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
                       Client Approved
@@ -549,18 +646,66 @@ export default function QuotationsScreen() {
                     </button>
                   </>
                 )}
-                {selected.status === 'client_approved' && !selected.advancePaymentReceived && can('send_quotation_client') && (
+                {selected.status === 'client_approved' && !selected.advanceStatus && !selected.advancePaymentReceived && can('send_quotation_client') && (
+                  <>
+                    <p className="w-full text-xs text-slate-500">Client approved. How is the project proceeding to Design?</p>
+                    <button onClick={() => setShowAdvancePayment(true)}
+                      className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
+                      Proceed with Advance
+                    </button>
+                    <button onClick={handleProceedWithoutAdvance}
+                      className="px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-700 active:bg-amber-100">
+                      Proceed without Advance
+                    </button>
+                  </>
+                )}
+                {selected.status === 'client_approved' && selected.advanceStatus === 'without_advance' && !selected.advancePaymentReceived && can('send_quotation_client') && (
                   <button onClick={() => setShowAdvancePayment(true)}
                     className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
-                    Record Advance Payment
+                    Record Advance Payment (when received)
                   </button>
                 )}
               </div>
             </div>
 
+            {selected.status === 'rejected' && selected.rejectionReason && (
+              <div className="bg-red-50 border border-red-100 rounded-2xl p-3.5">
+                <p className="text-xs font-bold text-red-700">Rejected by MD</p>
+                <p className="text-xs text-red-600 mt-0.5">{selected.rejectionReason}</p>
+                <p className="text-[11px] text-red-500 mt-1">Edit the quotation to address this and it goes back to the MD for approval.</p>
+              </div>
+            )}
+
+            {(selected.statusHistory?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Approval History</p>
+                <div className="space-y-2.5">
+                  {[...(selected.statusHistory ?? [])].reverse().map((h, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-800 mt-1.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800">{h.label}</p>
+                        {h.note && <p className="text-[11px] text-slate-500">{h.note}</p>}
+                        <p className="text-[10px] text-slate-400">
+                          {h.by}{h.byRole ? ` (${ROLE_LABELS[h.byRole]})` : ''} · {new Date(h.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selected.status === 'client_approved' && selected.advanceStatus === 'without_advance' && !selected.advancePaymentReceived && (
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3.5">
+                <p className="text-xs font-bold text-amber-700">Advance status: Without Advance</p>
+                <p className="text-[11px] text-amber-600 mt-1">Design can be started for this lead in Design Center. Record the advance when the client pays it.</p>
+              </div>
+            )}
+
             {selected.status === 'client_approved' && selected.advancePaymentReceived && (
               <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3.5">
-                <p className="text-xs font-bold text-emerald-700">Advance Payment Received</p>
+                <p className="text-xs font-bold text-emerald-700">Advance status: With Advance — Payment Received</p>
                 <p className="text-xs text-emerald-600 mt-0.5">
                   {fmtCurrency(selected.advancePaymentAmount ?? 0)}{selected.advancePaymentRef ? ` · Ref: ${selected.advancePaymentRef}` : ''}
                   {selected.advancePaymentAt ? ` · ${fmtDate(selected.advancePaymentAt)}` : ''}
@@ -577,6 +722,27 @@ export default function QuotationsScreen() {
             )}
           </div>
         )}
+      </BottomSheet>
+
+      {/* MD rejection — reason required */}
+      <BottomSheet isOpen={showReject} onClose={() => setShowReject(false)} title="Reject Quotation">
+        <div className="space-y-3 pb-4">
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Reason for rejection *</label>
+            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={4}
+              placeholder="What needs to change?"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+          </div>
+          <button disabled={!rejectReason.trim()}
+            onClick={async () => {
+              if (!selected) return
+              setShowReject(false)
+              await handleStatusChange(selected, 'rejected', rejectReason.trim())
+            }}
+            className="w-full py-3.5 rounded-xl bg-red-500 text-sm font-bold text-white active:bg-red-600 disabled:opacity-40">
+            Reject Quotation
+          </button>
+        </div>
       </BottomSheet>
 
       {/* Print / PDF View */}
@@ -792,8 +958,8 @@ export default function QuotationsScreen() {
           </div>
 
           <div>
-            <MultiFileUploadField label="Quotation Document (PDF)" files={documentFiles} onChange={setDocumentFiles}
-              accept="application/pdf,.pdf" maxFiles={1} uploadButtonLabel="Upload PDF" />
+            <MultiFileUploadField label="Quotation Documents (PDF)" files={documentFiles} onChange={setDocumentFiles}
+              accept="application/pdf,.pdf" uploadButtonLabel="Upload PDFs" />
           </div>
 
           <div className="bg-slate-50 rounded-2xl p-3.5 space-y-1.5">
@@ -841,25 +1007,31 @@ export default function QuotationsScreen() {
       <BottomSheet isOpen={showSendChoice} onClose={() => setShowSendChoice(false)} title="Send to Client">
         <div className="space-y-3 pb-4">
           <p className="text-xs text-slate-500">
-            Opens {leadName(selected?.leadId ?? '')}'s WhatsApp or email with the quotation summary
-            {selected?.documentFiles?.length ? ' and a link to the uploaded PDF' : ''} pre-filled.
+            Choose how the quotation goes to {leadName(selected?.leadId ?? '')}. For now this only records the action in the
+            activity log — no WhatsApp message or email is actually sent.
           </p>
-          <button onClick={() => handleSendToClient('whatsapp')}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-emerald-600 text-white text-sm font-bold active:bg-emerald-700">
-            <MessageCircle size={16} /> Send via WhatsApp
-          </button>
-          <button onClick={() => handleSendToClient('email')}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white text-sm font-bold active:opacity-90"
+          <div className="grid grid-cols-2 gap-2">
+            {([['whatsapp', 'WhatsApp', MessageCircle], ['email', 'Email', Mail]] as const).map(([value, label, Icon]) => (
+              <button key={value} type="button" onClick={() => setSendChannel(value)} aria-pressed={sendChannel === value}
+                className={`flex items-center justify-center gap-2 py-3.5 rounded-xl border-2 text-sm font-bold active:opacity-90 ${
+                  sendChannel === value ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600'
+                }`}>
+                <Icon size={16} /> {label}
+              </button>
+            ))}
+          </div>
+          <button disabled={!sendChannel} onClick={handleSendToClient}
+            className="w-full py-3.5 rounded-xl text-white text-sm font-bold active:opacity-90 disabled:opacity-40"
             style={{ background: '#0F2A4A' }}>
-            <Mail size={16} /> Send via Email
+            Send to Client
           </button>
         </div>
       </BottomSheet>
 
       {/* Record Advance Payment */}
-      <BottomSheet isOpen={showAdvancePayment} onClose={() => setShowAdvancePayment(false)} title="Record Advance Payment">
+      <BottomSheet isOpen={showAdvancePayment} onClose={() => setShowAdvancePayment(false)} title="Proceed with Advance">
         <div className="space-y-3 pb-4">
-          <p className="text-xs text-slate-500">Design can't be started for this lead until this is recorded.</p>
+          <p className="text-xs text-slate-500">Records the advance received and that the project is proceeding With Advance. Design can then be started for this lead.</p>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Advance Amount Received *</label>
             <input type="number" value={advanceAmount} onChange={e => setAdvanceAmount(e.target.value)} placeholder="₹"
@@ -873,7 +1045,7 @@ export default function QuotationsScreen() {
           <button onClick={handleRecordAdvancePayment}
             className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
             style={{ background: '#0F2A4A' }}>
-            Confirm Advance Payment
+            Confirm & Proceed with Advance
           </button>
         </div>
       </BottomSheet>

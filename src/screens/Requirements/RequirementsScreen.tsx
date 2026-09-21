@@ -278,7 +278,7 @@ export default function RequirementsScreen() {
             {selected.files && selected.files.length > 0 && (
               <div>
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Attachments</p>
-                <MultiFileUploadField label="" files={selected.files} onChange={() => {}} />
+                <MultiFileUploadField label="" files={selected.files} onChange={() => {}} readOnly />
               </div>
             )}
 

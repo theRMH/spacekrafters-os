@@ -32,6 +32,37 @@ CREATE TABLE IF NOT EXISTS sks_leads (
 CREATE INDEX IF NOT EXISTS sks_leads_owner_id_idx ON sks_leads(owner_id);
 ALTER TABLE sks_leads ENABLE ROW LEVEL SECURITY;
 
+-- Lead IDs (SK001, FGD001, …) must never repeat. The unique index is the real
+-- guarantee (two users saving at the same instant can't both win); the client
+-- retries with a fresh number if it loses that race.
+CREATE UNIQUE INDEX IF NOT EXISTS sks_leads_lead_number_uniq
+  ON sks_leads ((data->>'leadNumber')) WHERE data->>'leadNumber' IS NOT NULL;
+
+-- Next number for a prefix = highest existing + 1, computed server-side across
+-- ALL leads (SECURITY DEFINER bypasses RLS, so a user who can only see some
+-- leads still gets the true next number). SK and FGD are independent.
+CREATE OR REPLACE FUNCTION sks_next_lead_number(p_prefix TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_max INT;
+BEGIN
+  IF p_prefix NOT IN ('SK', 'FGD') THEN
+    RAISE EXCEPTION 'Invalid lead prefix: %', p_prefix;
+  END IF;
+  SELECT COALESCE(MAX(substring(data->>'leadNumber' FROM length(p_prefix) + 1)::INT), 0)
+    INTO v_max
+    FROM sks_leads
+   WHERE data->>'leadNumber' ~ ('^' || p_prefix || '[0-9]+$');
+  RETURN p_prefix || lpad((v_max + 1)::TEXT, 3, '0');
+END;
+$$;
+REVOKE ALL ON FUNCTION sks_next_lead_number(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION sks_next_lead_number(TEXT) TO authenticated;
+
 CREATE TABLE IF NOT EXISTS sks_lead_activities (
   id         TEXT        PRIMARY KEY,
   lead_id    TEXT        NOT NULL REFERENCES sks_leads(id) ON DELETE CASCADE,

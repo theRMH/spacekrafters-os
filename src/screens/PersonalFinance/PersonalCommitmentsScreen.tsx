@@ -207,7 +207,8 @@ export default function PersonalCommitmentsScreen() {
           </div>
           <div>
             <label className={label}>Due Date *</label>
-            <input type="date" className={inp} value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+            <input type="date" className={inp} value={form.dueDate} min={isEditing ? undefined : todayStr()}
+              onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
           </div>
           <div>
             <label className={label}>Linked Account</label>

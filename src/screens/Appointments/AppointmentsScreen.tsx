@@ -353,8 +353,8 @@ export default function AppointmentsScreen() {
                   <button type="button" key={m.id} onClick={() => toggleAssignee(m.id)}
                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left active:bg-slate-100">
                     {isChecked ? <CheckSquare size={17} className="text-indigo-600 shrink-0" /> : <Square size={17} className="text-slate-300 shrink-0" />}
-                    <span className="text-sm text-slate-700 truncate">{m.fullName}</span>
-                    <span className="text-[11px] text-slate-400 ml-auto shrink-0">{getRoleDisplayLabel(m.role, m.displayRole)}</span>
+                    <span className="text-sm text-slate-700 truncate w-40 sm:w-64 shrink-0">{m.fullName}</span>
+                    <span className="text-[11px] text-slate-400 truncate">{getRoleDisplayLabel(m.role, m.displayRole)}</span>
                   </button>
                 )
               })}

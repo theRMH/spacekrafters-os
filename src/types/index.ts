@@ -44,6 +44,9 @@ export type Permission =
   | 'view_attendance' | 'mark_attendance' | 'view_leave' | 'approve_leave' | 'view_weekly_planner'
   // Daily Tasks — everyone can see their own; only MD (owner) can assign
   | 'view_daily_tasks' | 'assign_daily_task'
+  // Delete an already-saved uploaded file (anyone can still remove a file they
+  // just added in the form they're currently filling in, before submitting)
+  | 'delete_uploaded_file'
   // MD Task tab — owner-only inbox of pending approvals (currently just
   // rescheduled-appointment requests; same shape can hold future task types)
   | 'view_md_tasks'
@@ -275,6 +278,17 @@ export type QuotationStatus =
   | 'client_approved'
   | 'rejected'
 
+// One entry per action taken on a quotation's approval flow — who did it, when,
+// and any note (e.g. the MD's rejection reason).
+export interface QuotationStatusHistoryItem {
+  status: QuotationStatus
+  label: string
+  note?: string
+  by: string
+  byRole?: UserRole
+  at: string
+}
+
 export interface BOQLineItem {
   id: string
   description: string
@@ -323,9 +337,15 @@ export interface Quotation {
   paymentTerms?: string
   sentAt?: string
   approvedAt?: string
-  // Recorded once the client has approved (status === 'client_approved') —
-  // Design Center checks this before a new design package can be started
-  // for this quotation's lead (see DesignCenterScreen.tsx).
+  statusHistory?: QuotationStatusHistoryItem[]
+  // Set when the MD rejects (status 'rejected'); cleared on any later transition.
+  rejectionReason?: string
+  // Chosen once the client has approved (status === 'client_approved'): the
+  // project proceeds to Design either With Advance (advance details recorded
+  // below) or Without Advance (client hasn't paid yet — never blocks Design; the
+  // advance can still be recorded later, which switches this to with_advance).
+  // Design Center only needs one of the two to be set (see DesignCenterScreen.tsx).
+  advanceStatus?: 'with_advance' | 'without_advance'
   advancePaymentReceived?: boolean
   advancePaymentAmount?: number
   advancePaymentRef?: string

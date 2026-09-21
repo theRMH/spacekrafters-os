@@ -58,6 +58,7 @@ export default function DesignCenterScreen() {
   const [leadId, setLeadId] = useState('')
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
+  const [newPackageFiles, setNewPackageFiles] = useState<string[]>([])
   const [versionFiles, setVersionFiles] = useState<string[]>([])
   const [versionNote, setVersionNote] = useState('')
   const [formError, setFormError] = useState('')
@@ -70,12 +71,15 @@ export default function DesignCenterScreen() {
   const eligibleLeads = leads.filter(l => l.status !== 'won' && l.status !== 'lost')
 
   // A pre-project (lead-linked) design package can't start until that lead's
-  // quotation has been client-approved AND has its advance payment recorded
-  // (see the "Record Advance Payment" action in QuotationsScreen.tsx). Won
-  // leads are exempt — a Project can't exist without already having gone
-  // through the (older) advance-payment-at-Won step in LeadStatusSheet.tsx.
+  // quotation has been client-approved AND the "Proceed with Advance" /
+  // "Proceed without Advance" choice has been made in QuotationsScreen.tsx.
+  // Without Advance deliberately does NOT block design (the client just hasn't
+  // paid yet); `advancePaymentReceived` is kept as a fallback for quotations
+  // recorded before that choice existed. Won leads are exempt — a Project can't
+  // exist without already having gone through the (older) advance-payment-at-Won
+  // step in LeadStatusSheet.tsx.
   function eligibleQuotationFor(id: string): Quotation | undefined {
-    return quotations.find(q => q.leadId === id && q.status === 'client_approved' && q.advancePaymentReceived)
+    return quotations.find(q => q.leadId === id && q.status === 'client_approved' && (q.advanceStatus || q.advancePaymentReceived))
   }
 
   async function refresh() {
@@ -120,7 +124,7 @@ export default function DesignCenterScreen() {
   }
 
   function resetNewForm() {
-    setProjectId(''); setLeadId(''); setName(''); setNotes(''); setFormError('')
+    setProjectId(''); setLeadId(''); setName(''); setNotes(''); setNewPackageFiles([]); setFormError('')
   }
 
   function openNew() {
@@ -145,7 +149,7 @@ export default function DesignCenterScreen() {
     }
     const eligibleQuotation = leadId ? eligibleQuotationFor(leadId) : undefined
     if (leadId && !eligibleQuotation) {
-      setFormError("This lead's quotation must be Client Approved with the advance payment recorded (in Quotations) before design can start.")
+      setFormError("This lead's quotation must be Client Approved, with \"Proceed with Advance\" or \"Proceed without Advance\" chosen (in Quotations), before design can start.")
       return
     }
     const now = new Date().toISOString()
@@ -166,9 +170,32 @@ export default function DesignCenterScreen() {
     }
     const result = await upsertDesignPackage(pkg)
     if (!result.ok) { setFormError(result.error ?? 'Could not create design package.'); return }
+    // Files picked on the New Package form become the package's Version 1, so
+    // they live in the same version history (and open/download UI) as every
+    // later upload — no separate storage.
+    let firstVersion: DesignVersion | undefined
+    if (newPackageFiles.length > 0) {
+      firstVersion = {
+        id: `dsver_${Date.now()}`,
+        designPackageId: pkg.id,
+        versionNumber: 1,
+        files: newPackageFiles,
+        note: 'Initial upload',
+        createdBy: user.name,
+        createdAt: now,
+      }
+      const versionResult = await addDesignVersion(firstVersion)
+      if (!versionResult.ok) {
+        setPackages(prev => [pkg, ...prev])
+        setShowNew(false)
+        setSnack({ open: true, msg: `Package created, but the files could not be saved (${versionResult.error ?? 'unknown error'}). Add them via "+ Add Version".`, type: 'error' })
+        return
+      }
+    }
     setPackages(prev => [pkg, ...prev])
+    if (firstVersion) setVersions(prev => [firstVersion!, ...prev])
     setShowNew(false)
-    setSnack({ open: true, msg: 'Design package created.', type: 'success' })
+    setSnack({ open: true, msg: newPackageFiles.length > 0 ? `Design package created with ${newPackageFiles.length} file${newPackageFiles.length > 1 ? 's' : ''}.` : 'Design package created.', type: 'success' })
   }
 
   async function handleAddVersion() {
@@ -227,9 +254,9 @@ export default function DesignCenterScreen() {
       : project?.leadId ? leads.find(l => l.id === project.leadId) : undefined
     const recipientName = lead?.name ?? project?.clientName ?? ''
     const latestVersion = versionsFor(selected.id)[0]
-    const docUrl = latestVersion?.files[0]
+    const docUrls = latestVersion?.files ?? []
     const message = `Hi ${recipientName}, please review your design "${selected.name}" from SpaceKrafters.`
-      + (docUrl ? ` View here: ${docUrl}` : '')
+      + (docUrls.length > 0 ? ` View here: ${docUrls.join(' ')}` : '')
 
     if (channel === 'whatsapp') {
       const digits = (lead?.phone ?? project?.clientPhone ?? '').replace(/\D/g, '')
@@ -371,7 +398,7 @@ export default function DesignCenterScreen() {
                     </div>
                     {v.note && <p className="text-[11px] text-slate-500 mt-1">{v.note}</p>}
                     <p className="text-[11px] text-slate-400 mt-1 mb-1.5">by {v.createdBy}</p>
-                    <MultiFileUploadField label="" files={v.files} onChange={() => {}} />
+                    <MultiFileUploadField label="" files={v.files} onChange={() => {}} readOnly />
                   </div>
                 ))}
                 {versionsFor(selected.id).length === 0 && (
@@ -397,7 +424,7 @@ export default function DesignCenterScreen() {
             </select>
             {leadId && !eligibleQuotationFor(leadId) && (
               <p className="text-[11px] text-amber-600 font-semibold mt-1">
-                This lead's quotation must be Client Approved with the advance payment recorded before design can start — check Quotations.
+                This lead's quotation must be Client Approved, with Proceed with / without Advance chosen, before design can start — check Quotations.
               </p>
             )}
           </div>
@@ -419,6 +446,13 @@ export default function DesignCenterScreen() {
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
           </div>
+          <MultiFileUploadField
+            label="Design Files (optional)"
+            files={newPackageFiles}
+            onChange={setNewPackageFiles}
+            uploadButtonLabel="Upload Files / PDFs"
+            helperText="Select several files at once, or add more later. You can remove a file before creating the package."
+          />
           <button onClick={handleCreatePackage}
             className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
             style={{ background: '#C9A24B' }}>

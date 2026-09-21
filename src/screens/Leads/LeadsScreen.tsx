@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Phone, Trash2, MoreVertical, CheckSquare, Square, X, ListChecks, ChevronDown, MapPin } from 'lucide-react'
+import { Plus, Phone, Trash2, CheckSquare, Square, X, ListChecks, ChevronDown, MapPin } from 'lucide-react'
 import { useCRM } from '../../context/CRMContext'
 import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -18,6 +18,7 @@ import {
   DIVISIONS_WITH_BRAND, BUSINESS_BRAND_OPTIONS, BUSINESS_BRAND_LABEL,
 } from '../../data/businessDivisions'
 import { getManagedUsersDirectory } from '../../services/userService'
+import { getNextLeadNumber } from '../../services/leadService'
 import { hasRole } from '../../utils/permissions'
 import { LeadStatusSheet, LEAD_STATUS_LABEL, ROLE_FOR_LEAD_STATUS } from './LeadStatusSheet'
 import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser, BusinessDivision, BusinessCategory, BusinessBrand, UserRole, LeadCodePrefix } from '../../types'
@@ -108,7 +109,6 @@ export default function LeadsScreen() {
   const [showNew, setShowNew] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
-  const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null)
   const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
   const [selectMode, setSelectMode] = useState(false)
@@ -118,6 +118,7 @@ export default function LeadsScreen() {
 
   const [name, setName] = useState('')
   const [leadCodePrefix, setLeadCodePrefix] = useState<LeadCodePrefix | ''>('')
+  const [previewLeadNumber, setPreviewLeadNumber] = useState<string | null>(null)
   const [siteNo, setSiteNo] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -145,24 +146,20 @@ export default function LeadsScreen() {
     ))
   }, [])
 
-  // Close the per-lead "more actions" menu on any click elsewhere. A plain
-  // document listener, rather than a full-screen overlay, since the card's
-  // own active:scale press effect gives it a (no-op at rest) transform —
-  // that makes it a containing block, so a nested `fixed` overlay would only
-  // ever cover the card's own box, not the viewport.
-  useEffect(() => {
-    if (!menuOpenFor) return
-    const close = () => setMenuOpenFor(null)
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [menuOpenFor])
-
   useEffect(() => {
     if (!sourceMenuOpen) return
     const close = () => setSourceMenuOpen(false)
     document.addEventListener('click', close)
     return () => document.removeEventListener('click', close)
   }, [sourceMenuOpen])
+
+  useEffect(() => {
+    setPreviewLeadNumber(null)
+    if (!leadCodePrefix) return
+    let cancelled = false
+    getNextLeadNumber(leadCodePrefix).then(n => { if (!cancelled) setPreviewLeadNumber(n) })
+    return () => { cancelled = true }
+  }, [leadCodePrefix])
 
   function onOwnerChange(id: string) {
     if (id === CUSTOM_OWNER_VALUE) {
@@ -187,20 +184,6 @@ export default function LeadsScreen() {
   function onSourceChange(value: LeadSource) {
     setSource(value)
     if (value !== 'other') setSubSource('')
-  }
-
-  // Next number for a prefix = highest existing number for that prefix + 1,
-  // padded to 3 digits (SK001, SK002… FGD001, FGD002…, independent counters).
-  // Computed from the currently-loaded lead list rather than a DB sequence —
-  // fine at this app's scale, same pragmatic approach used everywhere else
-  // in this codebase (no dedicated counter/sequence tables anywhere).
-  function nextLeadNumber(prefix: LeadCodePrefix): string {
-    const nums = leads
-      .filter(l => l.leadCodePrefix === prefix && l.leadNumber)
-      .map(l => parseInt(l.leadNumber!.slice(prefix.length), 10))
-      .filter(n => !isNaN(n))
-    const next = (nums.length > 0 ? Math.max(...nums) : 0) + 1
-    return `${prefix}${String(next).padStart(3, '0')}`
   }
 
   function resetForm() {
@@ -236,7 +219,7 @@ export default function LeadsScreen() {
     const now = new Date()
     const slaDueAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
     const result = await addLead({
-      name: name.trim(), leadCodePrefix, leadNumber: nextLeadNumber(leadCodePrefix),
+      name: name.trim(), leadCodePrefix,
       siteNo: siteNo.trim() || undefined, phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
       businessDivision: businessDivision || undefined, businessCategory: businessCategory || undefined,
       businessBrand: businessBrand || undefined,
@@ -246,7 +229,7 @@ export default function LeadsScreen() {
     })
     if (!result.ok) { setFormError(result.error ?? 'Could not save lead.'); return }
     setShowNew(false)
-    setSnack({ open: true, msg: 'Lead created successfully!', type: 'success' })
+    setSnack({ open: true, msg: result.leadNumber ? `Lead ${result.leadNumber} created successfully!` : 'Lead created successfully!', type: 'success' })
   }
 
   async function handleUpdateLead() {
@@ -396,27 +379,7 @@ export default function LeadsScreen() {
                 </div>
                 {!selectMode && (
                   <div className="flex flex-col items-end gap-1 shrink-0">
-                    <div className="flex items-center gap-1.5 relative">
-                      <StatusBadge status={lead.status} size="xs" />
-                      {can('delete_lead') && (
-                        <>
-                          <button onClick={e => { e.stopPropagation(); setMenuOpenFor(menuOpenFor === lead.id ? null : lead.id) }}
-                            aria-label={`More actions for ${lead.name}`}
-                            className="p-1 rounded-lg text-slate-400 active:bg-slate-100">
-                            <MoreVertical size={15} />
-                          </button>
-                          {menuOpenFor === lead.id && (
-                            <div onClick={e => e.stopPropagation()}
-                              className="absolute top-full right-0 mt-1 z-40 bg-white rounded-xl shadow-sheet border border-slate-100 overflow-hidden min-w-[120px]">
-                              <button onClick={() => { setDeleteTarget(lead); setMenuOpenFor(null) }}
-                                className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-red-500 active:bg-red-50">
-                                <Trash2 size={13} /> Delete
-                              </button>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
+                    <StatusBadge status={lead.status} size="xs" />
                     {overdue && (
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">
                         ⚠ SLA overdue
@@ -576,7 +539,8 @@ export default function LeadsScreen() {
         title={showEdit ? 'Edit Lead' : 'New Lead'}
         height="full"
       >
-        <div className="space-y-3">
+        {/* spellCheck is inherited — turns off the browser's red "misspelled" underline for every field in this form (names/places aren't in a dictionary). */}
+        <div className="space-y-3" spellCheck={false}>
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           {!showEdit && (
             <div>
@@ -589,7 +553,7 @@ export default function LeadsScreen() {
               </select>
               {leadCodePrefix && (
                 <p className="text-xs text-slate-500 mt-1.5">
-                  Lead ID: <span className="font-bold text-slate-700">{nextLeadNumber(leadCodePrefix)}</span> (auto-generated)
+                  Lead ID: <span className="font-bold text-slate-700">{previewLeadNumber ?? '…'}</span> (auto-generated when you save)
                 </p>
               )}
             </div>

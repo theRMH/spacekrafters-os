@@ -151,7 +151,7 @@ export default function DailyDiaryScreen() {
             {selected.photos.length > 0 && (
               <div>
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Photos</p>
-                <MultiFileUploadField label="" files={selected.photos} onChange={() => {}} />
+                <MultiFileUploadField label="" files={selected.photos} onChange={() => {}} readOnly />
               </div>
             )}
             <p className="text-[11px] text-slate-400">Logged by {selected.createdByName}</p>

@@ -1,8 +1,13 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Upload, X, FileText, Eye, Image, Download } from 'lucide-react'
 import { filePreviewStore as previewStore, resolveFileUrl } from '../../utils/sessionStore'
-import { storeFile, deleteRemoteFile, getDisplayFileName } from '../../utils/fileStorage'
+import { storeFile, deleteRemoteFile, getDisplayFileName, getUploadedAt, getFileTypeLabel } from '../../utils/fileStorage'
+import { useAuth } from '../../context/AuthContext'
 import { FilePreviewModal } from '../feedback/FilePreviewModal'
+
+function fmtUploadedAt(d: Date): string {
+  return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
 
 const DEFAULT_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp,.heic,image/*'
 
@@ -35,6 +40,14 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
   const [previewName, setPreviewName] = useState<string>('')
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const { can } = useAuth()
+  // Files added through this field since it mounted, with their upload time.
+  // Whoever just added a file can always take it back before submitting;
+  // removing a file that was already saved needs `delete_uploaded_file`.
+  const addedThisSession = useRef(new Map<string, Date>())
+  const mayDeleteSaved = can('delete_uploaded_file')
+  // The form was reset/closed — nothing in the map is "just added" anymore.
+  useEffect(() => { if (files.length === 0) addedThisSession.current.clear() }, [files.length])
 
   function openPreview(src: string, name: string) {
     setPreviewSrc(src)
@@ -47,8 +60,12 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
     setUploadError(null)
     setUploading(true)
     const names: string[] = []
-    try {
-      for (const f of Array.from(selected)) {
+    const failures: string[] = []
+    // One bad file must not throw away the others in the same selection:
+    // files already uploaded are still added to the list (otherwise they'd sit
+    // on the server, orphaned, and the user would have to re-pick everything).
+    for (const f of Array.from(selected)) {
+      try {
         const url = await storeFile(f)
         // Only data:/blob: URLs are session-local and need the lightweight
         // f.name key + previewStore cache — anything else storeFile() returns
@@ -59,15 +76,20 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
         const isLocalOnly = url.startsWith('data:') || url.startsWith('blob:')
         const identifier = isLocalOnly ? f.name : url
         if (isLocalOnly) previewStore.set(identifier, url)
+        addedThisSession.current.set(identifier, new Date())
         names.push(identifier)
+      } catch (err) {
+        failures.push(`${f.name}: ${err instanceof Error ? err.message : 'Upload failed.'}`)
       }
-      onChange([...files, ...names])
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
-    } finally {
-      setUploading(false)
-      e.target.value = ''
     }
+    if (names.length > 0) onChange([...files, ...names])
+    if (failures.length > 0) {
+      setUploadError(names.length > 0
+        ? `${names.length} uploaded, ${failures.length} failed — ${failures.join(' · ')}`
+        : failures.join(' · '))
+    }
+    setUploading(false)
+    e.target.value = ''
   }
 
   function removeFile(index: number) {
@@ -103,7 +125,7 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
         </button>
       )}
       {atMax && !readOnly && (
-        <p className="text-[11px] text-amber-600 font-semibold mt-1">Remove the current file to upload a different one.</p>
+        <p className="text-[11px] text-slate-400 mt-1">File uploaded. Remove it below to upload a different one.</p>
       )}
 
       {!readOnly && (
@@ -130,6 +152,8 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
           {files.map((name, i) => {
             const src = resolveFileUrl(name)
             const isImg = isImageName(name)
+            const uploadedAt = getUploadedAt(name) ?? addedThisSession.current.get(name) ?? null
+            const canRemove = !readOnly && (mayDeleteSaved || addedThisSession.current.has(name))
             return (
               <div key={i} className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2">
                 {isImg && src ? (
@@ -140,7 +164,12 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
                 ) : (
                   <FileText size={16} className="text-blue-400 flex-shrink-0" />
                 )}
-                <p className="text-xs text-slate-700 flex-1 truncate">{getDisplayFileName(name)}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-slate-700 truncate">{getDisplayFileName(name)}</p>
+                  <p className="text-[10px] text-slate-400 truncate">
+                    {getFileTypeLabel(name)}{uploadedAt ? ` · ${fmtUploadedAt(uploadedAt)}` : ''}
+                  </p>
+                </div>
                 {src && (
                   <>
                     <button type="button"
@@ -154,8 +183,8 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
                     </a>
                   </>
                 )}
-                {!readOnly && (
-                  <button type="button" onClick={() => removeFile(i)}
+                {canRemove && (
+                  <button type="button" onClick={() => removeFile(i)} aria-label={`Remove ${getDisplayFileName(name)}`}
                     className="w-6 h-6 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0 active:bg-red-100">
                     <X size={11} className="text-red-500" />
                   </button>

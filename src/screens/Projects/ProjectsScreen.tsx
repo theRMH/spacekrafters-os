@@ -21,22 +21,14 @@ import { getAllExpenseRequests } from '../../services/expenseService'
 import { addAuditLog } from '../../services/auditLogService'
 import { getAllClients, upsertClient } from '../../services/clientService'
 import { ROLE_LABELS } from '../../data/permissions'
-import { ProjectStatusSheet, ROLE_FOR_PROJECT_STAGE, PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
-import type { ManagedUser, Project, ProjectStage, Quotation, PaymentMilestone, Payable, VendorBill, PurchaseOrder, ExpenseRequest, AuditLog, Client, Receipt } from '../../types'
+import { ProjectStatusSheet, ROLE_FOR_PROJECT_STAGE, PROJECT_STAGE_LABEL, PROJECT_STAGE_ORDER } from '../ProjectWorkspace/ProjectStatusSheet'
+import type { ManagedUser, Project, ProjectStage, StatusHistoryItem, Quotation, PaymentMilestone, Payable, VendorBill, PurchaseOrder, ExpenseRequest, AuditLog, Client, Receipt } from '../../types'
 
-// Order matches PROJECT_STAGE_ORDER in ProjectStatusSheet.tsx (the single
-// source of truth for stage sequence) — change both together if the client's
-// final stage order differs from this.
-const STAGE_OPTIONS: { value: ProjectStage; label: string }[] = [
-  { value: 'advance_payment',  label: 'Advance Payment' },
-  { value: 'designing',        label: 'Designing' },
-  { value: 'execution',        label: 'Execution' },
-  { value: 'procurement',      label: 'Procurement' },
-  { value: 'handover_prep',    label: 'Handover Prep' },
-  { value: 'final_payment',    label: 'Final Payment' },
-  { value: 'reconciliation',   label: 'Reconciliation' },
-  { value: 'closed',           label: 'Closed' },
-]
+// Built from PROJECT_STAGE_ORDER (ProjectStatusSheet.tsx) — the single source of
+// truth for stage sequence — so reordering that one array reorders this
+// dropdown too.
+const STAGE_OPTIONS: { value: ProjectStage; label: string }[] =
+  PROJECT_STAGE_ORDER.map(value => ({ value, label: PROJECT_STAGE_LABEL[value] }))
 
 const STATUS_OPTIONS: { value: Project['status']; label: string }[] = [
   { value: 'active',    label: 'Active' },
@@ -216,8 +208,23 @@ export default function ProjectsScreen() {
       clientName = client.name
       clientPhone = client.phone
     }
-    const formToSave: Project = { ...form, clientId, clientName, clientPhone }
     const existing = projects.find(p => p.id === form.id)
+    // Record the stage picked here (on create, or when edited) in the same
+    // status history the Update Status workflow writes to.
+    const stageChanged = !existing || existing.stage !== form.stage
+    const historyEntry: StatusHistoryItem | null = stageChanged && user ? {
+      stage: form.stage,
+      note: existing
+        ? `Stage changed from ${PROJECT_STAGE_LABEL[existing.stage]} to ${PROJECT_STAGE_LABEL[form.stage]}`
+        : `Project created at ${PROJECT_STAGE_LABEL[form.stage]}`,
+      updatedBy: user.name,
+      updatedRole: user.role,
+      updatedAt: new Date().toISOString(),
+    } : null
+    const formToSave: Project = {
+      ...form, clientId, clientName, clientPhone,
+      statusHistory: historyEntry ? [...(form.statusHistory ?? []), historyEntry] : form.statusHistory,
+    }
     const closingNow = formToSave.status === 'closed' && existing?.status !== 'closed'
     if (closingNow) {
       const items = outstandingItemsFor(formToSave.id)

@@ -252,10 +252,12 @@ CREATE POLICY "authenticated select quotations" ON sks_quotations
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY "authenticated write quotations" ON sks_quotations
   FOR INSERT TO authenticated WITH CHECK (sks_has_role('owner') OR sks_has_role('qs') OR sks_has_role('project_coordinator'));
--- Client-facing transitions (send_to_client / client_approved / revision_requested /
--- rejected) require the send_quotation_client permission, which only 'owner' holds
--- (see src/data/permissions.ts) — the UI hides those actions from qs/project_coordinator,
--- so RLS must enforce the same boundary rather than trusting the client.
+-- MD approval (internally_approved / MD-rejected) and the client-facing transitions
+-- (send_to_client / client_approved / revision_requested / rejected) are owner-only
+-- (approve_quotation_internal / send_quotation_client in src/data/permissions.ts) —
+-- the UI hides those actions from qs/project_coordinator, so RLS must enforce the
+-- same boundary rather than trusting the client. qs/project_coordinator can still
+-- create quotations and edit them (an edit sends it back to internal_review).
 CREATE POLICY "authenticated update quotations" ON sks_quotations
   FOR UPDATE TO authenticated
   USING (sks_has_role('owner') OR sks_has_role('qs') OR sks_has_role('project_coordinator'))
@@ -263,7 +265,7 @@ CREATE POLICY "authenticated update quotations" ON sks_quotations
     sks_has_role('owner')
     OR (
       (sks_has_role('qs') OR sks_has_role('project_coordinator'))
-      AND status NOT IN ('sent_to_client', 'client_approved', 'revision_requested', 'rejected')
+      AND status NOT IN ('internally_approved', 'sent_to_client', 'client_approved', 'revision_requested', 'rejected')
     )
   );
 CREATE POLICY "authenticated delete quotations owner only" ON sks_quotations

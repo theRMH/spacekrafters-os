@@ -364,7 +364,7 @@ export default function ExpenseRequestScreen() {
             </div>
 
             {(selected.paymentProofFiles?.length ?? 0) > 0 && (
-              <MultiFileUploadField label="Proof of Payment" files={selected.paymentProofFiles ?? []} onChange={() => {}} />
+              <MultiFileUploadField label="Proof of Payment" files={selected.paymentProofFiles ?? []} onChange={() => {}} readOnly />
             )}
 
             {selected.status === 'requested' && (

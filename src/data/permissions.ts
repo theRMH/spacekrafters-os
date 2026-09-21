@@ -18,7 +18,7 @@ const OWNER_PERMS: Permission[] = [
   'view_company_finance', 'manage_company_accounts', 'view_receivables', 'record_receipt', 'view_payables', 'reconcile',
   'view_attendance', 'mark_attendance', 'view_leave', 'approve_leave', 'view_weekly_planner',
   'view_daily_tasks', 'assign_daily_task',
-  'view_md_tasks',
+  'view_md_tasks', 'delete_uploaded_file',
   'view_reports', 'view_financial_reports',
   'manage_users', 'manage_permissions', 'manage_settings', 'view_audit_log',
   'view_personal_finance', 'view_combined_finance',
@@ -52,7 +52,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_daily_reports', 'approve_daily_report_edit',
     'raise_expense_request',
     'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner', 'view_daily_tasks',
-    'view_reports',
+    'view_reports', 'delete_uploaded_file',
   ],
 
   site_engineer: [
@@ -80,7 +80,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 
   qs: [
     'view_home',
-    'view_quotations', 'create_quotation', 'approve_quotation_internal',
+    'view_quotations', 'create_quotation',
     'view_projects',
     'view_procurement',
     'view_mrf', 'submit_mrf', 'approve_mrf',

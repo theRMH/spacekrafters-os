@@ -98,7 +98,7 @@ export default function FilesScreen() {
                     </div>
                     {v.note && <p className="text-[11px] text-slate-500 mt-1">{v.note}</p>}
                     <p className="text-[11px] text-slate-400 mt-1 mb-1.5">by {v.createdBy}</p>
-                    <MultiFileUploadField label="" files={v.files} onChange={() => {}} />
+                    <MultiFileUploadField label="" files={v.files} onChange={() => {}} readOnly />
                   </div>
                 ))}
                 {versionsFor(selected.id).length === 0 && (

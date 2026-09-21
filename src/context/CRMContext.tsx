@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import type { Lead, LeadActivityItem } from '../types'
-import { getAllLeads, upsertLead, deleteLeads as deleteLeadRows } from '../services/leadService'
+import { getAllLeads, upsertLead, insertLead, getNextLeadNumber, deleteLeads as deleteLeadRows } from '../services/leadService'
 import { getAllQuotations, deleteQuotations } from '../services/quotationService'
 import { getAllDesignPackages, upsertDesignPackage } from '../services/designService'
 import { useAuth } from './AuthContext'
@@ -9,7 +9,7 @@ interface CRMContextValue {
   leads:           Lead[]
   isLoading:       boolean
   refreshLeads:    () => Promise<void>
-  addLead:         (lead: Omit<Lead, 'id' | 'activity' | 'createdAt' | 'updatedAt'>) => Promise<{ ok: boolean; error?: string }>
+  addLead:         (lead: Omit<Lead, 'id' | 'activity' | 'createdAt' | 'updatedAt' | 'leadNumber'>) => Promise<{ ok: boolean; error?: string; leadNumber?: string }>
   updateLead:      (id: string, updates: Partial<Lead>, activityNote?: string) => Promise<{ ok: boolean; error?: string }>
   deleteLead:      (id: string) => Promise<{ ok: boolean; error?: string }>
   bulkDeleteLeads: (ids: string[]) => Promise<{ ok: boolean; error?: string }>
@@ -40,11 +40,12 @@ export function CRMProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthReady, user?.id])
 
-  async function addLead(lead: Omit<Lead, 'id' | 'activity' | 'createdAt' | 'updatedAt'>) {
+  async function addLead(lead: Omit<Lead, 'id' | 'activity' | 'createdAt' | 'updatedAt' | 'leadNumber'>) {
     const now = new Date().toISOString()
-    const newLead: Lead = {
+    const base: Lead = {
       ...lead,
-      id: `lead_${Date.now()}`,
+      // Random suffix: two leads saved in the same millisecond must not share a primary key.
+      id: `lead_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       activity: [{
         id: `act_${Date.now()}`,
         label: 'Lead Created',
@@ -54,9 +55,22 @@ export function CRMProvider({ children }: { children: ReactNode }) {
       createdAt: now,
       updatedAt: now,
     }
-    const result = await upsertLead(newLead)
-    if (result.ok) setLeads(prev => [newLead, ...prev])
-    return result
+    // The Lead ID (SK001…) is always assigned here from the database's own
+    // highest-used number — never taken from the caller. If another user saves
+    // the same number first, the unique index rejects ours and we ask for the
+    // next one and try again.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const leadNumber = lead.leadCodePrefix ? await getNextLeadNumber(lead.leadCodePrefix) : undefined
+      if (lead.leadCodePrefix && !leadNumber) return { ok: false, error: 'Could not generate a Lead ID. Please try again.' }
+      const newLead: Lead = { ...base, leadNumber: leadNumber ?? undefined }
+      const result = await insertLead(newLead)
+      if (result.ok) {
+        setLeads(prev => [newLead, ...prev])
+        return { ok: true, leadNumber: newLead.leadNumber }
+      }
+      if (!result.duplicate) return result
+    }
+    return { ok: false, error: 'Could not assign a unique Lead ID. Please try again.' }
   }
 
   async function updateLead(id: string, updates: Partial<Lead>, activityNote?: string) {
