@@ -172,6 +172,7 @@ export const SCREEN_PERMISSIONS: Record<string, Permission> = {
   'weekly-planner':  'view_weekly_planner',
   'daily-tasks':     'view_daily_tasks',
   'md-tasks':        'view_md_tasks',
+  approval:          'view_md_tasks',
   'personal-finance':'view_personal_finance',
   'personal-categories':'view_personal_finance',
   'personal-commitments':'view_personal_finance',

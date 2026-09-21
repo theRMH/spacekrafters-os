@@ -63,3 +63,24 @@ describe('getDefaultRoute', () => {
     expect(getDefaultRoute('purchase')).toBe('/procurement')
   })
 })
+
+describe('MD-only screens (Task / Approval)', () => {
+  const roles = ['accounts', 'project_coordinator', 'site_engineer', 'designer', 'qs', 'purchase', 'admin'] as const
+
+  it('lets the owner (MD) open the MD Task and Approval screens', () => {
+    expect(canAccessScreen('owner', 'md-tasks')).toBe(true)
+    expect(canAccessScreen('owner', 'approval')).toBe(true)
+  })
+
+  it('keeps every other role out of both screens', () => {
+    for (const role of roles) {
+      expect(canAccessScreen(role, 'md-tasks')).toBe(false)
+      expect(canAccessScreen(role, 'approval')).toBe(false)
+    }
+  })
+
+  it('does not let a mixed-role user in unless one of the roles is owner', () => {
+    expect(canAccessScreen(['designer', 'qs'], 'approval')).toBe(false)
+    expect(canAccessScreen(['designer', 'owner'], 'approval')).toBe(true)
+  })
+})

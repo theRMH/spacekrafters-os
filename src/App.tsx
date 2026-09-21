@@ -33,6 +33,7 @@ import MRFScreen from './screens/MRF/MRFScreen'
 import VendorLabourScreen from './screens/VendorLabour/VendorLabourScreen'
 import DailyReportScreen from './screens/DailyReport/DailyReportScreen'
 import MDTasksScreen from './screens/MDTasks/MDTasksScreen'
+import ApprovalScreen from './screens/Approval/ApprovalScreen'
 import ClientMasterScreen from './screens/Clients/ClientMasterScreen'
 import ProcurementScreen from './screens/Procurement/ProcurementScreen'
 import ExpenseRequestScreen from './screens/Expenses/ExpenseRequestScreen'
@@ -255,6 +256,14 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="md-tasks">
             <AppShell><MDTasksScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/approval"
+        element={
+          <ProtectedRoute screenPath="approval">
+            <AppShell><ApprovalScreen /></AppShell>
           </ProtectedRoute>
         }
       />

@@ -13,6 +13,10 @@ import { getAllProjects } from '../../services/projectService'
 import { getAllDesignPackages, upsertDesignPackage, getAllDesignVersions, addDesignVersion } from '../../services/designService'
 import { getAllQuotations } from '../../services/quotationService'
 import { addAuditLog } from '../../services/auditLogService'
+import { getManagedUsersDirectory } from '../../services/userService'
+import { sendNotification } from '../../utils/notifications'
+import { approvalHistoryEntry } from '../../utils/approvalHistory'
+import { ROLE_LABELS } from '../../data/permissions'
 import type { Project, DesignPackage, DesignPackageStatus, DesignVersion, AuditLog, Quotation } from '../../types'
 
 // Same MD-approval terminology as Quotations, via StatusBadge's `label`
@@ -26,6 +30,17 @@ const DESIGN_STATUS_LABEL: Record<DesignPackageStatus, string> = {
   revision_requested:  'Revision Requested',
   rejected:            'Rejected',
   client_review:       'Client Review',
+}
+
+// Wording for each approval-history entry (rejections are labelled separately —
+// they depend on whether the MD or the client rejected).
+const DESIGN_HISTORY_LABEL: Partial<Record<DesignPackageStatus, string>> = {
+  in_progress:         'Back to in progress',
+  internal_review:     'Submitted for MD approval',
+  internally_approved: 'MD approved',
+  sent_to_client:      'Sent to client',
+  client_approved:     'Client approved',
+  revision_requested:  'Revision requested',
 }
 
 function fmtDateTime(val: string): string {
@@ -63,6 +78,8 @@ export default function DesignCenterScreen() {
   const [versionNote, setVersionNote] = useState('')
   const [formError, setFormError] = useState('')
   const [showSendChoice, setShowSendChoice] = useState(false)
+  const [showReject, setShowReject] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
 
   // Design starts at the Lead's `internally_approved` stage (LeadStatusSheet.tsx),
   // before a Project exists — Projects are only created once a Lead is Won. So a
@@ -123,6 +140,12 @@ export default function DesignCenterScreen() {
     return versions.filter(v => v.designPackageId === pkgId).sort((a, b) => b.versionNumber - a.versionNumber)
   }
 
+  // Best-effort heads-up to the MD(s) that a design is waiting on them.
+  async function notifyMdPending(pkg: DesignPackage) {
+    const mdIds = (await getManagedUsersDirectory()).filter(u => u.role === 'owner' && u.id !== user?.id).map(u => u.id)
+    await sendNotification(mdIds, 'Design Pending MD Approval', `"${pkg.name}" (${packageLinkLabel(pkg)}) is waiting for your approval.`)
+  }
+
   function resetNewForm() {
     setProjectId(''); setLeadId(''); setName(''); setNotes(''); setNewPackageFiles([]); setFormError('')
   }
@@ -163,6 +186,7 @@ export default function DesignCenterScreen() {
       quotationId,
       name: name.trim(),
       status: 'in_progress',
+      statusHistory: [approvalHistoryEntry('in_progress' as DesignPackageStatus, 'Package created', user)],
       notes: notes.trim() || undefined,
       createdBy: user.name,
       createdAt: now,
@@ -221,11 +245,21 @@ export default function DesignCenterScreen() {
     setSnack({ open: true, msg: 'Version added.', type: 'success' })
   }
 
-  async function handleStatusChange(status: DesignPackageStatus) {
+  async function handleStatusChange(status: DesignPackageStatus, note?: string) {
     if (!selected) return
-    const updated: DesignPackage = { ...selected, status, updatedAt: new Date().toISOString() }
+    // 'rejected' is used by the MD (while pending approval) and by the client (after sending).
+    const label = status === 'rejected'
+      ? (selected.status === 'internal_review' ? 'MD rejected' : 'Client rejected')
+      : DESIGN_HISTORY_LABEL[status] ?? status
+    const updated: DesignPackage = {
+      ...selected, status,
+      rejectionReason: status === 'rejected' ? note : undefined,
+      statusHistory: [...(selected.statusHistory ?? []), approvalHistoryEntry(status, label, user, note)],
+      updatedAt: new Date().toISOString(),
+    }
     const result = await upsertDesignPackage(updated)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update status.', type: 'error' }); return }
+    if (status === 'internal_review') notifyMdPending(updated)
     if (user) {
       const log: AuditLog = {
         id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -338,16 +372,32 @@ export default function DesignCenterScreen() {
             <div className="space-y-2">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status Actions</p>
               <div className="flex flex-wrap gap-2">
-                {selected.status === 'in_progress' && canApprove && (
+                {/* Whoever uploads the design (designer) submits it; only the MD approves/rejects. */}
+                {selected.status === 'in_progress' && (canUpload || canApprove) && (
                   <button onClick={() => handleStatusChange('internal_review')}
                     className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
                     Submit for MD Approval
                   </button>
                 )}
+                {selected.status === 'internal_review' && !canApprove && (
+                  <p className="text-xs text-slate-500">Waiting for MD approval.</p>
+                )}
                 {selected.status === 'internal_review' && canApprove && (
-                  <button onClick={() => handleStatusChange('internally_approved')}
-                    className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
-                    MD Approve
+                  <>
+                    <button onClick={() => handleStatusChange('internally_approved')}
+                      className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
+                      MD Approve
+                    </button>
+                    <button onClick={() => { setRejectReason(''); setShowReject(true) }}
+                      className="px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-xs font-semibold text-red-700 active:bg-red-100">
+                      Reject
+                    </button>
+                  </>
+                )}
+                {selected.status === 'rejected' && selected.rejectionReason && (canUpload || canApprove) && (
+                  <button onClick={() => handleStatusChange('in_progress')}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
+                    Back to In Progress
                   </button>
                 )}
                 {selected.status === 'internally_approved' && canApprove && (
@@ -386,6 +436,34 @@ export default function DesignCenterScreen() {
                 )}
               </div>
             </div>
+
+            {selected.status === 'rejected' && selected.rejectionReason && (
+              <div className="bg-red-50 border border-red-100 rounded-2xl p-3.5">
+                <p className="text-xs font-bold text-red-700">Rejected by MD</p>
+                <p className="text-xs text-red-600 mt-0.5">{selected.rejectionReason}</p>
+                <p className="text-[11px] text-red-500 mt-1">Revise the design (add a version), move it back to In Progress and submit it again.</p>
+              </div>
+            )}
+
+            {(selected.statusHistory?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Approval History</p>
+                <div className="space-y-2.5">
+                  {[...(selected.statusHistory ?? [])].reverse().map((h, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-800 mt-1.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800">{h.label}</p>
+                        {h.note && <p className="text-[11px] text-slate-500">{h.note}</p>}
+                        <p className="text-[10px] text-slate-400">
+                          {h.by}{h.byRole ? ` (${ROLE_LABELS[h.byRole]})` : ''} · {new Date(h.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Version History</p>
@@ -481,6 +559,23 @@ export default function DesignCenterScreen() {
             className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
             style={{ background: '#C9A24B' }}>
             Add Version
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* MD rejection — reason required */}
+      <BottomSheet isOpen={showReject} onClose={() => setShowReject(false)} title="Reject Design">
+        <div className="space-y-3 pb-4">
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Reason for rejection *</label>
+            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={4}
+              placeholder="What needs to change?"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+          </div>
+          <button disabled={!rejectReason.trim()}
+            onClick={async () => { setShowReject(false); await handleStatusChange('rejected', rejectReason.trim()) }}
+            className="w-full py-3.5 rounded-xl bg-red-500 text-sm font-bold text-white active:bg-red-600 disabled:opacity-40">
+            Reject Design
           </button>
         </div>
       </BottomSheet>

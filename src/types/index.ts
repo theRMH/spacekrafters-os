@@ -168,6 +168,21 @@ export interface Lead {
 
 export type AppointmentStatus = 'scheduled' | 'completed' | 'rescheduled' | 'cancelled'
 
+// One MD decision on a reschedule request. Append-only: a later request never
+// overwrites earlier entries (the fields on the Appointment itself only describe
+// the latest request), so this is the permanent record shown in MD Task history.
+export interface RescheduleDecisionItem {
+  decision: 'accepted' | 'rejected'
+  by: string
+  byRole?: UserRole
+  at: string
+  note?: string          // MD's notes on the decision
+  reason?: string        // the reason given when rescheduling was requested
+  requestedBy?: string
+  requestedAt?: string
+  newDate?: string
+}
+
 export interface Appointment {
   id: string
   leadId: string
@@ -198,6 +213,7 @@ export interface Appointment {
   rescheduleAcceptedBy?: string
   rescheduleAcceptedAt?: string
   rescheduleMdNotes?: string
+  rescheduleHistory?: RescheduleDecisionItem[]
   createdAt: string
   updatedAt: string
 }
@@ -558,6 +574,17 @@ export type DesignPackageStatus =
   | 'in_progress' | 'client_review' | 'client_approved' | 'revision_requested'
   | 'internal_review' | 'internally_approved' | 'sent_to_client' | 'rejected'
 
+// One entry per action on a design package's approval flow — who, when, and any
+// note (e.g. the MD's rejection reason).
+export interface DesignStatusHistoryItem {
+  status: DesignPackageStatus
+  label: string
+  note?: string
+  by: string
+  byRole?: UserRole
+  at: string
+}
+
 export interface DesignPackage {
   id: string
   projectId?: string
@@ -566,6 +593,9 @@ export interface DesignPackage {
   name: string
   status: DesignPackageStatus
   notes?: string
+  statusHistory?: DesignStatusHistoryItem[]
+  // Set when the MD rejects (status 'rejected'); cleared on any later transition.
+  rejectionReason?: string
   createdBy: string
   createdAt: string
   updatedAt: string

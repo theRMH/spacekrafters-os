@@ -1,0 +1,256 @@
+import { useEffect, useState } from 'react'
+import { useAuth } from '../../context/AuthContext'
+import { useCRM } from '../../context/CRMContext'
+import { BottomSheet } from '../../components/feedback/BottomSheet'
+import { Snackbar } from '../../components/feedback/Snackbar'
+import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
+import { upsertQuotation } from '../../services/quotationService'
+import { upsertDesignPackage } from '../../services/designService'
+import { addAuditLog } from '../../services/auditLogService'
+import { approvalHistoryEntry } from '../../utils/approvalHistory'
+import type { Quotation, DesignPackage, DesignVersion, Project, AuditLog, QuotationStatus, DesignPackageStatus } from '../../types'
+
+export function fmtCurrency(n: number): string {
+  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+}
+
+export function fmtDateTime(val: string): string {
+  const d = new Date(val)
+  if (isNaN(d.getTime())) return val
+  return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
+// Who submitted the item = the most recent history entry (falls back to the
+// record's own timestamp for items created before history was recorded).
+export function submitter(history: { by: string; at: string }[] | undefined): string | undefined {
+  return history?.[history.length - 1]?.by
+}
+export function submittedBy(history: { by: string; at: string }[] | undefined, fallbackAt: string): string {
+  const last = history?.[history.length - 1]
+  return last ? `${last.by} · ${fmtDateTime(last.at)}` : fmtDateTime(fallbackAt)
+}
+
+const inputCls = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400'
+
+interface Props {
+  quote: Quotation | null
+  design: DesignPackage | null
+  versions: DesignVersion[]
+  projects: Project[]
+  onClose: () => void
+  onDecided: (result: { quotation?: Quotation; design?: DesignPackage }) => void
+}
+
+// The MD's review sheets for a pending Quotation or Design package, with
+// Approve / Reject (reason required). Used by both the MD Task page and the
+// Approval tab so both apply exactly the same decision and history rules.
+export function ApprovalReviewSheets({ quote, design, versions, projects, onClose, onDecided }: Props) {
+  const { user } = useAuth()
+  const { leads } = useCRM()
+  const [rejecting, setRejecting] = useState(false)
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
+
+  // A different item was opened — start from the Approve/Reject choice again.
+  useEffect(() => { setRejecting(false); setReason('') }, [quote?.id, design?.id])
+
+  const leadFor = (id?: string) => (id ? leads.find(l => l.id === id) : undefined)
+  function designLink(p: DesignPackage): string {
+    if (p.projectId) return projects.find(pr => pr.id === p.projectId)?.name ?? p.projectId
+    if (p.leadId) return `${leadFor(p.leadId)?.name ?? p.leadId} (Lead)`
+    return 'Unassigned'
+  }
+
+  async function decideQuotation(approved: boolean) {
+    const q = quote
+    if (!q || (!approved && !reason.trim())) return
+    setSaving(true)
+    const status: QuotationStatus = approved ? 'internally_approved' : 'rejected'
+    const note = approved ? undefined : reason.trim()
+    const updated: Quotation = {
+      ...q, status,
+      rejectionReason: note,
+      statusHistory: [...(q.statusHistory ?? []), approvalHistoryEntry(status, approved ? 'MD approved' : 'MD rejected', user, note)],
+      updatedAt: new Date().toISOString(),
+    }
+    const result = await upsertQuotation(updated)
+    setSaving(false)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not save the decision.', type: 'error' }); return }
+    if (!approved && user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: updated.projectId,
+        action: 'quotation_rejected',
+        description: `Quotation v${updated.version} (${fmtCurrency(updated.netAmount)}) rejected.`,
+        createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
+    onDecided({ quotation: updated })
+    setSnack({ open: true, msg: approved ? 'Quotation approved.' : 'Quotation rejected.', type: 'success' })
+  }
+
+  async function decideDesign(approved: boolean) {
+    const p = design
+    if (!p || (!approved && !reason.trim())) return
+    setSaving(true)
+    const status: DesignPackageStatus = approved ? 'internally_approved' : 'rejected'
+    const note = approved ? undefined : reason.trim()
+    const updated: DesignPackage = {
+      ...p, status,
+      rejectionReason: note,
+      statusHistory: [...(p.statusHistory ?? []), approvalHistoryEntry(status, approved ? 'MD approved' : 'MD rejected', user, note)],
+      updatedAt: new Date().toISOString(),
+    }
+    const result = await upsertDesignPackage(updated)
+    setSaving(false)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not save the decision.', type: 'error' }); return }
+    if (user) {
+      const log: AuditLog = {
+        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        projectId: updated.projectId,
+        action: 'design_status_changed',
+        description: `Design package "${updated.name}" status changed to "${status}".`,
+        createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+      }
+      addAuditLog(log)
+    }
+    onDecided({ design: updated })
+    setSnack({ open: true, msg: approved ? 'Design approved.' : 'Design rejected.', type: 'success' })
+  }
+
+  // Approve / Reject footer shared by both review sheets.
+  function decisionFooter(onApprove: () => void, onReject: () => void, rejectLabel: string) {
+    if (!rejecting) {
+      return (
+        <div className="flex gap-2">
+          <button disabled={saving} onClick={onApprove}
+            className="flex-1 py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#059669' }}>
+            Approve
+          </button>
+          <button disabled={saving} onClick={() => { setReason(''); setRejecting(true) }}
+            className="flex-1 py-3 rounded-xl text-sm font-bold border border-red-200 bg-red-50 text-red-700 active:opacity-90 disabled:opacity-50">
+            Reject
+          </button>
+        </div>
+      )
+    }
+    return (
+      <div className="space-y-2">
+        <label className="text-xs font-semibold text-slate-500 block">Reason for rejection *</label>
+        <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3} placeholder="What needs to change?" className={`${inputCls} resize-none`} />
+        <button disabled={saving || !reason.trim()} onClick={onReject}
+          className="w-full py-3 rounded-xl text-sm font-bold text-white bg-red-500 active:bg-red-600 disabled:opacity-40">
+          {rejectLabel}
+        </button>
+        <button onClick={() => setRejecting(false)} className="w-full py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600">
+          Back
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Quotation review */}
+      <BottomSheet isOpen={!!quote} onClose={onClose} title="Review Quotation" height="full">
+        {quote && (() => {
+          const q = quote
+          const lead = leadFor(q.leadId)
+          return (
+            <div className="space-y-4 pb-4">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-sm space-y-1">
+                <p className="font-bold text-slate-800">{lead?.name ?? q.leadId} {lead?.leadNumber ? `(${lead.leadNumber})` : ''}</p>
+                <p className="text-slate-600">Contact: {lead?.phone ?? '—'}</p>
+                <p className="text-slate-600">Version {q.version}</p>
+              </div>
+
+              <div className="space-y-3">
+                {q.sections.map(section => (
+                  <div key={section.id} className="bg-white border border-slate-100 rounded-2xl overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-slate-50 flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">{section.title}</span>
+                      <span className="text-xs font-semibold text-slate-600">{fmtCurrency(section.items.reduce((s, i) => s + i.amount, 0))}</span>
+                    </div>
+                    {section.items.map((item, i) => (
+                      <div key={item.id} className={`p-3.5 ${i > 0 ? 'border-t border-slate-100' : ''}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-700">{item.description}</span>
+                          <span className="text-xs font-bold text-slate-800">{fmtCurrency(item.amount)}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {item.quantity} {item.unit} × {fmtCurrency(item.rate)}{item.taxPercent ? ` · ${item.taxPercent}% tax` : ''}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-slate-50 rounded-2xl p-3.5 space-y-1.5">
+                <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold text-slate-700">{fmtCurrency(q.totalAmount)}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold text-slate-700">{fmtCurrency(q.taxAmount)}</span></div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Discount{q.discountType === 'percentage' && q.discountValue ? ` (${q.discountValue}%)` : ''}</span>
+                  <span className="font-semibold text-slate-700">-{fmtCurrency(q.discountAmount)}</span>
+                </div>
+                <div className="flex justify-between text-sm pt-1.5 border-t border-slate-200"><span className="font-bold text-slate-800">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(q.netAmount)}</span></div>
+              </div>
+
+              {q.documentFiles && q.documentFiles.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quotation Documents</p>
+                  <MultiFileUploadField label="" files={q.documentFiles} onChange={() => {}} readOnly />
+                </div>
+              )}
+              {q.terms && <div><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p><p className="text-xs text-slate-600">{q.terms}</p></div>}
+              {q.paymentTerms && <div><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p><p className="text-xs text-slate-600">{q.paymentTerms}</p></div>}
+
+              {decisionFooter(() => decideQuotation(true), () => decideQuotation(false), 'Reject Quotation')}
+            </div>
+          )
+        })()}
+      </BottomSheet>
+
+      {/* Design review */}
+      <BottomSheet isOpen={!!design} onClose={onClose} title="Review Design" height="full">
+        {design && (() => {
+          const p = design
+          const pkgVersions = versions.filter(v => v.designPackageId === p.id).sort((a, b) => b.versionNumber - a.versionNumber)
+          return (
+            <div className="space-y-4 pb-4">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-sm space-y-1">
+                <p className="font-bold text-slate-800">{p.name}</p>
+                <p className="text-slate-600">{designLink(p)}</p>
+                {p.notes && <p className="text-slate-500 text-xs">{p.notes}</p>}
+              </div>
+
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Design Files</p>
+                <div className="space-y-2.5">
+                  {pkgVersions.map(v => (
+                    <div key={v.id} className="bg-white border border-slate-100 rounded-2xl p-3.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800">Version {v.versionNumber}</span>
+                        <span className="text-[11px] text-slate-400">{fmtDateTime(v.createdAt)}</span>
+                      </div>
+                      {v.note && <p className="text-[11px] text-slate-500 mt-1">{v.note}</p>}
+                      <p className="text-[11px] text-slate-400 mt-1 mb-1.5">by {v.createdBy}</p>
+                      <MultiFileUploadField label="" files={v.files} onChange={() => {}} readOnly />
+                    </div>
+                  ))}
+                  {pkgVersions.length === 0 && <p className="text-xs text-slate-400 text-center py-4">No files uploaded for this design.</p>}
+                </div>
+              </div>
+
+              {decisionFooter(() => decideDesign(true), () => decideDesign(false), 'Reject Design')}
+            </div>
+          )
+        })()}
+      </BottomSheet>
+
+      <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
+    </>
+  )
+}
