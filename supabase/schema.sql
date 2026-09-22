@@ -277,8 +277,8 @@ CREATE TABLE IF NOT EXISTS sks_purchase_requests (
 CREATE INDEX IF NOT EXISTS sks_purchase_requests_project_id_idx ON sks_purchase_requests(project_id);
 ALTER TABLE sks_purchase_requests ENABLE ROW LEVEL SECURITY;
 
--- Material Request Form: Project -> Send to QS -> QS drafts -> Procurement
--- sets dates -> Send to LO -> LO approves/rejects. One row per request.
+-- Material Request Form: Project raises -> QS drafts details/notes/dates ->
+-- Project Coordinator approves/rejects -> Procurement receives it. One row per request.
 CREATE TABLE IF NOT EXISTS sks_mrfs (
   id         TEXT        PRIMARY KEY,
   project_id TEXT        NOT NULL REFERENCES sks_projects(id) ON DELETE CASCADE,

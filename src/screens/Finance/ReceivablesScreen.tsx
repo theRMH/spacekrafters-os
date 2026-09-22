@@ -296,15 +296,29 @@ export default function ReceivablesScreen() {
               <PermissionGate permission="record_receipt">
                 <div className="bg-slate-50 rounded-xl p-3 space-y-2">
                   <label className={label}>Record Receipt (remaining {fmtCurrency(selected.amount - selected.receivedAmount)})</label>
-                  <input type="number" className={inp} placeholder="Amount received" value={receiptAmount} onChange={e => setReceiptAmount(e.target.value)} />
-                  <select className={inp} value={receiptAccountId} onChange={e => setReceiptAccountId(e.target.value)}>
-                    <option value="">Deposit into account…</option>
-                    {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                  <input className={inp} placeholder="Reference (optional)" value={receiptRef} onChange={e => setReceiptRef(e.target.value)} />
-                  <button onClick={handleRecordReceipt} className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold active:bg-indigo-700">
-                    Record Receipt
-                  </button>
+                  {accounts.length === 0 ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                      <p className="text-xs text-amber-700">No accounts available. Add one in Company Accounts before recording a receipt.</p>
+                      <button onClick={() => navigate('/company-accounts')}
+                        className="text-xs font-semibold text-indigo-600 active:opacity-70">
+                        Go to Company Accounts →
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input type="number" className={inp} placeholder="Amount received" value={receiptAmount} onChange={e => setReceiptAmount(e.target.value)} />
+                      <select className={inp} value={receiptAccountId} onChange={e => setReceiptAccountId(e.target.value)}>
+                        <option value="">Deposit into account…</option>
+                        {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                      <input className={inp} placeholder="Reference (optional)" value={receiptRef} onChange={e => setReceiptRef(e.target.value)} />
+                      <button onClick={handleRecordReceipt}
+                        disabled={!receiptAmount || Number(receiptAmount) <= 0 || Number(receiptAmount) > (selected.amount - selected.receivedAmount) || !receiptAccountId}
+                        className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold active:bg-indigo-700 disabled:opacity-40 disabled:pointer-events-none">
+                        Record Receipt
+                      </button>
+                    </>
+                  )}
                 </div>
               </PermissionGate>
             )}

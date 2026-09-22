@@ -342,12 +342,12 @@ CREATE POLICY "authenticated delete purchase requests" ON sks_purchase_requests
   FOR DELETE TO authenticated USING (sks_has_role('owner'));
 
 -- ─── sks_mrfs ─────────────────────────────────────────────────────────────────
--- Visible to everyone who can act on some stage of the flow (PC sends to QS,
--- QS drafts, Purchase sets dates, and any of PC/QS/designer could be the
--- project's Lead Owner) — checked by role rather than sks_can_see_project
--- since the responsible person for a given stage isn't always someone who'd
--- otherwise have project visibility (e.g. Purchase has no task/PO yet at the
--- point an MRF first reaches them).
+-- Visible to everyone who can act on some stage of the flow (PC raises + later
+-- approves, QS drafts details/notes/dates, Purchase receives the completed MRF)
+-- — checked by role rather than sks_can_see_project since the responsible
+-- person for a given stage isn't always someone who'd otherwise have project
+-- visibility (e.g. Purchase has no task/PO yet at the point an MRF first
+-- reaches them).
 CREATE POLICY "authenticated select mrfs" ON sks_mrfs
   FOR SELECT TO authenticated USING (
     sks_has_role('owner') OR sks_has_role('project_coordinator') OR sks_has_role('qs')

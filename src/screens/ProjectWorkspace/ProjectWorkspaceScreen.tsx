@@ -21,17 +21,17 @@ import { getAllExpenseRequests } from '../../services/expenseService'
 import { getAllPaymentMilestones, getAllReceipts } from '../../services/financeService'
 import { getAllPunchListItems, upsertPunchListItem } from '../../services/punchListService'
 import { getAllDocuments, upsertDocument, getAllDocumentVersions, addDocumentVersion } from '../../services/documentService'
-import { getAllMRFs } from '../../services/mrfService'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { Dialog } from '../../components/feedback/Dialog'
 import { GanttChart } from './GanttChart'
 import { ProjectStatusSheet, ROLE_FOR_PROJECT_STAGE, PROJECT_STAGE_LABEL } from './ProjectStatusSheet'
+import { MRFPanel, ProjectProcurementPanel } from '../MRF/MRFPanel'
 import { ROLE_LABELS } from '../../data/permissions'
-import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task, TaskDependency, DailyDiaryEntry, ExpenseRequest, PaymentMilestone, Receipt, SiteVisit, PunchListItem, ProjectDocument, ProjectDocumentVersion, UserRole, MaterialRequestForm } from '../../types'
+import type { Project, ManagedUser, Requirement, Quotation, DesignPackage, DesignVersion, Task, TaskDependency, DailyDiaryEntry, ExpenseRequest, PaymentMilestone, Receipt, SiteVisit, PunchListItem, ProjectDocument, ProjectDocumentVersion, UserRole } from '../../types'
 
-type Tab = 'overview' | 'gantt' | 'team' | 'tasks' | 'requirements' | 'boq' | 'design' | 'diary' | 'finance' | 'procurement' | 'documents' | 'handover'
+type Tab = 'overview' | 'gantt' | 'team' | 'tasks' | 'requirements' | 'boq' | 'design' | 'diary' | 'finance' | 'mrf' | 'procurement' | 'documents' | 'handover'
 
-const TABS: { value: Tab; label: string; placeholder?: boolean }[] = [
+const TABS: { value: Tab; label: string }[] = [
   { value: 'overview',     label: 'Overview' },
   { value: 'gantt',        label: 'Gantt' },
   { value: 'team',         label: 'Team' },
@@ -41,7 +41,8 @@ const TABS: { value: Tab; label: string; placeholder?: boolean }[] = [
   { value: 'design',       label: 'Design' },
   { value: 'diary',        label: 'Diary' },
   { value: 'finance',      label: 'Finance' },
-  { value: 'procurement',  label: 'Procurement', placeholder: true },
+  { value: 'mrf',          label: 'MRF' },
+  { value: 'procurement',  label: 'Procurement' },
   { value: 'documents',    label: 'Documents' },
   { value: 'handover',     label: 'Handover' },
 ]
@@ -113,7 +114,6 @@ export default function ProjectWorkspaceScreen() {
   const [showHandoverConfirm, setShowHandoverConfirm] = useState(false)
   const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [documents, setDocuments] = useState<ProjectDocument[]>([])
-  const [mrfs, setMrfs] = useState<MaterialRequestForm[]>([])
   const [documentVersions, setDocumentVersions] = useState<ProjectDocumentVersion[]>([])
   const [selectedDocument, setSelectedDocument] = useState<ProjectDocument | null>(null)
   const [showNewDocument, setShowNewDocument] = useState(false)
@@ -134,7 +134,7 @@ export default function ProjectWorkspaceScreen() {
   useEffect(() => {
     async function load() {
       setIsLoading(true)
-      const [projects, dirUsers, reqs, quotes, pkgs, versions, allTasks, allDeps, allDiary, allExpenses, allMilestones, allReceipts, allSiteVisits, allPunchItems, allDocuments, allDocumentVersions, allMrfs] = await Promise.all([
+      const [projects, dirUsers, reqs, quotes, pkgs, versions, allTasks, allDeps, allDiary, allExpenses, allMilestones, allReceipts, allSiteVisits, allPunchItems, allDocuments, allDocumentVersions] = await Promise.all([
         getAllProjects(),
         getManagedUsersDirectory(),
         getAllRequirements(),
@@ -151,7 +151,6 @@ export default function ProjectWorkspaceScreen() {
         getAllPunchListItems(),
         getAllDocuments(),
         getAllDocumentVersions(),
-        getAllMRFs(),
       ])
       setProject(projects.find(p => p.id === id) ?? null)
       setUsers(dirUsers)
@@ -169,7 +168,6 @@ export default function ProjectWorkspaceScreen() {
       setPunchListItems(allPunchItems)
       setDocuments(allDocuments)
       setDocumentVersions(allDocumentVersions)
-      setMrfs(allMrfs)
       setIsLoading(false)
     }
     load()
@@ -423,29 +421,6 @@ export default function ProjectWorkspaceScreen() {
                 </div>
               </div>
             )}
-            <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3 mb-4">
-              <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Material Requests (MRF)</p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {mrfs.filter(m => m.projectId === project.id).length === 0
-                    ? 'No MRFs raised for this project yet.'
-                    : `${mrfs.filter(m => m.projectId === project.id).length} MRF${mrfs.filter(m => m.projectId === project.id).length !== 1 ? 's' : ''} raised.`}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <PermissionGate permission="create_mrf">
-                  <button onClick={() => navigate('/mrf', { state: { projectId: project.id } })}
-                    className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold active:opacity-90"
-                    style={{ background: '#0F2A4A' }}>
-                    Send to QS for MRF
-                  </button>
-                </PermissionGate>
-                <button onClick={() => navigate('/mrf')}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
-                  View MRFs →
-                </button>
-              </div>
-            </div>
           <Accordion
             defaultOpen="details"
             items={[
@@ -682,11 +657,9 @@ export default function ProjectWorkspaceScreen() {
           </div>
         )}
 
-        {tab === 'procurement' && (
-          <div className="text-center py-16 text-slate-400">
-            <p className="text-sm">Coming soon.</p>
-          </div>
-        )}
+        {tab === 'mrf' && <MRFPanel projectId={project.id} projectName={project.name} leadId={project.leadId} />}
+
+        {tab === 'procurement' && <ProjectProcurementPanel projectId={project.id} projectName={project.name} leadId={project.leadId} />}
 
         {tab === 'documents' && (
           <div className="space-y-2.5">

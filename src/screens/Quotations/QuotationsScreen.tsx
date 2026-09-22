@@ -629,22 +629,8 @@ export default function QuotationsScreen() {
                     Send to Client
                   </button>
                 )}
-                {selected.status === 'sent_to_client' && can('send_quotation_client') && (
-                  <>
-                    <p className="w-full text-xs text-slate-500">Sent to the client — record their decision:</p>
-                    <button onClick={() => handleStatusChange(selected, 'client_approved')}
-                      className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
-                      Client Approved
-                    </button>
-                    <button onClick={() => handleStatusChange(selected, 'revision_requested')}
-                      className="px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-700 active:bg-amber-100">
-                      Revision Requested
-                    </button>
-                    <button onClick={() => handleStatusChange(selected, 'rejected')}
-                      className="px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-xs font-semibold text-red-700 active:bg-red-100">
-                      Client Rejected
-                    </button>
-                  </>
+                {selected.status === 'sent_to_client' && (
+                  <p className="w-full text-xs text-slate-500">Sent to the client — their decision is recorded on the Approval page.</p>
                 )}
                 {selected.status === 'client_approved' && !selected.advanceStatus && !selected.advancePaymentReceived && can('send_quotation_client') && (
                   <>

@@ -5,6 +5,7 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { upsertQuotation } from '../../services/quotationService'
+import { upsertProject } from '../../services/projectService'
 import { upsertDesignPackage } from '../../services/designService'
 import { addAuditLog } from '../../services/auditLogService'
 import { approvalHistoryEntry } from '../../utils/approvalHistory'
@@ -91,6 +92,37 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
     setSnack({ open: true, msg: approved ? 'Quotation approved.' : 'Quotation rejected.', type: 'success' })
   }
 
+  // The client-approval stage (Approval → Quotation, quote.status ===
+  // 'sent_to_client') — the MD records the client's real-world decision here
+  // instead of on the Quotation screen. Approve -> client_approved, Reject ->
+  // revision_requested (a reason is required, same as the MD decision above).
+  async function decideClientApproval(approved: boolean) {
+    const q = quote
+    if (!q || (!approved && !reason.trim())) return
+    setSaving(true)
+    const status: QuotationStatus = approved ? 'client_approved' : 'revision_requested'
+    const note = approved ? undefined : reason.trim()
+    const updated: Quotation = {
+      ...q, status,
+      approvedAt: approved ? new Date().toISOString() : q.approvedAt,
+      statusHistory: [...(q.statusHistory ?? []), approvalHistoryEntry(status, approved ? 'Client approved' : 'Client requested a revision', user, note)],
+      updatedAt: new Date().toISOString(),
+    }
+    const result = await upsertQuotation(updated)
+    if (!result.ok) { setSaving(false); setSnack({ open: true, msg: result.error ?? 'Could not save the decision.', type: 'error' }); return }
+    // Project already exists (this is a later revision, not the initial project-creation
+    // flow) — sync its contract value to the newly client-approved amount.
+    if (approved && updated.projectId) {
+      const project = projects.find(p => p.id === updated.projectId)
+      if (project && project.contractValue !== updated.netAmount) {
+        await upsertProject({ ...project, contractValue: updated.netAmount, updatedAt: new Date().toISOString() })
+      }
+    }
+    setSaving(false)
+    onDecided({ quotation: updated })
+    setSnack({ open: true, msg: approved ? 'Client approval recorded.' : 'Revision request recorded.', type: 'success' })
+  }
+
   async function decideDesign(approved: boolean) {
     const p = design
     if (!p || (!approved && !reason.trim())) return
@@ -153,10 +185,13 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
 
   return (
     <>
-      {/* Quotation review */}
-      <BottomSheet isOpen={!!quote} onClose={onClose} title="Review Quotation" height="full">
+      {/* Quotation review — the same sheet handles both the MD's own internal
+          approval (status 'internal_review') and the client-approval stage
+          (status 'sent_to_client'), branching only on which decision to record. */}
+      <BottomSheet isOpen={!!quote} onClose={onClose} title={quote?.status === 'sent_to_client' ? 'Review Client Approval' : 'Review Quotation'} height="full">
         {quote && (() => {
           const q = quote
+          const isClientStage = q.status === 'sent_to_client'
           const lead = leadFor(q.leadId)
           return (
             <div className="space-y-4 pb-4">
@@ -207,7 +242,9 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
               {q.terms && <div><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p><p className="text-xs text-slate-600">{q.terms}</p></div>}
               {q.paymentTerms && <div><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p><p className="text-xs text-slate-600">{q.paymentTerms}</p></div>}
 
-              {decisionFooter(() => decideQuotation(true), () => decideQuotation(false), 'Reject Quotation')}
+              {isClientStage
+                ? decisionFooter(() => decideClientApproval(true), () => decideClientApproval(false), 'Request Revision')
+                : decisionFooter(() => decideQuotation(true), () => decideQuotation(false), 'Reject Quotation')}
             </div>
           )
         })()}

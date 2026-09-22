@@ -55,6 +55,7 @@ const COLORS: Record<string, { bg: string; text: string }> = {
   in_progress:            { bg: 'bg-blue-50',     text: 'text-blue-700'    },
   client_review:          { bg: 'bg-violet-50',   text: 'text-violet-700'  },
   revision_requested:     { bg: 'bg-amber-50',    text: 'text-amber-700'   },
+  paid:                   { bg: 'bg-emerald-50',  text: 'text-emerald-700' },
 }
 
 interface Props {

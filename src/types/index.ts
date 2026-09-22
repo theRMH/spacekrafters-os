@@ -23,15 +23,19 @@ export type Permission =
   | 'view_design' | 'upload_design' | 'approve_design' | 'request_revision'
   // Projects
   | 'view_projects' | 'create_project' | 'edit_project' | 'delete_project'
+  // MD-only: approving a project's stage-advance request (Project Status Sheet)
+  | 'approve_project_stage'
   // Tasks
   | 'view_tasks' | 'add_task' | 'edit_task' | 'complete_task' | 'add_subtask'
   // Gantt
   | 'view_gantt' | 'edit_deadline'
   // Procurement
   | 'view_procurement' | 'raise_purchase_request' | 'approve_purchase_request' | 'create_po' | 'receive_goods' | 'enter_vendor_bill'
-  // MRF (Material Request Form) — Project sends to QS, QS drafts + submits to
-  // Procurement, Procurement sets dates + sends to LO, LO approves/rejects.
-  | 'view_mrf' | 'create_mrf' | 'submit_mrf' | 'set_mrf_dates' | 'approve_mrf'
+  // MRF (Material Request Form) — Project raises, QS drafts details/notes/dates
+  // + submits for approval, Project Coordinator approves/rejects, Procurement
+  // receives it, Accounts releases payment. 'set_mrf_dates' now also gates
+  // Procurement's own execution status updates after the MRF reaches them.
+  | 'view_mrf' | 'create_mrf' | 'submit_mrf' | 'set_mrf_dates' | 'approve_mrf' | 'release_mrf_payment'
   // Vendors / Labour listing — simple roster, separate from the full Vendor master
   | 'view_vendors_labour' | 'manage_vendors_labour'
   // Site Engineer Daily Report — locked once submitted; editing requires LO approval
@@ -403,10 +407,11 @@ export interface StatusHistoryItem {
 }
 
 // ─── Material Request Form (MRF) ─────────────────────────────────────────────
-// Project -> Send to QS -> QS drafts material details -> Send to Procurement ->
-// Procurement sets Requesting/Expected Delivery dates -> Send to LO (the
-// project's Lead Owner) -> LO Approves/Rejects with notes.
-export type MRFStatus = 'pending_qs' | 'pending_procurement' | 'pending_lo_approval' | 'approved' | 'rejected'
+// Project raises (optionally seeding details/notes) -> QS fills/updates material
+// details, notes, Requesting Date & Expected Delivery Date and submits for
+// approval -> Project Coordinator approves/rejects -> Procurement receives the
+// completed MRF (adds vendors/files) -> Accounts releases the payment.
+export type MRFStatus = 'pending_qs' | 'pending_coordinator_approval' | 'pending_procurement' | 'rejected' | 'paid'
 
 // Procurement's own execution status, tracked once the MRF is approved —
 // distinct from `status` above (the MRF's own QS/Procurement/LO approval
@@ -422,16 +427,35 @@ export interface ProcurementStatusHistoryItem {
   updatedAt: string
 }
 
+// A vendor Procurement has added to an MRF, with its own file uploads — each
+// vendor's files are only ever read/written through this entry, never a
+// shared list, so removing one vendor can never touch another's files.
+export interface MRFVendor {
+  id: string
+  name: string
+  files: string[]
+}
+
 export interface MaterialRequestForm {
   id: string
   projectId: string
   status: MRFStatus
-  materialDetails?: string          // filled by QS
-  requestingDate?: string           // filled by Procurement
-  expectedDeliveryDate?: string     // filled by Procurement
-  loId?: string                     // resolved Lead Owner for this project's lead
-  loName?: string
-  loNotes?: string                  // filled by LO on approve/reject
+  materialDetails?: string          // raised by Project, filled/updated by QS
+  notes?: string                    // raised by Project, filled/updated by QS
+  additionalNotes?: string          // filled by QS, separate from notes
+  requestingDate?: string           // filled by QS
+  expectedDeliveryDate?: string     // filled by QS
+  approvalNotes?: string            // filled by the Project Coordinator on approve/reject
+  vendors?: MRFVendor[]             // added by Procurement, any number of vendors, each with its own files
+  // Legacy — a flat vendor-name list + one shared file list, from before files
+  // were linked to a specific vendor. Only read (via migrateMrfVendors) to
+  // carry old records forward; never written to by current code.
+  vendorNames?: string[]
+  files?: string[]
+  releasedAmount?: number           // filled by Accounts on release
+  releaseDate?: string              // filled by Accounts on release
+  paymentReference?: string         // filled by Accounts on release
+  accountsNotes?: string            // filled by Accounts on release
   procurementStatus?: string
   procurementStatusHistory?: ProcurementStatusHistoryItem[]
   history: StatusHistoryItem[]
@@ -517,6 +541,17 @@ export interface Project {
   assignedToId?: string
   assignedToName?: string
   statusHistory?: StatusHistoryItem[]
+  // A stage-advance request the responsible role has submitted, sitting at
+  // the current stage until the MD approves (moves to toStage) or rejects
+  // (cleared, stage unchanged) — same pattern as MRF/Quotation/Design approval.
+  pendingStageRequest?: {
+    toStage: ProjectStage
+    note?: string
+    requestedBy: string
+    requestedById?: string
+    requestedByRole?: UserRole
+    requestedAt: string
+  }
   createdAt: string
   updatedAt: string
 }

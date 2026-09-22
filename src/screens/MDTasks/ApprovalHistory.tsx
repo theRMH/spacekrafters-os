@@ -6,7 +6,7 @@ import { getAllDesignPackages, getAllDesignVersions } from '../../services/desig
 import { getAllAppointments } from '../../services/appointmentService'
 import { getAllProjects } from '../../services/projectService'
 import { getAllAuditLogs } from '../../services/auditLogService'
-import { isMdDecisionLabel, isApprovedBeforeHistory, rescheduleDecisions } from '../../utils/approvalHistory'
+import { isMdDecisionLabel, isClientDecisionLabel, isApprovedBeforeHistory, rescheduleDecisions } from '../../utils/approvalHistory'
 
 export type ApprovalType = 'Quotation' | 'Designing' | 'Rescheduled Appointment'
 
@@ -62,15 +62,17 @@ export function ApprovalHistory({ refreshKey, types, title = 'Approval History' 
 
       for (const q of types.includes('Quotation') ? quotations : []) {
         (q.statusHistory ?? []).forEach((h, i) => {
-          if (!isMdDecisionLabel(h.label)) return
+          const isClient = isClientDecisionLabel(h.label)
+          if (!isMdDecisionLabel(h.label) && !isClient) return
           out.push({
             key: `q-${q.id}-${i}`, type: 'Quotation', name: leadName(q.leadId),
             fields: [
               ['Lead ID', leadFor(q.leadId)?.leadNumber ?? '—'],
               ['Version', String(q.version)],
               ['Amount', `₹${q.netAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`],
+              ['Stage', isClient ? 'Client Approval' : 'MD Approval'],
             ],
-            accepted: h.label === 'MD approved', by: h.by, at: h.at, reason: h.note,
+            accepted: h.label === 'MD approved' || h.label === 'Client approved', by: h.by, at: h.at, reason: h.note,
           })
         })
         // Approved before approval history existed: still an approved record.

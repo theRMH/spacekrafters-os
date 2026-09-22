@@ -139,10 +139,6 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     await save('qualified', 'Lead qualified')
   }
 
-  async function submitAppointmentConfirmed() {
-    await save('site_visit_scheduled', 'Appointment confirmed — site visit scheduled')
-  }
-
   async function submitReschedule() {
     if (!latestAppointment || !rescheduleReasonText.trim()) return
     setSaving(true)
@@ -335,15 +331,10 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
 
         return (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">A site visit appointment is scheduled.</p>
-            <div className="flex gap-2">
-              <button disabled={saving} onClick={submitAppointmentConfirmed} className={`${btn} flex-1 text-white`} style={{ background: '#0F2A4A' }}>
-                Appointment Confirmed
-              </button>
-              <button disabled={saving} onClick={() => setShowRescheduleForm(true)} className={`${btn} flex-1 border border-amber-200 bg-amber-50 text-amber-700`}>
-                Rescheduled
-              </button>
-            </div>
+            <p className="text-sm text-slate-600">A site visit appointment is scheduled. Submitting for MD approval is the only way to move this lead forward — the MD's Accept confirms the appointment and advances it to Site Visit.</p>
+            <button disabled={saving} onClick={() => setShowRescheduleForm(true)} className={`${btn} border border-amber-200 bg-amber-50 text-amber-700`}>
+              Rescheduled
+            </button>
           </div>
         )
       }

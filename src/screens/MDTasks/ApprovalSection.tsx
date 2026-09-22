@@ -40,6 +40,9 @@ export function ApprovalSection({ tab, onTabChange, onDecided }: {
 
   const newest = <T extends { updatedAt: string }>(a: T, b: T) => b.updatedAt.localeCompare(a.updatedAt)
   const pendingQuotes = quotations.filter(q => q.status === 'internal_review').sort(newest)
+  // Sent to the client — recorded here instead of on the Quotation screen, so
+  // the Approval page is the one place every quotation decision happens.
+  const pendingClientApprovals = quotations.filter(q => q.status === 'sent_to_client').sort(newest)
   const pendingDesigns = packages.filter(p => p.status === 'internal_review').sort(newest)
 
   const leadFor = (id?: string) => (id ? leads.find(l => l.id === id) : undefined)
@@ -71,13 +74,13 @@ export function ApprovalSection({ tab, onTabChange, onDecided }: {
   return (
     <section className="space-y-3">
       <div className="flex gap-2">
-        {tabBtn('quotation', 'Quotation', pendingQuotes.length)}
+        {tabBtn('quotation', 'Quotation', pendingQuotes.length + pendingClientApprovals.length)}
         {tabBtn('design', 'Designing', pendingDesigns.length)}
       </div>
 
       {tab === 'quotation' && (
         <div className="space-y-3">
-          {!isLoading && pendingQuotes.length === 0 && emptyText}
+          {!isLoading && pendingQuotes.length === 0 && pendingClientApprovals.length === 0 && emptyText}
           {pendingQuotes.map(q => {
             const lead = leadFor(q.leadId)
             return (
@@ -90,6 +93,25 @@ export function ApprovalSection({ tab, onTabChange, onDecided }: {
                 <p className="text-xs text-slate-500">Lead ID: {lead?.leadNumber ?? '—'} · v{q.version}</p>
                 <p className="text-xs text-slate-500">Net Amount: <span className="font-semibold text-slate-700">{fmtCurrency(q.netAmount)}</span></p>
                 <p className="text-[11px] text-slate-400 mt-1">Submitted by {submittedBy(q.statusHistory, q.updatedAt)}</p>
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
+                  {pendingPill}
+                  {reviewBtn(() => setSelectedQuote(q))}
+                </div>
+              </div>
+            )
+          })}
+          {pendingClientApprovals.map(q => {
+            const lead = leadFor(q.leadId)
+            return (
+              <div key={q.id} className={cardShell}>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h3 className="text-sm font-bold text-slate-800">Client Approval</h3>
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0" style={{ background: '#D1FAE5', color: '#047857' }}>Quotation</span>
+                </div>
+                <p className="text-sm text-slate-700 font-semibold">{lead?.name ?? q.leadId}</p>
+                <p className="text-xs text-slate-500">Lead ID: {lead?.leadNumber ?? '—'} · v{q.version}</p>
+                <p className="text-xs text-slate-500">Net Amount: <span className="font-semibold text-slate-700">{fmtCurrency(q.netAmount)}</span></p>
+                <p className="text-[11px] text-slate-400 mt-1">Sent to client — {submittedBy(q.statusHistory, q.updatedAt)}</p>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
                   {pendingPill}
                   {reviewBtn(() => setSelectedQuote(q))}

@@ -16,6 +16,11 @@ export function approvalHistoryEntry<S extends string>(
 // design package's history.
 export const isMdDecisionLabel = (label: string) => label === 'MD approved' || label === 'MD rejected'
 
+// The labels the client-approval stage (Approval → Quotation, recorded by the
+// MD on the client's behalf) writes into a quotation's history — a separate
+// decision from the MD's own internal approval above.
+export const isClientDecisionLabel = (label: string) => label === 'Client approved' || label === 'Client requested a revision'
+
 // A quotation / design can only be in these statuses after the MD approved it.
 // Items approved before approval history was recorded (2026-09-21) are in one
 // of them but have no "MD approved" entry — they're still approved records and
