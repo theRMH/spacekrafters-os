@@ -47,6 +47,17 @@ function todayInputValue(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+function nowTimeInputValue(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function isPastScheduledAt(value: string): boolean {
+  const d = new Date(value)
+  return !isNaN(d.getTime()) && d.getTime() < Date.now()
+}
+
 // Older appointments only ever had a single coordinator — fall back to that
 // when assignedToNames isn't there.
 function assigneeSummary(appt: Appointment): string {
@@ -147,6 +158,10 @@ export default function AppointmentsScreen() {
   async function handleAddAppointment() {
     if (!leadId || !clientName.trim() || !scheduledAt.split('T')[1] || !location.trim() || assignedToIds.length === 0) {
       setFormError('Lead, client name, date/time, location, and at least one assignee are required.')
+      return
+    }
+    if (isPastScheduledAt(scheduledAt)) {
+      setFormError('Please select a date & time that has not already passed.')
       return
     }
     const now = new Date().toISOString()
@@ -367,10 +382,21 @@ export default function AppointmentsScreen() {
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Date & Time *</label>
             <div className="grid grid-cols-2 gap-2">
               <input type="date" value={scheduledAt.split('T')[0] || ''} min={todayInputValue()}
-                onChange={e => setScheduledAt(`${e.target.value}T${scheduledAt.split('T')[1] || '09:00'}`)}
+                onChange={e => {
+                  const date = e.target.value
+                  let time = scheduledAt.split('T')[1] || '09:00'
+                  if (date === todayInputValue() && time < nowTimeInputValue()) time = nowTimeInputValue()
+                  setScheduledAt(`${date}T${time}`)
+                }}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
               <input type="time" value={scheduledAt.split('T')[1] || ''}
-                onChange={e => setScheduledAt(`${scheduledAt.split('T')[0] || new Date().toISOString().slice(0, 10)}T${e.target.value}`)}
+                min={(scheduledAt.split('T')[0] || todayInputValue()) === todayInputValue() ? nowTimeInputValue() : undefined}
+                onChange={e => {
+                  const date = scheduledAt.split('T')[0] || todayInputValue()
+                  let time = e.target.value
+                  if (date === todayInputValue() && time < nowTimeInputValue()) time = nowTimeInputValue()
+                  setScheduledAt(`${date}T${time}`)
+                }}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
             </div>
           </div>

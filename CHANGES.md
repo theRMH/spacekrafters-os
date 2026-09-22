@@ -1,4 +1,9 @@
-## 2026-09-21
+## 2026-09-22
+
+### New Appointment: can no longer pick a past time for today
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Appointments/AppointmentsScreen.tsx` — the Date & Time field on the appointment form (used for both New Appointment and Edit) now blocks past times when the selected date is today: the time input's `min` is set to the current local time, typing or picking an earlier time snaps it forward to now, switching the date away from today and back re-applies the restriction, and a future date allows any time. `handleAddAppointment` also rejects a past date/time on submit as a final guard. Future dates are unaffected, and no other date field in the app was touched.
+- **Verified live:** on open, time input's `min` matched the current time; typing an earlier time (01:00) snapped to the current time; typing a later time (23:55) was accepted; picking a date two days out removed the time restriction and let 06:00 be entered; switching the date back to today re-clamped a stale time back to now. Zero console errors. No test appointment left behind (validation blocked the incomplete submit). `tsc --noEmit`, unit tests (14) and `npm run build` clean.
 
 ### Approval History: already-approved records no longer missing ("No approvals or rejections recorded yet")
 **Commit:** Uncommitted
