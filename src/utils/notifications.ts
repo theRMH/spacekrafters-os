@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { sendPushNotification } from './pushNotifications'
+import { createNotifications } from '../services/notificationService'
 
 // SMS/WhatsApp go through the send-notification Edge Function — see its
 // header for why both channels are currently no-ops (no provider chosen
@@ -26,10 +27,13 @@ export async function sendWhatsAppNotification(userIds: string[], title: string,
 
 // Canonical notification entry point — fires every channel (push works
 // today; SMS/WhatsApp are wired end-to-end but no-op until a provider is
-// configured, see send-notification/index.ts). Every place in the CRM that
-// needs to alert someone should call this instead of sendPushNotification
-// directly, so SMS/WhatsApp light up automatically everywhere the moment a
-// provider is configured — no per-call-site changes needed later.
+// configured, see send-notification/index.ts) and persists an in-app
+// notification row per recipient (sks_notifications), so the alert is still
+// there — unread, in the bell — for a recipient who was offline/not
+// subscribed to push when this fired. Every place in the CRM that needs to
+// alert someone should call this instead of sendPushNotification directly,
+// so SMS/WhatsApp and the in-app list light up automatically everywhere —
+// no per-call-site changes needed later.
 // Best-effort, same convention as the rest of the app's side effects: never
 // throws, never blocks the action that triggered it.
 export async function sendNotification(
@@ -39,6 +43,7 @@ export async function sendNotification(
   const [push, text] = await Promise.all([
     sendPushNotification(userIds, title, body, url),
     sendTextNotification(userIds, title, body, ['sms', 'whatsapp']),
+    createNotifications(userIds, title, body, url),
   ])
   const errors = [push, text].filter(r => !r.ok).map(r => r.error ?? 'Unknown error')
   return { ok: errors.length === 0, errors }

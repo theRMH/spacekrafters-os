@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Phone, Lock, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { getDefaultRoute } from '../../utils/permissions'
 
 export default function LoginScreen() {
   const { loginWithCredentials, isAuthReady } = useAuth()
@@ -26,7 +27,7 @@ export default function LoginScreen() {
       setError(result.error ?? 'Invalid phone number or password.')
       return
     }
-    navigate('/home', { replace: true })
+    navigate(result.role ? getDefaultRoute(result.role) : '/home', { replace: true })
   }
 
   return (

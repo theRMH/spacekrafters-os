@@ -3,6 +3,7 @@ import { Menu } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { MobileMenuDrawer } from '../navigation/MobileMenuDrawer'
+import { NotificationBell } from './NotificationBell'
 
 export function AppHeader() {
   const navigate = useNavigate()
@@ -28,6 +29,7 @@ export function AppHeader() {
         />
       </div>
       <div className="flex items-center gap-2">
+        <NotificationBell />
         <button
           onClick={() => navigate('/settings')}
           className="w-9 h-9 rounded-full flex items-center justify-center"

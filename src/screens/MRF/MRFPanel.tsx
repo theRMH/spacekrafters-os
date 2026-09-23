@@ -352,7 +352,7 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Requesting Date *</label>
-            <input type="date" value={requestingDate} onChange={e => setRequestingDate(e.target.value)}
+            <input type="date" value={requestingDate} min={todayStr()} onChange={e => setRequestingDate(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
           <div>

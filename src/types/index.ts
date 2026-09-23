@@ -60,6 +60,10 @@ export type Permission =
   | 'manage_users' | 'manage_permissions' | 'manage_settings' | 'view_audit_log'
   // Owner-only
   | 'view_personal_finance' | 'view_combined_finance'
+  // MD-only executive Dashboard
+  | 'view_dashboard'
+  // Personalized Task tab — every non-MD role
+  | 'view_my_tasks'
   // Base
   | 'view_home'
 
@@ -974,6 +978,17 @@ export interface AuditLog {
   description: string
   createdBy: string
   createdByRole: UserRole
+  createdAt: string
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+export interface AppNotification {
+  id: string
+  userId: string
+  title: string
+  body: string
+  url?: string
+  readAt?: string
   createdAt: string
 }
 

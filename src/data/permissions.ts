@@ -1,7 +1,7 @@
 import type { UserRole, Permission } from '../types'
 
 const OWNER_PERMS: Permission[] = [
-  'view_home',
+  'view_home', 'view_dashboard',
   'view_leads', 'add_lead', 'edit_lead', 'delete_lead', 'convert_lead', 'view_activity',
   'view_appointments', 'add_appointment', 'edit_appointment',
   'view_site_visits', 'add_site_visit', 'edit_site_visit', 'add_requirements', 'view_site_visit_reports',
@@ -28,7 +28,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   owner: OWNER_PERMS,
 
   accounts: [
-    'view_home',
+    'view_home', 'view_my_tasks',
     'view_leads',
     'view_mrf', 'release_mrf_payment',
     'view_expenses', 'approve_expense', 'record_payment',
@@ -39,7 +39,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
 
   project_coordinator: [
-    'view_home',
+    'view_home', 'view_my_tasks',
     'view_leads', 'add_lead', 'edit_lead', 'convert_lead', 'view_activity',
     'view_appointments', 'add_appointment', 'edit_appointment',
     'view_site_visits', 'add_site_visit', 'edit_site_visit', 'add_requirements',
@@ -57,7 +57,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
 
   site_engineer: [
-    'view_home',
+    'view_home', 'view_my_tasks',
     'view_leads',
     'view_site_visits', 'add_site_visit', 'edit_site_visit', 'add_requirements',
     'view_tasks', 'complete_task',
@@ -69,7 +69,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
 
   designer: [
-    'view_home',
+    'view_home', 'view_my_tasks',
     'view_leads',
     'view_design', 'upload_design', 'request_revision',
     'view_tasks', 'complete_task',
@@ -80,7 +80,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
 
   qs: [
-    'view_home',
+    'view_home', 'view_my_tasks',
     'view_quotations', 'create_quotation',
     'view_projects',
     'view_procurement',
@@ -92,14 +92,14 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
 
   purchase: [
-    'view_home',
+    'view_home', 'view_my_tasks',
     'view_procurement', 'raise_purchase_request', 'create_po', 'receive_goods', 'enter_vendor_bill',
     'view_mrf', 'set_mrf_dates',
     'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner', 'view_daily_tasks',
   ],
 
   admin: [
-    'view_home',
+    'view_home', 'view_my_tasks',
     'view_attendance', 'mark_attendance', 'view_leave', 'approve_leave', 'view_weekly_planner', 'view_daily_tasks',
     'manage_users', 'manage_permissions', 'manage_settings',
   ],
@@ -133,6 +133,9 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
 
 export const SCREEN_PERMISSIONS: Record<string, Permission> = {
   home:              'view_home',
+  dashboard:         'view_dashboard',
+  'my-tasks':        'view_my_tasks',
+  'my-tasks/project':'view_my_tasks',
   leads:             'view_leads',
   appointments:      'view_appointments',
   'follow-ups':      'view_activity',

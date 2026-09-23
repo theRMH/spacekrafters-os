@@ -7,6 +7,7 @@ import {
   CalendarOff, UserCog, File, Settings, UploadCloud, History,
   PiggyBank, Tags, BellRing, TrendingUp, PieChart, CalendarDays, Scale, LineChart,
   CalendarClock, LocateFixed, ListChecks, FileSearch, Hammer, FileEdit, Wrench, ShieldCheck,
+  LayoutDashboard,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -19,7 +20,9 @@ export interface NavItem {
 
 export function getMainItems(): NavItem[] {
   return [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', permission: 'view_dashboard' },
     { icon: Home,       label: 'Home',     path: '/home',     permission: 'view_home'     },
+    { icon: Wrench,     label: 'Task',     path: '/my-tasks', permission: 'view_my_tasks' },
     { icon: FolderOpen, label: 'Projects', path: '/projects', permission: 'view_projects' },
     { icon: Users,      label: 'Clients',  path: '/clients',  permission: 'view_projects' },
   ]

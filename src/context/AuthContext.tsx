@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
-import type { AuthUser, ManagedUser, Permission } from '../types'
+import type { AuthUser, ManagedUser, Permission, UserRole } from '../types'
 import { hasPermission } from '../utils/permissions'
 import { syntheticEmailFromMobile } from '../utils/authIdentity'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
@@ -9,6 +9,9 @@ import { initUsersFromSupabase } from '../utils/userStorage'
 export interface LoginResult {
   success: boolean
   error?: string
+  // Set on success so the caller can route to the right landing page without
+  // racing the setUser() state update below.
+  role?: UserRole
 }
 
 interface AuthContextValue {
@@ -118,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: 'This user is inactive. Please contact Admin.' }
     }
     setUser(toAuthUser(managed))
-    return { success: true }
+    return { success: true, role: managed.role }
   }
 
   function logout() {

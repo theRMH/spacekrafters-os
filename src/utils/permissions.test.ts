@@ -55,12 +55,15 @@ describe('canAccessScreen', () => {
 })
 
 describe('getDefaultRoute', () => {
-  it('routes each role to its configured landing screen', () => {
+  it('routes the owner to Home and every other role to their personal Task tab', () => {
     expect(getDefaultRoute('owner')).toBe('/home')
-    expect(getDefaultRoute('site_engineer')).toBe('/tasks')
-    expect(getDefaultRoute('designer')).toBe('/design')
-    expect(getDefaultRoute('qs')).toBe('/quotations')
-    expect(getDefaultRoute('purchase')).toBe('/procurement')
+    expect(getDefaultRoute('site_engineer')).toBe('/my-tasks')
+    expect(getDefaultRoute('designer')).toBe('/my-tasks')
+    expect(getDefaultRoute('qs')).toBe('/my-tasks')
+    expect(getDefaultRoute('purchase')).toBe('/my-tasks')
+    expect(getDefaultRoute('accounts')).toBe('/my-tasks')
+    expect(getDefaultRoute('project_coordinator')).toBe('/my-tasks')
+    expect(getDefaultRoute('admin')).toBe('/my-tasks')
   })
 })
 

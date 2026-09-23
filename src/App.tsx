@@ -7,6 +7,11 @@ import { SidebarNavigation } from './components/navigation/SidebarNavigation'
 import { NavigationBar } from './components/navigation/NavigationBar'
 import LoginScreen from './screens/Login/LoginScreen'
 import HomeScreen from './screens/Home/HomeScreen'
+import DashboardScreen from './screens/Dashboard/DashboardScreen'
+import OutstandingProjectDetailScreen from './screens/Dashboard/OutstandingProjectDetailScreen'
+import SalesPersonDetailScreen from './screens/Dashboard/SalesPersonDetailScreen'
+import MyTaskScreen from './screens/MyTasks/MyTaskScreen'
+import MyProjectDetailScreen from './screens/MyTasks/MyProjectDetailScreen'
 import SettingsScreen from './screens/Settings/SettingsScreen'
 import UserManagementScreen from './screens/Settings/UserManagementScreen'
 import AttendanceSettingsScreen from './screens/Settings/AttendanceSettingsScreen'
@@ -88,6 +93,46 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="home">
             <AppShell><HomeScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute screenPath="dashboard">
+            <AppShell><DashboardScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/outstanding/:projectId"
+        element={
+          <ProtectedRoute screenPath="dashboard">
+            <AppShell><OutstandingProjectDetailScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/sales/:personName"
+        element={
+          <ProtectedRoute screenPath="dashboard">
+            <AppShell><SalesPersonDetailScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-tasks"
+        element={
+          <ProtectedRoute screenPath="my-tasks">
+            <AppShell><MyTaskScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-tasks/project/:projectId"
+        element={
+          <ProtectedRoute screenPath="my-tasks">
+            <AppShell><MyProjectDetailScreen /></AppShell>
           </ProtectedRoute>
         }
       />

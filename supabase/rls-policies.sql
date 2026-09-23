@@ -600,6 +600,13 @@ CREATE POLICY "authenticated select own notifications" ON sks_notifications
   FOR SELECT TO authenticated USING (user_id = sks_my_id());
 CREATE POLICY "authenticated update own notifications" ON sks_notifications
   FOR UPDATE TO authenticated USING (user_id = sks_my_id()) WITH CHECK (user_id = sks_my_id());
+-- Any signed-in user can notify any other signed-in user (assigning an
+-- appointment/task, an MD approval, etc.) — same "true" write-check already
+-- used for sks_site_visits/sks_requirements/sks_document_versions. SELECT
+-- stays locked to the recipient's own rows, so this only ever lets someone
+-- create a notification for someone else, never read one.
+CREATE POLICY "authenticated insert notifications" ON sks_notifications
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 CREATE POLICY "authenticated select own push subscriptions" ON sks_push_subscriptions
   FOR SELECT TO authenticated USING (user_id = sks_my_id());

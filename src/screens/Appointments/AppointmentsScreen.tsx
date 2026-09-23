@@ -213,6 +213,17 @@ export default function AppointmentsScreen() {
     setAppointments(prev => prev.map(a => (a.id === updated.id ? updated : a)))
     setShowEdit(false)
     setSelected(null)
+
+    const previouslyAssigned = new Set(selected.assignedToIds ?? (selected.coordinatorId ? [selected.coordinatorId] : []))
+    const newlyAssignedIds = assignedToIds.filter(id => id !== user?.id && !previouslyAssigned.has(id))
+    if (newlyAssignedIds.length > 0) {
+      sendNotification(
+        newlyAssignedIds,
+        'Site Visit Assigned',
+        `${clientName.trim()} — ${fmtDateTime(updated.scheduledAt)} at ${updated.location}`,
+        '/appointments',
+      )
+    }
     setSnack({ open: true, msg: 'Appointment updated.', type: 'success' })
   }
 

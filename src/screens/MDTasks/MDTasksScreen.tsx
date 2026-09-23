@@ -138,12 +138,10 @@ export default function MDTasksScreen() {
     })),
   ].sort((a, b) => b.at.localeCompare(a.at))
 
-  // The real assigned tasks (project tasks): open ones first by due date (soonest
-  // first, undated last), then completed ones, newest first.
-  const sortedTasks = [...tasks].sort((a, b) => {
-    const aDone = a.status === 'completed', bDone = b.status === 'completed'
-    if (aDone !== bDone) return aDone ? 1 : -1
-    if (aDone) return b.updatedAt.localeCompare(a.updatedAt)
+  // The real assigned tasks (project tasks) still open — completed ones move
+  // to Done History below instead of staying here. Soonest due date first,
+  // undated last.
+  const sortedTasks = [...tasks].filter(t => t.status !== 'completed').sort((a, b) => {
     if (a.deadline && b.deadline) return a.deadline.localeCompare(b.deadline)
     if (a.deadline) return -1
     if (b.deadline) return 1
@@ -272,11 +270,11 @@ export default function MDTasksScreen() {
         <div className="flex items-center gap-2 pt-1">
           <span className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center"><ClipboardList size={16} /></span>
           <h2 className="text-base font-extrabold text-slate-800">Assigned Tasks</h2>
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">{tasks.length}</span>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">{sortedTasks.length}</span>
         </div>
 
-        {!isLoading && tasks.length === 0 && (
-          <p className="text-sm text-slate-400 text-center py-8">No tasks have been assigned yet.</p>
+        {!isLoading && sortedTasks.length === 0 && (
+          <p className="text-sm text-slate-400 text-center py-8">No open tasks assigned right now.</p>
         )}
 
         <div className="grid gap-3 xl:grid-cols-2">
