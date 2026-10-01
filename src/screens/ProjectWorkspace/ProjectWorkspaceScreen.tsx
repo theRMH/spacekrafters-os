@@ -22,6 +22,8 @@ import { getAllPaymentMilestones, getAllReceipts } from '../../services/financeS
 import { getAllPunchListItems, upsertPunchListItem } from '../../services/punchListService'
 import { getAllDocuments, upsertDocument, getAllDocumentVersions, addDocumentVersion } from '../../services/documentService'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { Dialog } from '../../components/feedback/Dialog'
 import { GanttChart } from './GanttChart'
 import { ProjectStatusSheet, ROLE_FOR_PROJECT_STAGE, PROJECT_STAGE_LABEL } from './ProjectStatusSheet'
@@ -748,13 +750,10 @@ export default function ProjectWorkspaceScreen() {
           />
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Assign To *</label>
-            <select value={newTaskAssigneeId} onChange={e => setNewTaskAssigneeId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="">— Select —</option>
-              {users.filter(u => u.status === 'active').map(u => (
-                <option key={u.id} value={u.id}>{u.fullName}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={newTaskAssigneeId} onChange={setNewTaskAssigneeId}
+              options={users.filter(u => u.status === 'active').map(u => ({ value: u.id, label: u.fullName }))}
+            />
           </div>
           <button onClick={handleAddTask} disabled={!newTaskTitle.trim() || !newTaskAssigneeId}
             className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700 disabled:opacity-40">
@@ -767,8 +766,7 @@ export default function ProjectWorkspaceScreen() {
         <div className="space-y-3">
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Date *</label>
-            <input type="date" value={diaryDate} onChange={e => setDiaryDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            <DateField value={diaryDate} onChange={setDiaryDate} />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Work Done *</label>

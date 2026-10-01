@@ -4,12 +4,13 @@ import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllProjects } from '../../services/projectService'
 import { getAllMRFs, upsertMRF } from '../../services/mrfService'
-import { MRF_STATUS_LABEL, fmtDate, MRFDetailBody, noteWithExtras } from './MRFPanel'
+import { MRF_STATUS_LABEL, fmtDate, MRFDetailBody, noteWithExtras, notifyQsNewMrf } from './MRFPanel'
 import type { Project, MaterialRequestForm, StatusHistoryItem } from '../../types'
 
 export default function MRFScreen() {
@@ -81,6 +82,7 @@ export default function MRFScreen() {
     setMrfs(prev => [mrf, ...prev])
     setShowNew(false)
     setSnack({ open: true, msg: 'Sent to QS for MRF.', type: 'success' })
+    notifyQsNewMrf(mrf, projectName(projectId), user.name)
   }
 
   function handleSaved(updated: MaterialRequestForm) {
@@ -148,11 +150,11 @@ export default function MRFScreen() {
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Project *</label>
-            <select value={projectId} onChange={e => setProjectId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="">Select a project…</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={projectId} onChange={setProjectId}
+              options={projects.map(p => ({ value: p.id, label: p.name }))}
+              placeholder="Select a project…"
+            />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Material / Request Details</label>

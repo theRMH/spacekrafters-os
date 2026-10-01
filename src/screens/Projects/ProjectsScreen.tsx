@@ -6,6 +6,8 @@ import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
@@ -129,7 +131,10 @@ export default function ProjectsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, quotationsLoaded])
 
-  const eligibleLeads = leads.filter(l => l.status === 'won')
+  // Product Sale shells (type: 'product_sale') and their source FGD leads have
+  // their own dedicated screens at /product-sales — kept out of the Interior
+  // Projects list/conversion flow so the two workflows never mix.
+  const eligibleLeads = leads.filter(l => l.status === 'won' && l.businessDivision !== 'fgd')
 
   function openCreate() {
     setForm(emptyProject())
@@ -347,6 +352,7 @@ export default function ProjectsScreen() {
   }
 
   const filtered = projects.filter(p => {
+    if (p.type === 'product_sale') return false
     if (!search) return true
     const q = search.toLowerCase()
     return p.name.toLowerCase().includes(q) || p.clientName.toLowerCase().includes(q)
@@ -402,27 +408,30 @@ export default function ProjectsScreen() {
           </div>
           <div>
             <label className={label}>From Won Lead (optional)</label>
-            <select className={inp} value={form.leadId ?? ''} onChange={e => onLeadChange(e.target.value)}>
-              <option value="">— None —</option>
-              {eligibleLeads.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.leadId ?? ''} onChange={onLeadChange}
+              options={eligibleLeads.map(l => ({ value: l.id, label: l.name }))}
+              placeholder="— None —" searchPlaceholder="Search leads…"
+            />
           </div>
           <div>
             <label className={label}>Client</label>
-            <select className={inp} value={showNewClient ? '__new__' : form.clientId ?? ''} onChange={e => {
-              if (e.target.value === '__new__') {
-                setShowNewClient(true)
-                setNewClient({ name: form.clientName, phone: form.clientPhone, email: '' })
-              } else {
-                setShowNewClient(false)
-                const client = clients.find(c => c.id === e.target.value)
-                setForm(f => ({ ...f, clientId: client?.id, clientName: client?.name ?? f.clientName, clientPhone: client?.phone ?? f.clientPhone }))
-              }
-            }}>
-              <option value="">— Select —</option>
-              {clients.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
-              <option value="__new__">+ New Client</option>
-            </select>
+            <SearchableSelect
+              value={showNewClient ? '__new__' : form.clientId ?? ''}
+              onChange={v => {
+                if (v === '__new__') {
+                  setShowNewClient(true)
+                  setNewClient({ name: form.clientName, phone: form.clientPhone, email: '' })
+                } else {
+                  setShowNewClient(false)
+                  const client = clients.find(c => c.id === v)
+                  setForm(f => ({ ...f, clientId: client?.id, clientName: client?.name ?? f.clientName, clientPhone: client?.phone ?? f.clientPhone }))
+                }
+              }}
+              options={clients.map(c => ({ value: c.id, label: `${c.name} (${c.phone})`, sublabel: c.phone }))}
+              searchPlaceholder="Search by name or phone…"
+              extraOption={{ value: '__new__', label: '+ New Client' }}
+            />
           </div>
           {showNewClient ? (
             <>
@@ -453,23 +462,26 @@ export default function ProjectsScreen() {
           )}
           <div>
             <label className={label}>Coordinator *</label>
-            <select className={inp} value={form.coordinatorId} onChange={e => onCoordinatorChange(e.target.value)}>
-              <option value="">— Select —</option>
-              {coordinators.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.coordinatorId} onChange={onCoordinatorChange}
+              options={coordinators.map(c => ({ value: c.id, label: c.fullName }))}
+              searchPlaceholder="Search coordinators…"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>Stage</label>
-              <select className={inp} value={form.stage} onChange={e => setForm(f => ({ ...f, stage: e.target.value as ProjectStage }))}>
-                {STAGE_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
+              <SearchableSelect
+                value={form.stage} onChange={v => setForm(f => ({ ...f, stage: v as ProjectStage }))}
+                options={STAGE_OPTIONS}
+              />
             </div>
             <div>
               <label className={label}>Status</label>
-              <select className={inp} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as Project['status'] }))}>
-                {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
+              <SearchableSelect
+                value={form.status} onChange={v => setForm(f => ({ ...f, status: v as Project['status'] }))}
+                options={STATUS_OPTIONS}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -487,14 +499,14 @@ export default function ProjectsScreen() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>Start Date</label>
-              <input type="date" className={inp} value={form.startDate ?? ''} min={isEditingExisting ? undefined : todayStr()}
-                onChange={e => setForm(f => ({ ...f, startDate: e.target.value || undefined }))} />
+              <DateField value={form.startDate ?? ''} min={isEditingExisting ? undefined : todayStr()}
+                onChange={v => setForm(f => ({ ...f, startDate: v || undefined }))} />
             </div>
             <div>
               <label className={label}>Expected Handover</label>
-              <input type="date" className={inp} value={form.expectedHandoverDate ?? ''}
+              <DateField value={form.expectedHandoverDate ?? ''}
                 min={isEditingExisting ? undefined : (form.startDate || todayStr())}
-                onChange={e => setForm(f => ({ ...f, expectedHandoverDate: e.target.value || undefined }))} />
+                onChange={v => setForm(f => ({ ...f, expectedHandoverDate: v || undefined }))} />
             </div>
           </div>
           <button onClick={handleSave} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">

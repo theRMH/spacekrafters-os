@@ -58,6 +58,9 @@ import PersonalPlansScreen from './screens/PersonalFinance/PersonalPlansScreen'
 import PersonalReportsScreen from './screens/PersonalFinance/PersonalReportsScreen'
 import PersonalCalendarScreen from './screens/PersonalFinance/PersonalCalendarScreen'
 import CombinedFinanceScreen from './screens/PersonalFinance/CombinedFinanceScreen'
+import ProductSalesScreen from './screens/ProductSales/ProductSalesScreen'
+import ProductSaleDetailScreen from './screens/ProductSales/ProductSaleDetailScreen'
+import { getDefaultRoute } from './utils/permissions'
 
 function AppLoadingScreen() {
   return (
@@ -78,15 +81,24 @@ function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 function AuthedRoutes() {
-  const { isAuthReady, isLoggedIn } = useAuth()
+  const { isAuthReady, isLoggedIn, user } = useAuth()
 
   if (!isAuthReady) return <AppLoadingScreen />
+
+  // Every non-owner role's real landing page is /my-tasks, not /home (see
+  // getDefaultRoute) — the PWA's start_url is bare "/", which has no route of
+  // its own and falls through to the catch-all below, and the /login route
+  // hits this same question for an already-logged-in visitor. Both used to
+  // hardcode '/home' regardless of role, so a non-owner opening the app fresh
+  // (PWA launch, or a bookmark/shortcut at "/") would land on Home before
+  // anything corrected it to their actual Task tab.
+  const defaultRoute = isLoggedIn && user ? getDefaultRoute(user.role) : '/login'
 
   return (
     <Routes>
       <Route
         path="/login"
-        element={isLoggedIn ? <Navigate to="/home" replace /> : <LoginScreen />}
+        element={isLoggedIn ? <Navigate to={defaultRoute} replace /> : <LoginScreen />}
       />
       <Route
         path="/home"
@@ -504,7 +516,23 @@ function AuthedRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to={isLoggedIn ? '/home' : '/login'} replace />} />
+      <Route
+        path="/product-sales"
+        element={
+          <ProtectedRoute screenPath="product-sales">
+            <AppShell><ProductSalesScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/product-sales/:leadId"
+        element={
+          <ProtectedRoute screenPath="product-sales/project">
+            <AppShell><ProductSaleDetailScreen /></AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to={defaultRoute} replace />} />
     </Routes>
   )
 }

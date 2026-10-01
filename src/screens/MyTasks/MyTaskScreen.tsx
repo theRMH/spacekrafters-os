@@ -25,6 +25,11 @@ import type {
 function isToday(iso: string): boolean {
   return new Date(iso).toDateString() === new Date().toDateString()
 }
+function fmtShort(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
 
 export default function MyTaskScreen() {
   const { user } = useAuth()
@@ -137,13 +142,22 @@ export default function MyTaskScreen() {
         <div className="grid gap-3 xl:grid-cols-2">
           {feed.map(item => (
             <div key={item.key} className="bg-white rounded-2xl shadow-card border border-slate-100 p-5">
-              <div className="flex justify-end">
+              <div className="flex items-start justify-between gap-2">
                 <span className={`text-[11px] font-bold px-3 py-1 rounded-full ${item.badgeCls}`}>{item.badge}</span>
+                <span className="text-[11px] text-slate-400 shrink-0 mt-0.5">{fmtShort(item.at)}</span>
               </div>
-              <h3 className="text-base font-extrabold text-slate-800 mt-1">{item.title}</h3>
-              <p className="text-sm font-semibold text-slate-600 mt-3 break-words">{item.client}</p>
-              {item.details.map((d, i) => <p key={i} className="text-sm text-slate-400 break-words">{d}</p>)}
-              {item.person && <p className="text-sm font-semibold text-teal-700 mt-3">{item.person}</p>}
+              <h3 className="text-base font-extrabold text-slate-800 mt-2">{item.title}</h3>
+              <p className="text-sm text-slate-600 mt-1.5 break-words">
+                <span className="text-slate-400">{item.subjectLabel}: </span>
+                <span className="font-semibold">{item.subject}</span>
+              </p>
+              {item.meta.length > 0 && (
+                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+                  {item.meta.map((m, i) => <span key={i} className="text-xs text-slate-400 break-words">{m}</span>)}
+                </div>
+              )}
+              {item.note && <p className="text-xs text-slate-500 mt-2 italic break-words">&ldquo;{item.note}&rdquo;</p>}
+              {item.person && <p className="text-sm font-semibold text-teal-700 mt-3">Assigned to: {item.person}</p>}
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
                 <span className="text-xs font-semibold px-3.5 py-1.5 rounded-full bg-slate-100 text-slate-500">Pending</span>
                 <button onClick={() => navigate(item.linkTo)}

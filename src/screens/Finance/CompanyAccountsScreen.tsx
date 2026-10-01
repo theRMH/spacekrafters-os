@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { Dialog } from '../../components/feedback/Dialog'
@@ -209,9 +210,10 @@ export default function CompanyAccountsScreen() {
           </div>
           <div>
             <label className={label}>Type</label>
-            <select className={inp} value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as CompanyAccountType }))}>
-              {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.type} onChange={v => setForm(f => ({ ...f, type: v as CompanyAccountType }))}
+              options={TYPE_OPTIONS}
+            />
           </div>
           <div>
             <label className={label}>Opening Balance</label>

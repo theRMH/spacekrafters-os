@@ -64,6 +64,9 @@ export type Permission =
   | 'view_dashboard'
   // Personalized Task tab — every non-MD role
   | 'view_my_tasks'
+  // Product Sales (FGD — KitchenAid/Bosch/Siemens/Gaggenau appliance sales),
+  // deliberately separate from the Interior Projects permissions above
+  | 'view_product_sales' | 'create_product_sale' | 'approve_product_sale_stage'
   // Base
   | 'view_home'
 
@@ -120,9 +123,11 @@ export type LeadSource = 'referral' | 'walk_in' | 'website' | 'social_media' | '
 export type LeadInterest = 'hot' | 'medium' | 'cold'
 export type BusinessDivision = 'fgd' | 'first_property_contractors' | 'sk_constructions' | 'sk_interiors' | 'sk_turnkey_interiors'
 export type BusinessCategory = 'residential' | 'commercial' | 'industrial'
-// FGD is a single company with two brand lines — this is a sub-selection under
-// the 'fgd' division, same pattern as BusinessCategory under 'sk_turnkey_interiors'.
-export type BusinessBrand = 'kitchenaid' | 'bosch_siemens_gaggenau'
+// FGD's brand lines — a sub-selection under the 'fgd' division, same pattern
+// as BusinessCategory under 'sk_turnkey_interiors'. 'bosch_siemens_gaggenau'
+// is legacy (kept only so already-saved leads still display correctly) —
+// the picker now offers 'bosch'/'siemens'/'gaggenau' as separate brands.
+export type BusinessBrand = 'kitchenaid' | 'bosch' | 'siemens' | 'gaggenau' | 'bosch_siemens_gaggenau'
 
 export interface LeadActivityItem {
   id: string
@@ -146,6 +151,10 @@ export interface Lead {
   phone: string
   email?: string
   city: string
+  // Set together, only via the map picker's "Confirm Location" — never
+  // independently. Absent on leads whose City was only ever typed by hand.
+  latitude?: number
+  longitude?: number
   businessDivision?: BusinessDivision
   businessCategory?: BusinessCategory
   businessBrand?: BusinessBrand
@@ -556,9 +565,39 @@ export interface Project {
     requestedByRole?: UserRole
     requestedAt: string
   }
+  // Absent (undefined) = the existing Interior Projects workflow, unchanged.
+  // 'product_sale' rows are a lightweight shell for the separate FGD
+  // appliance-sales flow — they use productSaleStage/pendingProductSaleStageRequest
+  // below instead of stage/pendingStageRequest (which stays a fixed, unread
+  // 'closed' sentinel on these rows), and are filtered out of every Interior
+  // Projects screen so the two workflows never mix.
+  type?: 'product_sale'
+  productSaleStage?: ProductSaleStage
+  pendingProductSaleStageRequest?: {
+    toStage: ProductSaleStage
+    note?: string
+    requestedBy: string
+    requestedById?: string
+    requestedByRole?: UserRole
+    requestedAt: string
+  }
   createdAt: string
   updatedAt: string
 }
+
+// ─── Product Sales (FGD — KitchenAid / Bosch / Siemens / Gaggenau) ───────────
+// A separate, simpler linear workflow from Interior Projects' 8-stage one.
+// Customer Enquiry/Quotation are pure read-derived state from Lead/Quotation
+// (no Project row exists yet); a Project shell (type: 'product_sale') is only
+// created once the quotation is client-approved, starting at 'payment'.
+export type ProductSaleStage =
+  | 'customer_enquiry'
+  | 'quotation'
+  | 'approval'
+  | 'payment'
+  | 'product_ordering'
+  | 'delivery'
+  | 'completed'
 
 export type PunchListItemStatus = 'open' | 'resolved' | 'verified'
 

@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { Snackbar } from '../../components/feedback/Snackbar'
@@ -165,16 +167,15 @@ export default function DailyDiaryScreen() {
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Project *</label>
-            <select value={projectId} onChange={e => setProjectId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="">Select a project…</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={projectId} onChange={setProjectId}
+              options={projects.map(p => ({ value: p.id, label: p.name }))}
+              placeholder="Select a project…" searchPlaceholder="Search projects…"
+            />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Date *</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            <DateField value={date} onChange={setDate} />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Work Done *</label>

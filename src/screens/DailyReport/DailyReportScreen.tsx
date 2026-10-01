@@ -5,6 +5,8 @@ import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllProjects } from '../../services/projectService'
@@ -352,16 +354,21 @@ export default function DailyReportScreen() {
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Project *</label>
-            <select value={projectId} onChange={e => setProjectId(e.target.value)} disabled={isEditingApproved}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 disabled:opacity-60">
-              <option value="">Select a project…</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            {isEditingApproved ? (
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 opacity-60">
+                {projectName(projectId)}
+              </div>
+            ) : (
+              <SearchableSelect
+                value={projectId} onChange={setProjectId}
+                options={projects.map(p => ({ value: p.id, label: p.name }))}
+                placeholder="Select a project…" searchPlaceholder="Search projects…"
+              />
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Date *</label>
-            <input type="date" value={date} max={todayISO()} onChange={e => setDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            <DateField value={date} max={todayISO()} onChange={setDate} />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">No. of Labour *</label>

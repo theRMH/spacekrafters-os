@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { Dialog } from '../../components/feedback/Dialog'
@@ -273,20 +275,27 @@ export default function PersonalFinanceScreen() {
       {tab === 'transactions' && (
         <>
           <div className="px-4 pt-4 flex gap-2">
-            <select className={`${inp} flex-1`} value={filterAccountId} onChange={e => setFilterAccountId(e.target.value)}>
-              <option value="">All accounts</option>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-            <select className={`${inp} flex-1`} value={filterType} onChange={e => setFilterType(e.target.value)}>
-              <option value="">All types</option>
-              {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <div className="flex-1">
+              <SearchableSelect
+                value={filterAccountId} onChange={setFilterAccountId}
+                options={accounts.map(a => ({ value: a.id, label: a.name }))}
+                placeholder="All accounts"
+              />
+            </div>
+            <div className="flex-1">
+              <SearchableSelect
+                value={filterType} onChange={setFilterType}
+                options={TXN_TYPE_OPTIONS}
+                placeholder="All types"
+              />
+            </div>
           </div>
           <div className="px-4 pt-2">
-            <select className={inp} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-              <option value="">All statuses</option>
-              {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <SearchableSelect
+              value={filterStatus} onChange={setFilterStatus}
+              options={STATUS_OPTIONS}
+              placeholder="All statuses"
+            />
           </div>
 
           <div className="px-4 pt-4 space-y-2.5">
@@ -346,9 +355,10 @@ export default function PersonalFinanceScreen() {
           </div>
           <div>
             <label className={label}>Type</label>
-            <select className={inp} value={accountForm.type} onChange={e => setAccountForm(f => ({ ...f, type: e.target.value as PersonalAccountType }))}>
-              {ACCOUNT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <SearchableSelect
+              value={accountForm.type} onChange={v => setAccountForm(f => ({ ...f, type: v as PersonalAccountType }))}
+              options={ACCOUNT_TYPE_OPTIONS}
+            />
           </div>
           <div>
             <label className={label}>Opening Balance</label>
@@ -400,20 +410,22 @@ export default function PersonalFinanceScreen() {
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Account *</label>
-            <select className={inp} value={txnForm.accountId} onChange={e => setTxnForm(f => ({ ...f, accountId: e.target.value }))}>
-              <option value="">Select account</option>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={txnForm.accountId} onChange={v => setTxnForm(f => ({ ...f, accountId: v }))}
+              options={accounts.map(a => ({ value: a.id, label: a.name }))}
+              placeholder="Select account"
+            />
           </div>
           <div>
             <label className={label}>Type</label>
-            <select className={inp} value={txnForm.type} onChange={e => setTxnForm(f => ({ ...f, type: e.target.value as PersonalTransactionType }))}>
-              {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <SearchableSelect
+              value={txnForm.type} onChange={v => setTxnForm(f => ({ ...f, type: v as PersonalTransactionType }))}
+              options={TXN_TYPE_OPTIONS}
+            />
           </div>
           <div>
             <label className={label}>Date *</label>
-            <input type="date" className={inp} value={txnForm.date} onChange={e => setTxnForm(f => ({ ...f, date: e.target.value }))} />
+            <DateField value={txnForm.date} onChange={v => setTxnForm(f => ({ ...f, date: v }))} />
           </div>
           <div>
             <label className={label}>Amount *</label>
@@ -421,18 +433,20 @@ export default function PersonalFinanceScreen() {
           </div>
           <div>
             <label className={label}>Category</label>
-            <select className={inp} value={txnForm.categoryId ?? ''} onChange={e => setTxnForm(f => ({ ...f, categoryId: e.target.value || undefined, subcategoryId: undefined }))}>
-              <option value="">Select category</option>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.groupName} · {c.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={txnForm.categoryId ?? ''} onChange={v => setTxnForm(f => ({ ...f, categoryId: v || undefined, subcategoryId: undefined }))}
+              options={categories.map(c => ({ value: c.id, label: `${c.groupName} · ${c.name}` }))}
+              placeholder="Select category"
+            />
           </div>
           {txnForm.categoryId && subcategoriesForCategory.length > 0 && (
             <div>
               <label className={label}>Subcategory</label>
-              <select className={inp} value={txnForm.subcategoryId ?? ''} onChange={e => setTxnForm(f => ({ ...f, subcategoryId: e.target.value || undefined }))}>
-                <option value="">Select subcategory</option>
-                {subcategoriesForCategory.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <SearchableSelect
+                value={txnForm.subcategoryId ?? ''} onChange={v => setTxnForm(f => ({ ...f, subcategoryId: v || undefined }))}
+                options={subcategoriesForCategory.map(s => ({ value: s.id, label: s.name }))}
+                placeholder="Select subcategory"
+              />
             </div>
           )}
           <div>

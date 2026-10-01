@@ -3,6 +3,7 @@ import { ClipboardList, Plus, Check, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
+import { DateField } from '../../components/forms/DateField'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllDailyTasks, upsertDailyTask, updateDailyTaskStatus, deleteDailyTask } from '../../services/dailyTaskService'
@@ -235,9 +236,8 @@ export default function DailyTasksScreen() {
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Date</label>
-              <input type="date" value={date} min={todayKey}
-                onChange={e => setDate(e.target.value < todayKey ? todayKey : e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-indigo-400" />
+              <DateField value={date} min={todayKey}
+                onChange={v => setDate(v < todayKey ? todayKey : v)} />
             </div>
             <button onClick={handleAssign} className="w-full py-3 rounded-xl text-white text-sm font-bold active:opacity-90" style={{ background: '#0F2A4A' }}>
               Assign Task

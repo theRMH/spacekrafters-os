@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { BackButton } from '../../components/layout/BackButton'
 import { Snackbar } from '../../components/feedback/Snackbar'
+import { TimeField } from '../../components/forms/TimeField'
 import { getAttendanceSettings, upsertAttendanceSettings } from '../../services/attendanceSettingsService'
 import type { AttendanceSettings } from '../../types'
 
-const inp = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-primary'
 const lbl = 'text-xs font-semibold text-slate-500 mb-1.5 block'
 
 export default function AttendanceSettingsScreen() {
@@ -59,11 +59,11 @@ export default function AttendanceSettingsScreen() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Start Time</label>
-              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={inp} />
+              <TimeField value={startTime} onChange={setStartTime} />
             </div>
             <div>
               <label className={lbl}>End Time</label>
-              <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={inp} />
+              <TimeField value={endTime} onChange={setEndTime} />
             </div>
           </div>
         </div>

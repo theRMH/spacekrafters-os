@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppHeader } from '../../components/layout/AppHeader'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import {
   getAllPersonalTransactions, getAllPersonalCategories,
   getAllPersonalCommitments, getAllPersonalInvestments, getAllPersonalPlans,
@@ -191,12 +192,18 @@ export default function PersonalReportsScreen() {
       <div className="bg-white px-5 pt-4 pb-3 border-b border-slate-100 sticky top-14 z-20">
         <h1 className="text-lg font-extrabold text-slate-800 mb-2">Personal Reports</h1>
         <div className="flex items-center gap-2 mb-3">
-          <select className="text-xs font-semibold text-slate-600 bg-slate-100 rounded-lg px-2 py-1.5" value={month} onChange={e => setMonth(Number(e.target.value))}>
-            {MONTH_LABEL.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
-          <select className="text-xs font-semibold text-slate-600 bg-slate-100 rounded-lg px-2 py-1.5" value={year} onChange={e => setYear(Number(e.target.value))}>
-            {[year - 1, year, year + 1].map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
+          <div className="w-28">
+            <SearchableSelect
+              value={String(month)} onChange={v => setMonth(Number(v))}
+              options={MONTH_LABEL.map((m, i) => ({ value: String(i + 1), label: m }))}
+            />
+          </div>
+          <div className="w-28">
+            <SearchableSelect
+              value={String(year)} onChange={v => setYear(Number(v))}
+              options={[year - 1, year, year + 1].map(y => ({ value: String(y), label: String(y) }))}
+            />
+          </div>
         </div>
         <div className="flex gap-1.5 overflow-x-auto -mx-5 px-5 pb-1">
           {TABS.map(t => (

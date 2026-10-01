@@ -24,7 +24,7 @@ export function canAccessScreen(role: UserRole | UserRole[], screenPath: string)
 
 export function getDefaultRoute(role: UserRole): string {
   switch (role) {
-    case 'owner':                return '/home'
+    case 'owner':                return '/dashboard'
     default:                     return '/my-tasks'
   }
 }

@@ -5,6 +5,8 @@ import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
@@ -252,10 +254,11 @@ export default function ReceivablesScreen() {
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Project *</label>
-            <select className={inp} value={form.projectId} onChange={e => setForm(f => ({ ...f, projectId: e.target.value }))}>
-              <option value="">Select project…</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.projectId} onChange={v => setForm(f => ({ ...f, projectId: v }))}
+              options={projects.map(p => ({ value: p.id, label: p.name }))}
+              placeholder="Select project…"
+            />
           </div>
           <div>
             <label className={label}>Title *</label>
@@ -268,7 +271,7 @@ export default function ReceivablesScreen() {
             </div>
             <div>
               <label className={label}>Due Date</label>
-              <input type="date" className={inp} value={form.dueDate?.slice(0, 10) ?? ''} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value || undefined }))} />
+              <DateField value={form.dueDate?.slice(0, 10) ?? ''} onChange={v => setForm(f => ({ ...f, dueDate: v || undefined }))} />
             </div>
           </div>
           <div>
@@ -307,10 +310,11 @@ export default function ReceivablesScreen() {
                   ) : (
                     <>
                       <input type="number" className={inp} placeholder="Amount received" value={receiptAmount} onChange={e => setReceiptAmount(e.target.value)} />
-                      <select className={inp} value={receiptAccountId} onChange={e => setReceiptAccountId(e.target.value)}>
-                        <option value="">Deposit into account…</option>
-                        {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                      </select>
+                      <SearchableSelect
+                        value={receiptAccountId} onChange={setReceiptAccountId}
+                        options={accounts.map(a => ({ value: a.id, label: a.name }))}
+                        placeholder="Deposit into account…"
+                      />
                       <input className={inp} placeholder="Reference (optional)" value={receiptRef} onChange={e => setReceiptRef(e.target.value)} />
                       <button onClick={handleRecordReceipt}
                         disabled={!receiptAmount || Number(receiptAmount) <= 0 || Number(receiptAmount) > (selected.amount - selected.receivedAmount) || !receiptAccountId}

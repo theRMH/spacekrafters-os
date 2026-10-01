@@ -7,6 +7,8 @@ import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
 import { FilterChips } from '../../components/forms/FilterChips'
+import { LocationPicker } from '../../components/forms/LocationPicker'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
@@ -123,6 +125,8 @@ export default function LeadsScreen() {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [city, setCity] = useState('')
+  const [latitude, setLatitude] = useState<number | undefined>(undefined)
+  const [longitude, setLongitude] = useState<number | undefined>(undefined)
   const [businessDivision, setBusinessDivision] = useState<BusinessDivision | ''>('')
   const [businessCategory, setBusinessCategory] = useState<BusinessCategory | ''>('')
   const [businessBrand, setBusinessBrand] = useState<BusinessBrand | ''>('')
@@ -181,6 +185,23 @@ export default function LeadsScreen() {
     if (!DIVISIONS_WITH_BRAND.includes(division as BusinessDivision)) setBusinessBrand('')
   }
 
+  // Type (SK/FGD) and Business Division are separate fields, but FGD leads
+  // only ever belong to the 'fgd' division — auto-selecting it here is what
+  // makes the Brand dropdown (gated on businessDivision === 'fgd') actually
+  // appear the moment FGD is picked, instead of requiring a second, easy-to-
+  // miss manual selection in Business Division. Switching back to SK clears
+  // 'fgd' back out since it's not a valid SK-type division.
+  function onLeadCodePrefixChange(value: LeadCodePrefix | '') {
+    setLeadCodePrefix(value)
+    if (value === 'FGD') {
+      setBusinessDivision('fgd')
+      setBusinessCategory('')
+    } else if (businessDivision === 'fgd') {
+      setBusinessDivision('')
+      setBusinessBrand('')
+    }
+  }
+
   function onSourceChange(value: LeadSource) {
     setSource(value)
     if (value !== 'other') setSubSource('')
@@ -188,6 +209,7 @@ export default function LeadsScreen() {
 
   function resetForm() {
     setName(''); setLeadCodePrefix(''); setSiteNo(''); setPhone(''); setEmail(''); setCity('')
+    setLatitude(undefined); setLongitude(undefined)
     setBusinessDivision(''); setBusinessCategory(''); setBusinessBrand('')
     setRequirement(''); setNotes(''); setSource('walk_in'); setSubSource(''); setInterest('medium'); setStatus('new')
     setOwnerId(''); setOwnerName(''); setIsCustomOwner(false)
@@ -201,6 +223,7 @@ export default function LeadsScreen() {
 
   function openEdit(lead: Lead) {
     setName(lead.name); setSiteNo(lead.siteNo ?? ''); setPhone(lead.phone); setEmail(lead.email ?? ''); setCity(lead.city)
+    setLatitude(lead.latitude); setLongitude(lead.longitude)
     setBusinessDivision(lead.businessDivision ?? ''); setBusinessCategory(lead.businessCategory ?? '')
     setBusinessBrand(lead.businessBrand ?? '')
     setRequirement(lead.requirement ?? ''); setNotes(lead.notes ?? '')
@@ -216,11 +239,16 @@ export default function LeadsScreen() {
       setFormError('Name, phone, city, lead owner, and type (SK/FGD) are required.')
       return
     }
+    if (businessDivision === 'fgd' && !businessBrand) {
+      setFormError('Brand is required for FGD leads.')
+      return
+    }
     const now = new Date()
     const slaDueAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
     const result = await addLead({
       name: name.trim(), leadCodePrefix,
       siteNo: siteNo.trim() || undefined, phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
+      latitude, longitude,
       businessDivision: businessDivision || undefined, businessCategory: businessCategory || undefined,
       businessBrand: businessBrand || undefined,
       requirement: requirement.trim() || undefined, notes: notes.trim() || undefined,
@@ -238,9 +266,14 @@ export default function LeadsScreen() {
       setFormError('Name, phone, city, and lead owner are required.')
       return
     }
+    if (businessDivision === 'fgd' && !businessBrand) {
+      setFormError('Brand is required for FGD leads.')
+      return
+    }
     const statusChanged = status !== selected.status
     const result = await updateLead(selected.id, {
       name: name.trim(), siteNo: siteNo.trim() || undefined, phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
+      latitude, longitude,
       businessDivision: businessDivision || undefined, businessCategory: businessCategory || undefined,
       businessBrand: businessBrand || undefined,
       requirement: requirement.trim() || undefined, notes: notes.trim() || undefined,
@@ -296,6 +329,10 @@ export default function LeadsScreen() {
   const liveSelected = selected ? leads.find(l => l.id === selected.id) ?? null : null
 
   const filtered = leads.filter(l => {
+    // FGD (Product Sales) leads have their own dedicated screens at
+    // /product-sales — kept out of the Interior Leads list so the two
+    // workflows never mix.
+    if (l.businessDivision === 'fgd') return false
     if (assignedOnly && l.assignedToId !== user?.id) return false
     const matchSearch = !search
       || l.name.toLowerCase().includes(search.toLowerCase())
@@ -545,12 +582,10 @@ export default function LeadsScreen() {
           {!showEdit && (
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1 block">Type *</label>
-              <select value={leadCodePrefix} onChange={e => setLeadCodePrefix(e.target.value as LeadCodePrefix | '')}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-                <option value="">— Select —</option>
-                <option value="SK">SK</option>
-                <option value="FGD">FGD</option>
-              </select>
+              <SearchableSelect
+                value={leadCodePrefix} onChange={v => onLeadCodePrefixChange(v as LeadCodePrefix | '')}
+                options={[{ value: 'SK', label: 'SK' }, { value: 'FGD', label: 'FGD' }]}
+              />
               {leadCodePrefix && (
                 <p className="text-xs text-slate-500 mt-1.5">
                   Lead ID: <span className="font-bold text-slate-700">{previewLeadNumber ?? '…'}</span> (auto-generated when you save)
@@ -578,49 +613,34 @@ export default function LeadsScreen() {
             <input value={email} onChange={e => setEmail(e.target.value)} placeholder="optional"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
-          <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Location / City *</label>
-            <input value={city} onChange={e => setCity(e.target.value)} placeholder="e.g. Anna Nagar, Chennai"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-          </div>
+          <LocationPicker
+            city={city} onCityChange={setCity}
+            latitude={latitude} longitude={longitude}
+            onLocationChange={(lat, lng) => { setLatitude(lat); setLongitude(lng) }}
+          />
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Company / Business Division <span className="font-normal text-slate-400">(optional)</span></label>
-            <select value={businessDivision} onChange={e => onBusinessDivisionChange(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="">— Select —</option>
-              {BUSINESS_DIVISION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <SearchableSelect value={businessDivision} onChange={onBusinessDivisionChange} options={BUSINESS_DIVISION_OPTIONS} />
           </div>
           {DIVISIONS_WITH_CATEGORY.includes(businessDivision as BusinessDivision) && (
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1 block">Category</label>
-              <select value={businessCategory} onChange={e => setBusinessCategory(e.target.value as BusinessCategory)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-                <option value="">— Select —</option>
-                {BUSINESS_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <SearchableSelect value={businessCategory} onChange={v => setBusinessCategory(v as BusinessCategory)} options={BUSINESS_CATEGORY_OPTIONS} />
             </div>
           )}
           {DIVISIONS_WITH_BRAND.includes(businessDivision as BusinessDivision) && (
             <div>
-              <label className="text-xs font-semibold text-slate-500 mb-1 block">Brand</label>
-              <select value={businessBrand} onChange={e => setBusinessBrand(e.target.value as BusinessBrand)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-                <option value="">— Select —</option>
-                {BUSINESS_BRAND_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <label className="text-xs font-semibold text-slate-500 mb-1 block">Brand *</label>
+              <SearchableSelect value={businessBrand} onChange={v => setBusinessBrand(v as BusinessBrand)} options={BUSINESS_BRAND_OPTIONS} />
             </div>
           )}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Assign To *</label>
-            <select value={isCustomOwner ? CUSTOM_OWNER_VALUE : ownerId} onChange={e => onOwnerChange(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="">— Select —</option>
-              {assignableMembers.map(m => (
-                <option key={m.id} value={m.id}>{m.fullName} – {getRoleDisplayLabel(m.role, m.displayRole)}</option>
-              ))}
-              <option value={CUSTOM_OWNER_VALUE}>Other — type a name…</option>
-            </select>
+            <SearchableSelect
+              value={isCustomOwner ? CUSTOM_OWNER_VALUE : ownerId} onChange={onOwnerChange}
+              options={assignableMembers.map(m => ({ value: m.id, label: `${m.fullName} – ${getRoleDisplayLabel(m.role, m.displayRole)}` }))}
+              extraOption={{ value: CUSTOM_OWNER_VALUE, label: 'Other — type a name…' }}
+            />
             {isCustomOwner && (
               <input value={ownerName} onChange={e => setOwnerName(e.target.value)}
                 placeholder="Lead Owner name"
@@ -677,10 +697,7 @@ export default function LeadsScreen() {
           {showEdit && (
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1 block">Status</label>
-              <select value={status} onChange={e => setStatus(e.target.value as LeadStatus)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-                {CHIPS.filter(c => c.value !== 'all').map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
+              <SearchableSelect value={status} onChange={v => setStatus(v as LeadStatus)} options={CHIPS.filter(c => c.value !== 'all')} />
             </div>
           )}
           <div>
@@ -724,6 +741,7 @@ export default function LeadsScreen() {
         type={snack.type}
         onClose={() => setSnack(s => ({ ...s, open: false }))}
       />
+
     </div>
   )
 }

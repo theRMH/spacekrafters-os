@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
+import { TimeField } from '../../components/forms/TimeField'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { getManagedUsersDirectory } from '../../services/userService'
@@ -311,12 +314,10 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">New date/time <span className="font-normal text-slate-400">(optional)</span></label>
                 <div className="grid grid-cols-2 gap-2">
-                  <input type="date" value={rescheduledDateInput.split('T')[0] || ''} min={todayStr()}
-                    onChange={e => setRescheduledDateInput(`${e.target.value}T${rescheduledDateInput.split('T')[1] || '09:00'}`)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-                  <input type="time" value={rescheduledDateInput.split('T')[1] || ''}
-                    onChange={e => setRescheduledDateInput(`${rescheduledDateInput.split('T')[0] || new Date().toISOString().slice(0, 10)}T${e.target.value}`)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+                  <DateField value={rescheduledDateInput.split('T')[0] || ''} min={todayStr()}
+                    onChange={v => setRescheduledDateInput(`${v}T${rescheduledDateInput.split('T')[1] || '09:00'}`)} />
+                  <TimeField value={rescheduledDateInput.split('T')[1] || ''}
+                    onChange={v => setRescheduledDateInput(`${rescheduledDateInput.split('T')[0] || new Date().toISOString().slice(0, 10)}T${v}`)} />
                 </div>
               </div>
               <button disabled={saving || !rescheduleReasonText.trim()} onClick={submitReschedule} className={primaryBtn} style={{ background: '#0F2A4A' }}>
@@ -456,12 +457,11 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
       case 'negotiating':
         return (
           <div className="space-y-3">
-            <select value={clientOutcome} onChange={e => setClientOutcome(e.target.value as typeof clientOutcome)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="client_approved">Client Approved</option>
-              <option value="negotiating">Still Negotiating</option>
-              <option value="lost">Lost</option>
-            </select>
+            <SearchableSelect value={clientOutcome} onChange={v => setClientOutcome(v as typeof clientOutcome)} options={[
+              { value: 'client_approved', label: 'Client Approved' },
+              { value: 'negotiating', label: 'Still Negotiating' },
+              { value: 'lost', label: 'Lost' },
+            ]} />
             {clientOutcome === 'lost' && (
               <textarea value={lostReason} onChange={e => setLostReason(e.target.value)} placeholder="Reason for loss"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" rows={3} />

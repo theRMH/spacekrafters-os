@@ -9,6 +9,7 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { getAllProjects } from '../../services/projectService'
 import { getAllDesignPackages, upsertDesignPackage, getAllDesignVersions, addDesignVersion } from '../../services/designService'
 import { getAllQuotations } from '../../services/quotationService'
@@ -495,11 +496,11 @@ export default function DesignCenterScreen() {
           <p className="text-xs text-slate-500">Link to the Lead if the project hasn't been created yet, or to the Project once it has.</p>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead (pre-project)</label>
-            <select value={leadId} onChange={e => { setLeadId(e.target.value); if (e.target.value) setProjectId('') }}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="">— None —</option>
-              {eligibleLeads.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={leadId} onChange={v => { setLeadId(v); if (v) setProjectId('') }}
+              options={eligibleLeads.map(l => ({ value: l.id, label: l.name }))}
+              placeholder="— None —"
+            />
             {leadId && !eligibleQuotationFor(leadId) && (
               <p className="text-[11px] text-amber-600 font-semibold mt-1">
                 This lead's quotation must be Client Approved, with Proceed with / without Advance chosen, before design can start — check Quotations.
@@ -508,11 +509,11 @@ export default function DesignCenterScreen() {
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Project</label>
-            <select value={projectId} onChange={e => { setProjectId(e.target.value); if (e.target.value) setLeadId('') }}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="">— None —</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={projectId} onChange={v => { setProjectId(v); if (v) setLeadId('') }}
+              options={projects.map(p => ({ value: p.id, label: p.name }))}
+              placeholder="— None —"
+            />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Package Name *</label>

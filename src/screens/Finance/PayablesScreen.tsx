@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
@@ -318,10 +320,11 @@ export default function PayablesScreen() {
           {isVendorPayable ? (
             <div>
               <label className={label}>Vendor *</label>
-              <select className={inp} value={form.vendorId ?? ''} onChange={e => setForm(f => ({ ...f, vendorId: e.target.value }))}>
-                <option value="">Select vendor…</option>
-                {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
+              <SearchableSelect
+                value={form.vendorId ?? ''} onChange={v => setForm(f => ({ ...f, vendorId: v }))}
+                options={vendors.map(v => ({ value: v.id, label: v.name }))}
+                placeholder="Select vendor…"
+              />
             </div>
           ) : (
             <div>
@@ -340,7 +343,7 @@ export default function PayablesScreen() {
             </div>
             <div>
               <label className={label}>Due Date</label>
-              <input type="date" className={inp} value={form.dueDate?.slice(0, 10) ?? ''} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value || undefined }))} />
+              <DateField value={form.dueDate?.slice(0, 10) ?? ''} onChange={v => setForm(f => ({ ...f, dueDate: v || undefined }))} />
             </div>
           </div>
           <button onClick={handleSave} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
@@ -365,10 +368,11 @@ export default function PayablesScreen() {
                 <div className="bg-slate-50 rounded-xl p-3 space-y-2">
                   <label className={label}>Record Payment (remaining {fmtCurrency(selected.amount - selected.paidAmount)})</label>
                   <input type="number" className={inp} placeholder="Amount paid" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
-                  <select className={inp} value={payAccountId} onChange={e => setPayAccountId(e.target.value)}>
-                    <option value="">Pay from account…</option>
-                    {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={payAccountId} onChange={setPayAccountId}
+                    options={accounts.map(a => ({ value: a.id, label: a.name }))}
+                    placeholder="Pay from account…"
+                  />
                   <input className={inp} placeholder="Reference (optional)" value={payRef} onChange={e => setPayRef(e.target.value)} />
 
                   {!showSplit ? (
@@ -385,10 +389,13 @@ export default function PayablesScreen() {
                       </div>
                       {splits.map((s, i) => (
                         <div key={i} className="flex gap-2 items-center">
-                          <select className={inp} value={s.projectId} onChange={e => setSplits(prev => prev.map((row, idx) => (idx === i ? { ...row, projectId: e.target.value } : row)))}>
-                            <option value="">Select project…</option>
-                            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
+                          <div className="flex-1">
+                            <SearchableSelect
+                              value={s.projectId} onChange={v => setSplits(prev => prev.map((row, idx) => (idx === i ? { ...row, projectId: v } : row)))}
+                              options={projects.map(p => ({ value: p.id, label: p.name }))}
+                              placeholder="Select project…"
+                            />
+                          </div>
                           <input type="number" className={`${inp} w-28`} placeholder="Amount" value={s.amount} onChange={e => setSplits(prev => prev.map((row, idx) => (idx === i ? { ...row, amount: e.target.value } : row)))} />
                           {splits.length > 1 && (
                             <button onClick={() => removeSplitRow(i)} className="text-xs font-semibold text-red-500 px-1">✕</button>

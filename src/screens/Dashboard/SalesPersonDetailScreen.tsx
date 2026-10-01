@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronRight, X } from 'lucide-react'
 import { AppHeader } from '../../components/layout/AppHeader'
+import { DateField } from '../../components/forms/DateField'
 import { useCRM } from '../../context/CRMContext'
 import { getAllProjects } from '../../services/projectService'
 import { FILTERS, type FilterKey, resolveRange, inRange } from './dashboardDateUtils'
@@ -119,9 +120,9 @@ export default function SalesPersonDetailScreen() {
         </div>
         {filter === 'custom' && (
           <div className="flex items-center gap-2">
-            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+            <DateField value={customFrom} onChange={setCustomFrom} />
             <span className="text-slate-400 text-sm">to</span>
-            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+            <DateField value={customTo} onChange={setCustomTo} />
           </div>
         )}
 

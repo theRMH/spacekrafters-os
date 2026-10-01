@@ -22,6 +22,7 @@ const OWNER_PERMS: Permission[] = [
   'view_reports', 'view_financial_reports',
   'manage_users', 'manage_permissions', 'manage_settings', 'view_audit_log',
   'view_personal_finance', 'view_combined_finance',
+  'view_product_sales', 'create_product_sale', 'approve_product_sale_stage',
 ]
 
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
@@ -36,6 +37,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_vendors_labour',
     'view_attendance', 'view_leave', 'view_weekly_planner', 'view_daily_tasks',
     'view_reports', 'view_financial_reports',
+    'view_product_sales',
   ],
 
   project_coordinator: [
@@ -54,6 +56,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'raise_expense_request',
     'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner', 'view_daily_tasks',
     'view_reports', 'delete_uploaded_file',
+    'view_product_sales', 'create_product_sale',
   ],
 
   site_engineer: [
@@ -96,6 +99,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_procurement', 'raise_purchase_request', 'create_po', 'receive_goods', 'enter_vendor_bill',
     'view_mrf', 'set_mrf_dates',
     'view_attendance', 'mark_attendance', 'view_leave', 'view_weekly_planner', 'view_daily_tasks',
+    'view_product_sales',
   ],
 
   admin: [
@@ -188,4 +192,6 @@ export const SCREEN_PERMISSIONS: Record<string, Permission> = {
   'settings/users':  'manage_users',
   'settings/attendance': 'manage_settings',
   'audit-log':       'view_audit_log',
+  'product-sales':         'view_product_sales',
+  'product-sales/project': 'view_product_sales',
 }

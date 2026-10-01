@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
+import { DateField } from '../../components/forms/DateField'
 import { useCRM } from '../../context/CRMContext'
 import { getAllProjects } from '../../services/projectService'
 import { getAllAppointments } from '../../services/appointmentService'
@@ -88,8 +89,13 @@ export default function DashboardScreen() {
   const periodAppointments = useMemo(() => appointments.filter(a => inRange(a.scheduledAt) && a.status !== 'cancelled'), [appointments, range])
   const periodAppointmentsDone = periodAppointments.filter(a => a.status === 'completed').length
 
-  const activeProjects = useMemo(() => projects.filter(p => p.status === 'active'), [projects])
-  const periodNewProjects = useMemo(() => projects.filter(p => inRange(p.createdAt)), [projects, range])
+  // Product Sale shells (type: 'product_sale') have their own dedicated
+  // Product Sales screens — excluded from every Interior Projects KPI/report
+  // below so they don't inflate Interior counts. Receipts/receivables stay
+  // unfiltered on purpose: Accounts still needs one combined revenue view.
+  const interiorProjects = useMemo(() => projects.filter(p => p.type !== 'product_sale'), [projects])
+  const activeProjects = useMemo(() => interiorProjects.filter(p => p.status === 'active'), [interiorProjects])
+  const periodNewProjects = useMemo(() => interiorProjects.filter(p => inRange(p.createdAt)), [interiorProjects, range])
   // No separate "installation" date on a project in this data model — approximated
   // as active, execution-stage projects last touched within the selected period.
   const periodExecutionProjects = useMemo(() => activeProjects.filter(p => p.stage === 'execution' && inRange(p.updatedAt)), [activeProjects, range])
@@ -100,13 +106,14 @@ export default function DashboardScreen() {
   const periodLeads = useMemo(() => (leads as Lead[]).filter(l => inRange(l.createdAt)), [leads, range])
 
   // ─── Sales Team Performance — shared with SalesPersonDetailScreen's drill-down ──
-  const salesPerformance = useMemo(() => buildSalesPerformance(leads as Lead[], projects), [leads, projects])
+  const salesPerformance = useMemo(() => buildSalesPerformance(leads as Lead[], interiorProjects), [leads, interiorProjects])
 
   // ─── Outstanding Payment — grouped by due month, project-wise detail ──────
   const projectById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
   const outstandingByMonth = useMemo(() => {
     const groups = new Map<string, { label: string; sortKey: string; total: number; items: { milestone: PaymentMilestone; project?: Project; outstanding: number }[] }>()
     for (const m of milestones) {
+      if (m.projectId && projectById.get(m.projectId)?.type === 'product_sale') continue
       const outstanding = m.amount - m.receivedAmount
       if (outstanding <= 0) continue
       const d = m.dueDate ? new Date(m.dueDate) : null
@@ -250,9 +257,9 @@ export default function DashboardScreen() {
         <p className="text-[11px] text-slate-400 -mt-2">{rangeCaption}</p>
         {filter === 'custom' && (
           <div className="flex items-center gap-2 flex-wrap">
-            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs" />
+            <DateField value={customFrom} onChange={setCustomFrom} />
             <span className="text-slate-400 text-xs">to</span>
-            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs" />
+            <DateField value={customTo} onChange={setCustomTo} />
           </div>
         )}
 

@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
@@ -303,10 +305,11 @@ export default function ExpenseRequestScreen() {
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Project</label>
-            <select className={inp} value={form.projectId ?? ''} onChange={e => setForm(f => ({ ...f, projectId: e.target.value || undefined }))}>
-              <option value="">Company overhead (no project)</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.projectId ?? ''} onChange={v => setForm(f => ({ ...f, projectId: v || undefined }))}
+              options={projects.map(p => ({ value: p.id, label: p.name }))}
+              placeholder="Company overhead (no project)"
+            />
           </div>
           <div>
             <label className={label}>Category *</label>
@@ -323,8 +326,8 @@ export default function ExpenseRequestScreen() {
             </div>
             <div>
               <label className={label}>Needed By</label>
-              <input type="date" className={inp} value={form.neededBy?.slice(0, 10) ?? ''} min={todayStr()}
-                onChange={e => setForm(f => ({ ...f, neededBy: e.target.value || undefined }))} />
+              <DateField value={form.neededBy?.slice(0, 10) ?? ''} min={todayStr()}
+                onChange={v => setForm(f => ({ ...f, neededBy: v || undefined }))} />
             </div>
           </div>
           <div>
@@ -386,10 +389,11 @@ export default function ExpenseRequestScreen() {
               <PermissionGate permission="record_payment">
                 <div className="bg-slate-50 rounded-xl p-3 space-y-2">
                   <label className={label}>Record Payment{(selected.paidAmount ?? 0) > 0 ? ` (Remaining: ${fmtCurrency(selected.amount - (selected.paidAmount ?? 0))})` : ''}</label>
-                  <select className={inp} value={payAccountId} onChange={e => setPayAccountId(e.target.value)}>
-                    <option value="">Select payment account…</option>
-                    {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={payAccountId} onChange={setPayAccountId}
+                    options={accounts.map(a => ({ value: a.id, label: a.name }))}
+                    placeholder="Select payment account…"
+                  />
                   <input type="number" className={inp} placeholder="Amount to pay" value={payAmount || ''}
                     onChange={e => setPayAmount(Number(e.target.value))} />
                   <input className={inp} placeholder="Reference (optional)" value={payRef} onChange={e => setPayRef(e.target.value)} />

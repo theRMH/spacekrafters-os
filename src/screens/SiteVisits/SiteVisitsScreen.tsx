@@ -6,6 +6,8 @@ import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
@@ -343,17 +345,22 @@ export default function SiteVisitsScreen() {
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead *</label>
-            <select value={leadId} onChange={e => setLeadId(e.target.value)} disabled={showEdit}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 disabled:opacity-60">
-              <option value="">Select a lead…</option>
-              {leads.map(l => <option key={l.id} value={l.id}>{l.name} — {l.city}</option>)}
-            </select>
+            {showEdit ? (
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 opacity-60">
+                {leadName(leadId)}
+              </div>
+            ) : (
+              <SearchableSelect
+                value={leadId} onChange={setLeadId}
+                options={leads.map(l => ({ value: l.id, label: `${l.name} — ${l.city}` }))}
+                placeholder="Select a lead…" searchPlaceholder="Search leads…"
+              />
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Visit Date *</label>
-            <input type="date" value={visitDate} min={showEdit ? undefined : todayStr()}
-              onChange={e => setVisitDate(!showEdit && e.target.value < todayStr() ? todayStr() : e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            <DateField value={visitDate} min={showEdit ? undefined : todayStr()}
+              onChange={v => setVisitDate(!showEdit && v < todayStr() ? todayStr() : v)} />
           </div>
 
           <div>

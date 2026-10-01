@@ -6,6 +6,9 @@ import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
+import { TimeField } from '../../components/forms/TimeField'
 import { FilterChips } from '../../components/forms/FilterChips'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
@@ -353,11 +356,17 @@ export default function AppointmentsScreen() {
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead *</label>
-            <select value={leadId} onChange={e => handleLeadPick(e.target.value)} disabled={showEdit}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 disabled:opacity-60">
-              <option value="">Select a lead…</option>
-              {leads.map(l => <option key={l.id} value={l.id}>{l.name} — {l.city}</option>)}
-            </select>
+            {showEdit ? (
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 opacity-60">
+                {leads.find(l => l.id === leadId)?.name ?? leadId}
+              </div>
+            ) : (
+              <SearchableSelect
+                value={leadId} onChange={handleLeadPick}
+                options={leads.map(l => ({ value: l.id, label: `${l.name} — ${l.city}` }))}
+                placeholder="Select a lead…" searchPlaceholder="Search leads…"
+              />
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Client Name *</label>
@@ -392,23 +401,19 @@ export default function AppointmentsScreen() {
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Date & Time *</label>
             <div className="grid grid-cols-2 gap-2">
-              <input type="date" value={scheduledAt.split('T')[0] || ''} min={todayInputValue()}
-                onChange={e => {
-                  const date = e.target.value
+              <DateField value={scheduledAt.split('T')[0] || ''} min={todayInputValue()}
+                onChange={date => {
                   let time = scheduledAt.split('T')[1] || '09:00'
                   if (date === todayInputValue() && time < nowTimeInputValue()) time = nowTimeInputValue()
                   setScheduledAt(`${date}T${time}`)
-                }}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-              <input type="time" value={scheduledAt.split('T')[1] || ''}
+                }} />
+              <TimeField value={scheduledAt.split('T')[1] || ''}
                 min={(scheduledAt.split('T')[0] || todayInputValue()) === todayInputValue() ? nowTimeInputValue() : undefined}
-                onChange={e => {
+                onChange={time => {
                   const date = scheduledAt.split('T')[0] || todayInputValue()
-                  let time = e.target.value
                   if (date === todayInputValue() && time < nowTimeInputValue()) time = nowTimeInputValue()
                   setScheduledAt(`${date}T${time}`)
-                }}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+                }} />
             </div>
           </div>
           <div>
@@ -419,10 +424,7 @@ export default function AppointmentsScreen() {
           {showEdit && (
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1 block">Status</label>
-              <select value={status} onChange={e => setStatus(e.target.value as AppointmentStatus)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-                {CHIPS.filter(c => c.value !== 'all').map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
+              <SearchableSelect value={status} onChange={v => setStatus(v as AppointmentStatus)} options={CHIPS.filter(c => c.value !== 'all')} />
             </div>
           )}
           <div>

@@ -5,6 +5,8 @@ import { useCRM } from '../../context/CRMContext'
 import { hasRole } from '../../utils/permissions'
 import { sendNotification } from '../../utils/notifications'
 import { PermissionGate } from '../../components/layout/PermissionGate'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
@@ -18,8 +20,9 @@ import type { Lead, MaterialRequestForm, MRFStatus, MRFVendor, StatusHistoryItem
 // Same MRF workflow everywhere it's used (the standalone /mrf screen and a
 // project's MRF tab) — Project raises (optionally seeding Details/Notes) ->
 // QS fills/updates Details, Notes, Requesting Date & Expected Delivery Date
-// -> Project Coordinator approves/rejects -> Procurement receives the
-// completed MRF (adds vendors/files) -> Accounts releases the payment.
+// -> the project's Lead Owner approves/rejects (Reject sends it back to QS
+// with the reason, for them to revise and resubmit) -> Procurement receives
+// the completed MRF (adds vendors/files) -> Accounts releases the payment.
 export const MRF_STATUS_LABEL: Record<MRFStatus, string> = {
   pending_qs:                   'Pending QS',
   pending_coordinator_approval: 'Pending Approval',
@@ -33,9 +36,9 @@ export function fmtCurrency(n?: number): string {
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 }
 
-// The project's Lead Owner (LO) — resolved the same way it used to be for
-// MRF approval before that moved to the Project Coordinator; still needed
-// here as the payment-release notification/Account Details audience.
+// The project's Lead Owner (LO) — the person who approves/rejects an MRF
+// once QS submits it, and the payment-release notification/Account Details
+// audience.
 export function resolveLeadOwner(leadId: string | undefined, leads: Lead[]): { id?: string; name?: string } {
   const lead = leadId ? leads.find(l => l.id === leadId) : undefined
   return { id: lead?.ownerId, name: lead?.ownerName }
@@ -81,12 +84,15 @@ export function noteWithExtras(base: string, extras: { label: string; value: str
   return parts.length > 0 ? `${base} — ${parts.join(' · ')}` : base
 }
 
-// Everyone who can act as the Project Coordinator approver for an MRF (same
-// people canApprove allows below) — owner is included since owner can always
-// act on the Project Coordinator's behalf.
-async function notifyApprovers(mrf: MaterialRequestForm, projectName: string, submittedBy: string) {
+// Notifies the project's Lead Owner (the one who approves/rejects — see
+// canApprove below) that an MRF is waiting on them. Falls back to broadcasting
+// to every owner/project_coordinator if no Lead Owner is resolved (e.g. the
+// project has no linked lead), so a submission is never silently unnotified.
+async function notifyApprovers(mrf: MaterialRequestForm, projectName: string, submittedBy: string, leadOwnerId: string | undefined) {
   const dir = await getManagedUsersDirectory()
-  const recipientIds = dir.filter(u => hasRole(u, 'owner') || hasRole(u, 'project_coordinator')).map(u => u.id)
+  const recipientIds = leadOwnerId
+    ? [leadOwnerId]
+    : dir.filter(u => hasRole(u, 'owner') || hasRole(u, 'project_coordinator')).map(u => u.id)
   const parts = [
     `Project: ${projectName}`,
     mrf.materialDetails ? `Details: ${mrf.materialDetails}` : null,
@@ -96,6 +102,25 @@ async function notifyApprovers(mrf: MaterialRequestForm, projectName: string, su
     mrf.notes ? `Notes: ${mrf.notes}` : null,
   ].filter(Boolean)
   await sendNotification(recipientIds, 'MRF Pending Approval', parts.join(' · '), '/mrf')
+}
+
+// Notifies everyone who can act as QS that a new MRF has been raised and is
+// waiting for them to fill in material details/dates — the step this whole
+// flow starts with, so this is the very first notification an MRF ever sends.
+export async function notifyQsNewMrf(mrf: MaterialRequestForm, projectName: string, raisedBy: string) {
+  const dir = await getManagedUsersDirectory()
+  const recipientIds = dir.filter(u => hasRole(u, 'qs') || hasRole(u, 'owner')).map(u => u.id)
+  const parts = [`Project: ${projectName}`, `Raised by: ${raisedBy}`, mrf.materialDetails ? `Details: ${mrf.materialDetails}` : null, mrf.notes ? `Notes: ${mrf.notes}` : null].filter(Boolean)
+  await sendNotification(recipientIds, 'New MRF — Pending QS', parts.join(' · '), '/mrf')
+}
+
+// Notifies everyone who can act as QS (the role that fills in/revises an MRF)
+// that the Lead Owner rejected it and it needs rework.
+async function notifyRejection(mrf: MaterialRequestForm, projectName: string, rejectedBy: string, reason: string) {
+  const dir = await getManagedUsersDirectory()
+  const recipientIds = dir.filter(u => hasRole(u, 'qs') || hasRole(u, 'owner')).map(u => u.id)
+  const parts = [`Project: ${projectName}`, `Rejected by: ${rejectedBy}`, reason ? `Reason: ${reason}` : null].filter(Boolean)
+  await sendNotification(recipientIds, 'MRF Rejected — Needs Rework', parts.join(' · '), '/mrf')
 }
 
 // QS, the project's Lead Owner, MD (owner) and the Procurement Team (purchase
@@ -221,29 +246,32 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
     })
   }
 
+  // Used both for the first submission (pending_qs) and for resubmitting
+  // after the Lead Owner rejects it (rejected) — same target stage either way.
   async function handleQsSubmit() {
     if (!materialDetails.trim() || !requestingDate || !expectedDeliveryDate) {
       notify('Enter the material/request details, Requesting Date, and Expected Delivery Date.', 'error')
       return
     }
-    const historyNote = noteWithExtras('QS submitted details and dates for approval', [
-      { label: 'Notes', value: notes },
-      { label: 'Additional Notes', value: additionalNotes },
-    ])
+    const historyNote = noteWithExtras(
+      mrf.status === 'rejected' ? 'QS revised and resubmitted for approval' : 'QS submitted details and dates for approval',
+      [{ label: 'Notes', value: notes }, { label: 'Additional Notes', value: additionalNotes }],
+    )
     const updated = await saveTransition('pending_coordinator_approval', historyNote, {
       materialDetails: materialDetails.trim(), notes: notes.trim() || undefined,
       additionalNotes: additionalNotes.trim() || undefined, requestingDate, expectedDeliveryDate,
     })
-    if (updated && user) notifyApprovers(updated, projectName, user.name)
+    if (updated && user) notifyApprovers(updated, projectName, user.name, leadOwner.id)
   }
 
-  async function handleCoordinatorDecision(approved: boolean) {
-    const base = approved ? 'Project Coordinator approved — sent to Procurement' : 'Project Coordinator rejected'
-    await saveTransition(
+  async function handleLeadOwnerDecision(approved: boolean) {
+    const base = approved ? 'Lead Owner approved — sent to Procurement' : 'Lead Owner rejected — returned to QS'
+    const updated = await saveTransition(
       approved ? 'pending_procurement' : 'rejected',
-      noteWithExtras(base, [{ label: 'Notes', value: approvalNotes }]),
+      noteWithExtras(base, [{ label: approved ? 'Notes' : 'Rejection Reason', value: approvalNotes }]),
       { approvalNotes: approvalNotes.trim() || undefined },
     )
+    if (updated && !approved && user) notifyRejection(updated, projectName, user.name, approvalNotes.trim())
   }
 
   async function handleReleasePayment() {
@@ -290,11 +318,13 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
     notify('Procurement status updated.', 'success')
   }
 
-  // Project Coordinator (the one who can raise an MRF) approves it — owner can
-  // always act on their behalf, same convention as LeadStatusSheet/ProjectStatusSheet.
-  const canApprove = user?.role === 'owner' || can('create_mrf')
-  // Account Details is LO/MD only — the project's actual Lead Owner, or owner (MD).
+  // The project's actual Lead Owner approves/rejects — owner can always act
+  // on their behalf, same convention as LeadStatusSheet/ProjectStatusSheet.
+  // approve_mrf still gates it (granted to every role that can ever be a Lead
+  // Owner — project_coordinator/qs/designer — see ASSIGNABLE_LEAD_OWNER_ROLES
+  // in LeadsScreen.tsx), narrowed further to the specific person.
   const isLoOrMd = user?.role === 'owner' || (!!leadOwner.id && user?.id === leadOwner.id)
+  const canApprove = isLoOrMd && (user?.role === 'owner' || can('approve_mrf'))
 
   return (
     <div className="space-y-4">
@@ -316,7 +346,7 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
         {mrf.expectedDeliveryDate && (
           <div className="flex justify-between gap-3"><span className="text-xs text-slate-400">Expected Delivery</span><span className="text-xs font-semibold text-slate-700">{fmtDate(mrf.expectedDeliveryDate)}</span></div>
         )}
-        {mrf.approvalNotes && (
+        {mrf.approvalNotes && mrf.status !== 'rejected' && (
           <div><span className="text-xs text-slate-400 block mb-0.5">Approval Notes</span><p className="text-xs font-semibold text-slate-700 whitespace-pre-wrap">{mrf.approvalNotes}</p></div>
         )}
         {!mrf.materialDetails && !mrf.notes && !mrf.additionalNotes && (
@@ -339,8 +369,17 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
         </div>
       )}
 
-      {/* QS: draft material details, notes and both dates */}
-      {mrf.status === 'pending_qs' && can('submit_mrf') && (
+      {/* Rejected — sent back to QS with the reason, for them to revise and resubmit */}
+      {mrf.status === 'rejected' && (
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-3.5 space-y-1">
+          <p className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Rejected by Lead Owner</p>
+          <p className="text-xs font-semibold text-slate-700 whitespace-pre-wrap">{mrf.approvalNotes || 'No reason given.'}</p>
+        </div>
+      )}
+
+      {/* QS: draft material details, notes and both dates — same form for the
+          first submission (pending_qs) and for revising after a rejection. */}
+      {(mrf.status === 'pending_qs' || mrf.status === 'rejected') && can('submit_mrf') && (
         <div className="space-y-2">
           <label className="text-xs font-semibold text-slate-500 block">Material / Request Details *</label>
           <textarea value={materialDetails} onChange={e => setMaterialDetails(e.target.value)} rows={4}
@@ -352,43 +391,44 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Requesting Date *</label>
-            <input type="date" value={requestingDate} min={todayStr()} onChange={e => setRequestingDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            <DateField value={requestingDate} min={todayStr()} onChange={setRequestingDate} />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Expected Delivery Date *</label>
-            <input type="date" value={expectedDeliveryDate} min={requestingDate || todayStr()} onChange={e => setExpectedDeliveryDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            <DateField value={expectedDeliveryDate} min={requestingDate || todayStr()} onChange={setExpectedDeliveryDate} />
           </div>
           <label className="text-xs font-semibold text-slate-500 block">Additional Notes</label>
           <textarea value={additionalNotes} onChange={e => setAdditionalNotes(e.target.value)} rows={3}
             placeholder="Anything else Procurement should know"
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
           <button onClick={handleQsSubmit} disabled={isSaving} className="w-full py-3 rounded-xl text-white text-sm font-bold active:opacity-90 disabled:opacity-60" style={{ background: '#0F2A4A' }}>
-            Submit for Approval
+            {mrf.status === 'rejected' ? 'Resubmit for Approval' : 'Submit for Approval'}
           </button>
         </div>
       )}
+      {mrf.status === 'rejected' && !can('submit_mrf') && (
+        <p className="text-xs text-slate-400 text-center py-4">Waiting on QS to revise and resubmit.</p>
+      )}
 
-      {/* Project Coordinator: approve/reject */}
-      {mrf.status === 'pending_coordinator_approval' && can('approve_mrf') && canApprove && (
+      {/* Lead Owner: approve/reject */}
+      {mrf.status === 'pending_coordinator_approval' && canApprove && (
         <div className="space-y-2">
           <label className="text-xs font-semibold text-slate-500 block">Notes</label>
           <textarea value={approvalNotes} onChange={e => setApprovalNotes(e.target.value)} rows={3}
             placeholder="Comments / approval notes"
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
           <div className="flex gap-2">
-            <button onClick={() => handleCoordinatorDecision(true)} disabled={isSaving} className="flex-1 py-3 rounded-xl text-white text-sm font-bold active:opacity-90 disabled:opacity-60" style={{ background: '#059669' }}>
+            <button onClick={() => handleLeadOwnerDecision(true)} disabled={isSaving} className="flex-1 py-3 rounded-xl text-white text-sm font-bold active:opacity-90 disabled:opacity-60" style={{ background: '#059669' }}>
               Approve
             </button>
-            <button onClick={() => handleCoordinatorDecision(false)} disabled={isSaving} className="flex-1 py-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-bold active:bg-red-100 disabled:opacity-60">
+            <button onClick={() => handleLeadOwnerDecision(false)} disabled={isSaving} className="flex-1 py-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-bold active:bg-red-100 disabled:opacity-60">
               Reject
             </button>
           </div>
         </div>
       )}
       {mrf.status === 'pending_coordinator_approval' && !canApprove && (
-        <p className="text-xs text-slate-400 text-center py-4">Waiting on the Project Coordinator to approve or reject.</p>
+        <p className="text-xs text-slate-400 text-center py-4">Waiting on {leadOwner.name ?? 'the Lead Owner'} to approve or reject.</p>
       )}
 
       {/* Procurement: vendors, each with its own separate file uploads — not
@@ -489,8 +529,7 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Release Date *</label>
-            <input type="date" value={releaseDate} onChange={e => setReleaseDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            <DateField value={releaseDate} min={todayStr()} onChange={setReleaseDate} />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Payment Reference</label>
@@ -528,11 +567,11 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
         <div className="space-y-3 pb-4">
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Status *</label>
-            <select value={newProcurementStatus} onChange={e => setNewProcurementStatus(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="">Select a status…</option>
-              {PROCUREMENT_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <SearchableSelect
+              value={newProcurementStatus} onChange={setNewProcurementStatus}
+              options={PROCUREMENT_STATUS_OPTIONS.map(s => ({ value: s, label: s }))}
+              placeholder="Select a status…"
+            />
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={procurementIsDelay} onChange={e => setProcurementIsDelay(e.target.checked)}
@@ -616,6 +655,7 @@ export function MRFPanel({ projectId, projectName, leadId }: { projectId: string
     setMrfs(prev => [mrf, ...prev])
     setShowNew(false)
     setSnack({ open: true, msg: 'Sent to QS for MRF.', type: 'success' })
+    notifyQsNewMrf(mrf, projectName, user.name)
   }
 
   function handleSaved(updated: MaterialRequestForm) {

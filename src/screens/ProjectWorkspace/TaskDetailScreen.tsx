@@ -8,6 +8,7 @@ import { StatusBadge } from '../../components/badges/StatusBadge'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { getManagedUsersDirectory } from '../../services/userService'
 import {
   getAllTasks, upsertTask,
@@ -241,11 +242,13 @@ export default function TaskDetailScreen() {
         </div>
 
         <PermissionGate permission="complete_task">
-          <div className="flex flex-wrap gap-2">
-            {STATUS_OPTIONS.map(opt => (
+          <div className="grid grid-cols-2 gap-2">
+            {STATUS_OPTIONS.map((opt, i) => (
               <button key={opt.value} onClick={() => updateStatus(task, opt.value)}
                 disabled={task.status === opt.value}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold ${task.status === opt.value ? 'bg-slate-100 text-slate-400' : 'text-white'}`}
+                className={`px-3 py-2 rounded-full text-xs font-semibold text-center ${
+                  i === STATUS_OPTIONS.length - 1 && STATUS_OPTIONS.length % 2 !== 0 ? 'col-span-2' : ''
+                } ${task.status === opt.value ? 'bg-slate-100 text-slate-400' : 'text-white'}`}
                 style={task.status === opt.value ? undefined : { background: '#0F2A4A' }}>
                 {opt.label}
               </button>
@@ -316,11 +319,10 @@ export default function TaskDetailScreen() {
           />
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Assign To *</label>
-            <select value={subtaskAssigneeId} onChange={e => setSubtaskAssigneeId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="">— Select —</option>
-              {activeUsers.map(u => <option key={u.id} value={u.id}>{u.fullName}</option>)}
-            </select>
+            <SearchableSelect
+              value={subtaskAssigneeId} onChange={setSubtaskAssigneeId}
+              options={activeUsers.map(u => ({ value: u.id, label: u.fullName }))}
+            />
           </div>
           <button onClick={handleAddSubtask} disabled={!subtaskTitle.trim() || !subtaskAssigneeId}
             className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700 disabled:opacity-40">
@@ -332,11 +334,10 @@ export default function TaskDetailScreen() {
       {/* Reassign Task */}
       <BottomSheet isOpen={showAssigneeSheet} onClose={() => setShowAssigneeSheet(false)} title="Change Assignee">
         <div className="space-y-4 pb-4">
-          <select value={reassignId} onChange={e => setReassignId(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-            <option value="">— Select —</option>
-            {activeUsers.map(u => <option key={u.id} value={u.id}>{u.fullName}</option>)}
-          </select>
+          <SearchableSelect
+            value={reassignId} onChange={setReassignId}
+            options={activeUsers.map(u => ({ value: u.id, label: u.fullName }))}
+          />
           <button onClick={handleReassign} disabled={!reassignId}
             className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700 disabled:opacity-40">
             Save
@@ -347,13 +348,11 @@ export default function TaskDetailScreen() {
       {/* Add Dependency */}
       <BottomSheet isOpen={showDepSheet} onClose={() => setShowDepSheet(false)} title="Add Dependency">
         <div className="space-y-4 pb-4">
-          <select
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400"
-            value={depTaskId} onChange={e => setDepTaskId(e.target.value)}
-          >
-            <option value="">Select a task this depends on…</option>
-            {otherProjectTasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
-          </select>
+          <SearchableSelect
+            value={depTaskId} onChange={setDepTaskId}
+            options={otherProjectTasks.map(t => ({ value: t.id, label: t.title }))}
+            placeholder="Select a task this depends on…"
+          />
           <button onClick={handleAddDependency} disabled={!depTaskId}
             className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700 disabled:opacity-40">
             Add Dependency

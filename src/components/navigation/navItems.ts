@@ -7,7 +7,7 @@ import {
   CalendarOff, UserCog, File, Settings, UploadCloud, History,
   PiggyBank, Tags, BellRing, TrendingUp, PieChart, CalendarDays, Scale, LineChart,
   CalendarClock, LocateFixed, ListChecks, FileSearch, Hammer, FileEdit, Wrench, ShieldCheck,
-  LayoutDashboard,
+  LayoutDashboard, Package,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -37,6 +37,12 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { icon: ClipboardList, label: 'Follow-ups',   path: '/follow-ups',   permission: 'view_activity'     },
       { icon: Wrench,        label: 'Task',         path: '/md-tasks',    permission: 'view_md_tasks'     },
       { icon: ShieldCheck,   label: 'Approval',     path: '/approval',    permission: 'view_md_tasks'     },
+    ],
+  },
+  {
+    label: 'Product Sales',
+    items: [
+      { icon: Package, label: 'Product Sales', path: '/product-sales', permission: 'view_product_sales' },
     ],
   },
   {

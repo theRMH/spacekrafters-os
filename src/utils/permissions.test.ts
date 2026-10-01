@@ -55,8 +55,8 @@ describe('canAccessScreen', () => {
 })
 
 describe('getDefaultRoute', () => {
-  it('routes the owner to Home and every other role to their personal Task tab', () => {
-    expect(getDefaultRoute('owner')).toBe('/home')
+  it('routes the owner to the Dashboard and every other role to their personal Task tab', () => {
+    expect(getDefaultRoute('owner')).toBe('/dashboard')
     expect(getDefaultRoute('site_engineer')).toBe('/my-tasks')
     expect(getDefaultRoute('designer')).toBe('/my-tasks')
     expect(getDefaultRoute('qs')).toBe('/my-tasks')

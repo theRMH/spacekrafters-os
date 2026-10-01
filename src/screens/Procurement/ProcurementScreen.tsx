@@ -6,6 +6,8 @@ import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { Dialog } from '../../components/feedback/Dialog'
@@ -394,10 +396,11 @@ export default function ProcurementScreen() {
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Project</label>
-            <select className={inp} value={form.projectId ?? ''} onChange={e => setForm(f => ({ ...f, projectId: e.target.value || undefined }))}>
-              <option value="">No specific project</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.projectId ?? ''} onChange={v => setForm(f => ({ ...f, projectId: v || undefined }))}
+              options={projects.map(p => ({ value: p.id, label: p.name }))}
+              placeholder="No specific project"
+            />
           </div>
           <div>
             <label className={label}>Description *</label>
@@ -415,8 +418,8 @@ export default function ProcurementScreen() {
           </div>
           <div>
             <label className={label}>Needed By</label>
-            <input type="date" className={inp} value={form.neededBy?.slice(0, 10) ?? ''} min={todayStr()}
-              onChange={e => setForm(f => ({ ...f, neededBy: e.target.value || undefined }))} />
+            <DateField value={form.neededBy?.slice(0, 10) ?? ''} min={todayStr()}
+              onChange={v => setForm(f => ({ ...f, neededBy: v || undefined }))} />
           </div>
           <button onClick={handleSavePR} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
             Save Purchase Request
@@ -477,10 +480,11 @@ export default function ProcurementScreen() {
                 </div>
                 <PermissionGate permission="raise_purchase_request">
                   <div className="bg-slate-50 rounded-xl p-3 space-y-2">
-                    <select className={inp} value={quoteForm.vendorId} onChange={e => setQuoteForm(f => ({ ...f, vendorId: e.target.value }))}>
-                      <option value="">Select vendor…</option>
-                      {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                    </select>
+                    <SearchableSelect
+                      value={quoteForm.vendorId} onChange={v => setQuoteForm(f => ({ ...f, vendorId: v }))}
+                      options={vendors.map(v => ({ value: v.id, label: v.name }))}
+                      placeholder="Select vendor…"
+                    />
                     <input type="number" className={inp} placeholder="Quoted amount" value={quoteForm.amount} onChange={e => setQuoteForm(f => ({ ...f, amount: e.target.value }))} />
                     <input className={inp} placeholder="Notes (optional)" value={quoteForm.notes} onChange={e => setQuoteForm(f => ({ ...f, notes: e.target.value }))} />
                     <button onClick={handleAddQuote} className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold active:bg-indigo-700">

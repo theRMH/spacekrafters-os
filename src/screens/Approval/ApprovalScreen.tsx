@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { ApprovalSection, type ApprovalTab } from '../MDTasks/ApprovalSection'
 import { ApprovalHistory } from '../MDTasks/ApprovalHistory'
@@ -21,9 +22,13 @@ export default function ApprovalScreen() {
 
       <div className="px-4 pt-4 space-y-6">
         <ApprovalSection tab={tab} onTabChange={setTab} onDecided={() => setHistoryKey(k => k + 1)} />
-        {tab === 'quotation'
-          ? <ApprovalHistory refreshKey={historyKey} types={['Quotation']} title="Quotation Approval History" />
-          : <ApprovalHistory refreshKey={historyKey} types={['Designing']} title="Designing Approval History" />}
+        {tab === 'quotation' && <ApprovalHistory refreshKey={historyKey} types={['Quotation']} title="Quotation Approval History" />}
+        {tab === 'design' && <ApprovalHistory refreshKey={historyKey} types={['Designing']} title="Designing Approval History" />}
+        {tab === 'mrf' && (
+          <p className="text-xs text-slate-400 text-center py-4">
+            Every MRF's full approval history is on the MRF itself — open it from the <Link to="/mrf" className="font-semibold text-indigo-600">MRF screen</Link>.
+          </p>
+        )}
       </div>
     </div>
   )

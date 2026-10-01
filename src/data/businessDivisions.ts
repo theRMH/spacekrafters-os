@@ -21,12 +21,20 @@ export const BUSINESS_CATEGORY_OPTIONS: { value: BusinessCategory; label: string
 export const BUSINESS_CATEGORY_LABEL: Record<BusinessCategory, string> =
   Object.fromEntries(BUSINESS_CATEGORY_OPTIONS.map(o => [o.value, o.label])) as Record<BusinessCategory, string>
 
-// FGD is one company with two brand lines — not two separate divisions.
+// FGD is one company with several brand lines — not separate divisions.
 export const DIVISIONS_WITH_BRAND: BusinessDivision[] = ['fgd']
 
+// Shown in the picker for new leads.
 export const BUSINESS_BRAND_OPTIONS: { value: BusinessBrand; label: string }[] = [
-  { value: 'kitchenaid',             label: 'KitchenAid (KA)' },
-  { value: 'bosch_siemens_gaggenau', label: 'Bosch, Siemens & Gaggenau' },
+  { value: 'kitchenaid', label: 'KitchenAid' },
+  { value: 'bosch',      label: 'Bosch'      },
+  { value: 'siemens',    label: 'Siemens'    },
+  { value: 'gaggenau',   label: 'Gaggenau'   },
 ]
-export const BUSINESS_BRAND_LABEL: Record<BusinessBrand, string> =
-  Object.fromEntries(BUSINESS_BRAND_OPTIONS.map(o => [o.value, o.label])) as Record<BusinessBrand, string>
+// Labels for every value that can appear on a saved lead, including the
+// legacy bundled 'bosch_siemens_gaggenau' (no longer offered as a new
+// choice, but still shown correctly on leads saved before this change).
+export const BUSINESS_BRAND_LABEL: Record<BusinessBrand, string> = {
+  ...Object.fromEntries(BUSINESS_BRAND_OPTIONS.map(o => [o.value, o.label])),
+  bosch_siemens_gaggenau: 'Bosch, Siemens & Gaggenau',
+} as Record<BusinessBrand, string>

@@ -6,6 +6,7 @@ import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
@@ -303,11 +304,17 @@ export default function RequirementsScreen() {
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Site Visit *</label>
-            <select value={siteVisitId} onChange={e => handleSiteVisitPick(e.target.value)} disabled={showEdit}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 disabled:opacity-60">
-              <option value="">Select a site visit…</option>
-              {siteVisits.map(v => <option key={v.id} value={v.id}>{visitLabel(v)}</option>)}
-            </select>
+            {showEdit ? (
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 opacity-60">
+                {(() => { const v = siteVisits.find(sv => sv.id === siteVisitId); return v ? visitLabel(v) : siteVisitId })()}
+              </div>
+            ) : (
+              <SearchableSelect
+                value={siteVisitId} onChange={handleSiteVisitPick}
+                options={siteVisits.map(v => ({ value: v.id, label: visitLabel(v) }))}
+                placeholder="Select a site visit…" searchPlaceholder="Search site visits…"
+              />
+            )}
             {!showEdit && <p className="text-[10px] text-slate-400 mt-1">Selecting a site visit pre-fills one line item per room measured.</p>}
           </div>
 
@@ -336,10 +343,10 @@ export default function RequirementsScreen() {
                       onChange={e => updateLineItem(item.id, { quantity: parseFloat(e.target.value) || 0 })}
                       placeholder="Qty"
                       className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
-                    <select value={item.unit} onChange={e => updateLineItem(item.id, { unit: e.target.value })}
-                      className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
-                      {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
+                    <div className="w-1/2">
+                      <SearchableSelect value={item.unit} onChange={v => updateLineItem(item.id, { unit: v })}
+                        options={UNIT_OPTIONS.map(u => ({ value: u, label: u }))} />
+                    </div>
                   </div>
                 </div>
               ))}

@@ -6,6 +6,7 @@ import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
@@ -832,21 +833,27 @@ export default function QuotationsScreen() {
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead *</label>
-            <select value={leadId} onChange={e => { setLeadId(e.target.value); setRequirementId('') }} disabled={showEdit}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 disabled:opacity-60">
-              <option value="">Select a lead…</option>
-              {leads.map(l => <option key={l.id} value={l.id}>{l.name} — {l.city}</option>)}
-            </select>
+            {showEdit ? (
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 opacity-60">
+                {leadName(leadId)}
+              </div>
+            ) : (
+              <SearchableSelect
+                value={leadId} onChange={v => { setLeadId(v); setRequirementId('') }}
+                options={leads.map(l => ({ value: l.id, label: `${l.name} — ${l.city}` }))}
+                placeholder="Select a lead…" searchPlaceholder="Search leads…"
+              />
+            )}
           </div>
 
           {leadId && (
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1 block">Requirement</label>
-              <select value={requirementId} onChange={e => handleRequirementPick(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-                <option value="">None — build sections manually</option>
-                {requirementsForLead(leadId).map(r => <option key={r.id} value={r.id}>{requirementLabel(r)}</option>)}
-              </select>
+              <SearchableSelect
+                value={requirementId} onChange={handleRequirementPick}
+                options={requirementsForLead(leadId).map(r => ({ value: r.id, label: requirementLabel(r) }))}
+                placeholder="None — build sections manually" searchPlaceholder="Search requirements…"
+              />
               <p className="text-[10px] text-slate-400 mt-1">Selecting a requirement pre-fills one section per room with its captured line items (rate defaults to 0).</p>
             </div>
           )}
@@ -885,34 +892,32 @@ export default function QuotationsScreen() {
                             </button>
                           </div>
                           <div className="flex items-end gap-1.5">
-                            <div className="w-1/4">
+                            <div className="w-[18%]">
                               <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Qty</label>
                               <input type="number" min="0" step="0.01" value={item.quantity || ''}
                                 onChange={e => updateItem(section.id, item.id, { quantity: parseFloat(e.target.value) || 0 })}
                                 className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
                             </div>
-                            <div className="w-1/5">
+                            <div className="w-[22%]">
                               <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Unit</label>
-                              <select value={item.unit} onChange={e => updateItem(section.id, item.id, { unit: e.target.value })}
-                                className="w-full border border-slate-200 rounded-lg px-1.5 py-1.5 text-xs focus:outline-none focus:border-indigo-400">
-                                {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                              </select>
+                              <SearchableSelect compact value={item.unit} onChange={v => updateItem(section.id, item.id, { unit: v })}
+                                options={UNIT_OPTIONS.map(u => ({ value: u, label: u }))} />
                             </div>
-                            <div className="w-1/4">
+                            <div className="w-[20%]">
                               <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Rate</label>
                               <input type="number" min="0" step="0.01" value={item.rate || ''}
                                 onChange={e => updateItem(section.id, item.id, { rate: parseFloat(e.target.value) || 0 })}
                                 className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
                             </div>
-                            <div className="w-1/5">
+                            <div className="w-[15%]">
                               <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Tax%</label>
                               <input type="number" min="0" step="0.01" value={item.taxPercent ?? ''}
                                 onChange={e => updateItem(section.id, item.id, { taxPercent: e.target.value ? parseFloat(e.target.value) : undefined })}
                                 className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
                             </div>
-                            <div className="w-1/4">
+                            <div className="w-[25%]">
                               <label className="block text-[9px] font-semibold text-slate-400 mb-0.5 text-right">Amount</label>
-                              <span className="block text-right text-xs font-bold text-slate-700 py-1.5">{fmtCurrency(item.quantity * item.rate)}</span>
+                              <span className="block text-right text-xs font-bold text-slate-700 py-1.5 truncate">{fmtCurrency(item.quantity * item.rate)}</span>
                             </div>
                           </div>
                         </div>
@@ -931,11 +936,12 @@ export default function QuotationsScreen() {
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Discount</label>
             <div className="flex gap-2">
-              <select value={discountType} onChange={e => setDiscountType(e.target.value as DiscountType)}
-                className="w-32 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-sm focus:outline-none focus:border-indigo-400">
-                <option value="amount">Amount (₹)</option>
-                <option value="percentage">Percentage (%)</option>
-              </select>
+              <div className="w-32">
+                <SearchableSelect value={discountType} onChange={v => setDiscountType(v as DiscountType)} options={[
+                  { value: 'amount', label: 'Amount (₹)' },
+                  { value: 'percentage', label: 'Percentage (%)' },
+                ]} />
+              </div>
               <input type="number" min="0" step="0.01" value={discountValue || ''}
                 onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)}
                 placeholder={discountType === 'percentage' ? 'e.g. 10' : 'e.g. 5000'}

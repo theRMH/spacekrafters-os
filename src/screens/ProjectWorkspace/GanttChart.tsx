@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
+import { DateField } from '../../components/forms/DateField'
 import { upsertTask } from '../../services/taskService'
 import type { Task, TaskDependency } from '../../types'
 
@@ -108,8 +109,7 @@ export function GanttChart({ tasks, dependencies, onTaskUpdated, canEditDeadline
 
       <BottomSheet isOpen={!!editing} onClose={() => setEditing(null)} title={editing ? `Edit Deadline — ${editing.title}` : ''}>
         <div className="space-y-4 pb-4">
-          <input type="date" value={deadlineInput} min={todayStr()} onChange={e => setDeadlineInput(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+          <DateField value={deadlineInput} min={todayStr()} onChange={setDeadlineInput} />
           <button onClick={saveDeadline} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
             Save Deadline
           </button>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { Dialog } from '../../components/feedback/Dialog'
@@ -223,9 +224,10 @@ export default function PersonalPlansScreen() {
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Month</label>
-            <select className={inp} value={form.month} onChange={e => setForm(f => ({ ...f, month: Number(e.target.value) }))}>
-              {MONTH_LABEL.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-            </select>
+            <SearchableSelect
+              value={String(form.month)} onChange={v => setForm(f => ({ ...f, month: Number(v) }))}
+              options={MONTH_LABEL.map((m, i) => ({ value: String(i + 1), label: m }))}
+            />
           </div>
           <div>
             <label className={label}>Year</label>
@@ -233,9 +235,10 @@ export default function PersonalPlansScreen() {
           </div>
           <div>
             <label className={label}>Plan Type</label>
-            <select className={inp} value={form.planType} onChange={e => setForm(f => ({ ...f, planType: e.target.value as PersonalPlanType }))}>
-              {PLAN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.planType} onChange={v => setForm(f => ({ ...f, planType: v as PersonalPlanType }))}
+              options={PLAN_TYPE_OPTIONS}
+            />
           </div>
           <div>
             <label className={label}>Projected Amount *</label>

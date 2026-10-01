@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { Dialog } from '../../components/feedback/Dialog'
@@ -187,9 +189,10 @@ export default function PersonalCommitmentsScreen() {
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Type</label>
-            <select className={inp} value={form.commitmentType} onChange={e => setForm(f => ({ ...f, commitmentType: e.target.value as PersonalCommitmentType }))}>
-              {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.commitmentType} onChange={v => setForm(f => ({ ...f, commitmentType: v as PersonalCommitmentType }))}
+              options={TYPE_OPTIONS}
+            />
           </div>
           <div>
             <label className={label}>Name *</label>
@@ -201,21 +204,23 @@ export default function PersonalCommitmentsScreen() {
           </div>
           <div>
             <label className={label}>Frequency</label>
-            <select className={inp} value={form.frequency} onChange={e => setForm(f => ({ ...f, frequency: e.target.value as PersonalCommitmentFrequency }))}>
-              {FREQUENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.frequency} onChange={v => setForm(f => ({ ...f, frequency: v as PersonalCommitmentFrequency }))}
+              options={FREQUENCY_OPTIONS}
+            />
           </div>
           <div>
             <label className={label}>Due Date *</label>
-            <input type="date" className={inp} value={form.dueDate} min={isEditing ? undefined : todayStr()}
-              onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+            <DateField value={form.dueDate} min={isEditing ? undefined : todayStr()}
+              onChange={v => setForm(f => ({ ...f, dueDate: v }))} />
           </div>
           <div>
             <label className={label}>Linked Account</label>
-            <select className={inp} value={form.linkedAccountId ?? ''} onChange={e => setForm(f => ({ ...f, linkedAccountId: e.target.value || undefined }))}>
-              <option value="">None</option>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.linkedAccountId ?? ''} onChange={v => setForm(f => ({ ...f, linkedAccountId: v || undefined }))}
+              options={accounts.map(a => ({ value: a.id, label: a.name }))}
+              placeholder="None"
+            />
           </div>
           <div>
             <label className={label}>Provider</label>
@@ -303,17 +308,18 @@ export default function PersonalCommitmentsScreen() {
               </div>
               <div>
                 <label className={label}>Expected Date</label>
-                <input type="date" className={inp} value={form.expectedDate ?? ''} min={todayStr()}
-                  onChange={e => setForm(f => ({ ...f, expectedDate: e.target.value }))} />
+                <DateField value={form.expectedDate ?? ''} min={todayStr()}
+                  onChange={v => setForm(f => ({ ...f, expectedDate: v }))} />
               </div>
             </>
           )}
 
           <div>
             <label className={label}>Status</label>
-            <select className={inp} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as PersonalCommitmentStatus }))}>
-              {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.status} onChange={v => setForm(f => ({ ...f, status: v as PersonalCommitmentStatus }))}
+              options={STATUS_OPTIONS}
+            />
           </div>
           <button onClick={handleSave} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
             Save Commitment

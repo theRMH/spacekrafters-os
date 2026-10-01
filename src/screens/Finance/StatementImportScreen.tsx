@@ -3,6 +3,7 @@ import { Upload } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllCompanyAccounts, addCompanyTransaction, addTransactionAllocations } from '../../services/companyAccountService'
 import { getAllPersonalAccounts, addPersonalTransaction, getAllPersonalCategories, getAllPersonalSubcategories } from '../../services/personalFinanceService'
@@ -272,10 +273,11 @@ export default function StatementImportScreen() {
 
           <div>
             <label className={label}>Deposit Account *</label>
-            <select className={inp} value={accountId} onChange={e => setAccountId(e.target.value)}>
-              <option value="">Select account…</option>
-              {(scope === 'company' ? accounts : personalAccounts).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={accountId} onChange={setAccountId}
+              options={(scope === 'company' ? accounts : personalAccounts).map(a => ({ value: a.id, label: a.name }))}
+              placeholder="Select account…"
+            />
           </div>
 
           <label className="w-full flex items-center justify-center gap-2 py-4 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 text-sm font-semibold cursor-pointer active:bg-slate-100">
@@ -311,35 +313,42 @@ export default function StatementImportScreen() {
                           <input className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
                             value={row.category} onChange={e => updateRow(row.key, { category: e.target.value })} placeholder="Category" />
                           {scope === 'company' && (
-                            <select className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-500"
-                              value={row.companyCategory ?? ''}
-                              onChange={e => updateRow(row.key, { companyCategory: (e.target.value || undefined) as CompanyTransactionCategory | undefined })}>
-                              <option value="">Income/Expense</option>
-                              <option value="transfer">Transfer</option>
-                              <option value="owner_funding">Owner Funding</option>
-                            </select>
+                            <div className="flex-1 min-w-0">
+                              <SearchableSelect
+                                value={row.companyCategory ?? ''}
+                                onChange={v => updateRow(row.key, { companyCategory: (v || undefined) as CompanyTransactionCategory | undefined })}
+                                options={[{ value: 'transfer', label: 'Transfer' }, { value: 'owner_funding', label: 'Owner Funding' }]}
+                                placeholder="Income/Expense"
+                              />
+                            </div>
                           )}
                         </div>
                         {scope === 'personal' && (
                           <div className="flex gap-1.5 mt-1.5">
-                            <select className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-500"
-                              value={row.personalType}
-                              onChange={e => updateRow(row.key, { personalType: e.target.value as PersonalTransactionType })}>
-                              {PERSONAL_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
-                            <select className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-500"
-                              value={row.personalCategoryId ?? ''}
-                              onChange={e => updateRow(row.key, { personalCategoryId: e.target.value || undefined, personalSubcategoryId: undefined })}>
-                              <option value="">No category</option>
-                              {personalCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
+                            <div className="flex-1 min-w-0">
+                              <SearchableSelect
+                                value={row.personalType}
+                                onChange={v => updateRow(row.key, { personalType: v as PersonalTransactionType })}
+                                options={PERSONAL_TYPE_OPTIONS}
+                              />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <SearchableSelect
+                                value={row.personalCategoryId ?? ''}
+                                onChange={v => updateRow(row.key, { personalCategoryId: v || undefined, personalSubcategoryId: undefined })}
+                                options={personalCategories.map(c => ({ value: c.id, label: c.name }))}
+                                placeholder="No category"
+                              />
+                            </div>
                             {row.personalCategoryId && personalSubcategories.some(s => s.categoryId === row.personalCategoryId) && (
-                              <select className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-500"
-                                value={row.personalSubcategoryId ?? ''}
-                                onChange={e => updateRow(row.key, { personalSubcategoryId: e.target.value || undefined })}>
-                                <option value="">No subcategory</option>
-                                {personalSubcategories.filter(s => s.categoryId === row.personalCategoryId).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                              </select>
+                              <div className="flex-1 min-w-0">
+                                <SearchableSelect
+                                  value={row.personalSubcategoryId ?? ''}
+                                  onChange={v => updateRow(row.key, { personalSubcategoryId: v || undefined })}
+                                  options={personalSubcategories.filter(s => s.categoryId === row.personalCategoryId).map(s => ({ value: s.id, label: s.name }))}
+                                  placeholder="No subcategory"
+                                />
+                              </div>
                             )}
                           </div>
                         )}

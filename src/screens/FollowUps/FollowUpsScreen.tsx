@@ -5,6 +5,8 @@ import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { FilterChips } from '../../components/forms/FilterChips'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
@@ -256,24 +258,26 @@ export default function FollowUpsScreen() {
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead *</label>
-            <select value={leadId} onChange={e => setLeadId(e.target.value)} disabled={showEdit}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 disabled:opacity-60">
-              <option value="">Select a lead…</option>
-              {leads.map(l => <option key={l.id} value={l.id}>{l.name} — {l.city}</option>)}
-            </select>
+            {showEdit ? (
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 opacity-60">
+                {leadName(leadId)}
+              </div>
+            ) : (
+              <SearchableSelect
+                value={leadId} onChange={setLeadId}
+                options={leads.map(l => ({ value: l.id, label: `${l.name} — ${l.city}` }))}
+                placeholder="Select a lead…" searchPlaceholder="Search leads…"
+              />
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Due Date *</label>
-            <input type="date" value={dueDate} min={showEdit ? undefined : todayStr()} onChange={e => setDueDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            <DateField value={dueDate} min={showEdit ? undefined : todayStr()} onChange={setDueDate} />
           </div>
           {showEdit && (
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1 block">Status</label>
-              <select value={status} onChange={e => setStatus(e.target.value as FollowUpStatus)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-                {CHIPS.filter(c => c.value !== 'all').map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
+              <SearchableSelect value={status} onChange={v => setStatus(v as FollowUpStatus)} options={CHIPS.filter(c => c.value !== 'all')} />
             </div>
           )}
           <div>

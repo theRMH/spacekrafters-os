@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { Dialog } from '../../components/feedback/Dialog'
@@ -189,9 +191,10 @@ export default function PersonalInvestmentsScreen() {
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Type</label>
-            <select className={inp} value={form.investmentType} onChange={e => setForm(f => ({ ...f, investmentType: e.target.value as PersonalInvestmentType }))}>
-              {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.investmentType} onChange={v => setForm(f => ({ ...f, investmentType: v as PersonalInvestmentType }))}
+              options={TYPE_OPTIONS}
+            />
           </div>
           <div>
             <label className={label}>Name *</label>
@@ -211,14 +214,15 @@ export default function PersonalInvestmentsScreen() {
           </div>
           <div>
             <label className={label}>Purchase Date *</label>
-            <input type="date" className={inp} value={form.purchaseDate} onChange={e => setForm(f => ({ ...f, purchaseDate: e.target.value }))} />
+            <DateField value={form.purchaseDate} onChange={v => setForm(f => ({ ...f, purchaseDate: v }))} />
           </div>
           <div>
             <label className={label}>Linked Account</label>
-            <select className={inp} value={form.linkedAccountId ?? ''} onChange={e => setForm(f => ({ ...f, linkedAccountId: e.target.value || undefined }))}>
-              <option value="">None</option>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.linkedAccountId ?? ''} onChange={v => setForm(f => ({ ...f, linkedAccountId: v || undefined }))}
+              options={accounts.map(a => ({ value: a.id, label: a.name }))}
+              placeholder="None"
+            />
           </div>
           <div>
             <label className={label}>Notes</label>

@@ -3,6 +3,8 @@ import { Plus, Check, X as XIcon, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
@@ -209,22 +211,20 @@ export default function LeaveScreen() {
           {canApprove && (
             <div>
               <label className={lbl}>For</label>
-              <select value={targetUserId} onChange={e => setTargetUserId(e.target.value)} className={inp}>
-                {user && <option value={user.id}>{user.name} (Me)</option>}
-                {team.filter(m => m.id !== user?.id).map(m => (
-                  <option key={m.id} value={m.id}>{m.fullName} — {m.displayRole}</option>
-                ))}
-              </select>
+              <SearchableSelect value={targetUserId} onChange={setTargetUserId} options={[
+                ...(user ? [{ value: user.id, label: `${user.name} (Me)` }] : []),
+                ...team.filter(m => m.id !== user?.id).map(m => ({ value: m.id, label: `${m.fullName} — ${m.displayRole}` })),
+              ]} />
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Leave From Date *</label>
-              <input type="date" value={fromDate} min={todayStr()} onChange={e => setFromDate(e.target.value)} className={inp} />
+              <DateField value={fromDate} min={todayStr()} onChange={setFromDate} />
             </div>
             <div>
               <label className={lbl}>Leave To Date *</label>
-              <input type="date" value={toDate} min={fromDate || todayStr()} onChange={e => setToDate(e.target.value)} className={inp} />
+              <DateField value={toDate} min={fromDate || todayStr()} onChange={setToDate} />
             </div>
           </div>
           <div>

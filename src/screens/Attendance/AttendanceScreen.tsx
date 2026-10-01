@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Download, LogIn, LogOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, Download, LogIn, LogOut, Plus, Pencil } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
+import { TimeField } from '../../components/forms/TimeField'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { Dialog } from '../../components/feedback/Dialog'
+import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { AttendanceCaptureSheet } from '../../components/attendance/AttendanceCaptureSheet'
 import { AttendanceCapturePreview } from '../../components/attendance/AttendanceCapturePreview'
 import { getAllAttendance, upsertAttendance } from '../../services/attendanceService'
@@ -53,6 +57,23 @@ function fmtDuration(startIso?: string, endIso?: string): string {
   const h = Math.floor(ms / 3_600_000)
   const m = Math.round((ms % 3_600_000) / 60_000)
   return `${h}h ${m}m`
+}
+
+// Local "HH:mm" (from a <input type="time">) + a "YYYY-MM-DD" date key ->
+// an ISO timestamp, interpreted in the browser's local time — same
+// local-time convention as every other date/time field in this app (see
+// toDateKey above for why: never round-trip through toISOString() first).
+function timeToIso(dateKey: string, hhmm: string): string | undefined {
+  if (!hhmm) return undefined
+  const d = new Date(`${dateKey}T${hhmm}:00`)
+  return isNaN(d.getTime()) ? undefined : d.toISOString()
+}
+function isoToTime(iso?: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function fmtDate(dateKey: string): string {
@@ -108,6 +129,7 @@ export default function AttendanceScreen() {
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   async function refresh() {
     setIsLoading(true)
@@ -212,6 +234,70 @@ export default function AttendanceScreen() {
     if (!absentTarget || !absentDate) return
     await markStatus(absentTarget.userId, absentTarget.userName, absentDate, 'absent', absentReason.trim())
     setAbsentTarget(null)
+  }
+
+  // MD/Admin: add a record for any team member on any date, or edit an
+  // existing one (correct the status, or the In/Out time itself — the
+  // Start/End buttons above only ever capture "now" for yourself, so this is
+  // the only way to fix a wrong clock-in/out or backfill a missed day).
+  // Shares one form for both — the deterministic att_<userId>_<dateKey> id
+  // means saving always upserts the one record for that person+day, so
+  // there's no separate "create" vs "update" codepath to keep in sync.
+  const [manageOpen, setManageOpen] = useState(false)
+  const [manageIsNew, setManageIsNew] = useState(true)
+  const [manageUserId, setManageUserId] = useState('')
+  const [manageUserName, setManageUserName] = useState('')
+  const [manageDate, setManageDate] = useState('')
+  const [manageStatus, setManageStatus] = useState<AttendanceStatus>('present')
+  const [manageStartTime, setManageStartTime] = useState('')
+  const [manageEndTime, setManageEndTime] = useState('')
+  const [manageReason, setManageReason] = useState('')
+  const [manageError, setManageError] = useState('')
+
+  function openAddDialog() {
+    setManageIsNew(true)
+    setManageUserId(''); setManageUserName('')
+    setManageDate(selectedDateKey)
+    setManageStatus('present')
+    setManageStartTime(''); setManageEndTime(''); setManageReason('')
+    setManageError('')
+    setManageOpen(true)
+  }
+
+  function openEditDialog(rec: AttendanceRecord) {
+    setManageIsNew(false)
+    setManageUserId(rec.userId); setManageUserName(rec.userName)
+    setManageDate(rec.date)
+    setManageStatus(rec.status)
+    setManageStartTime(isoToTime(rec.startTime)); setManageEndTime(isoToTime(rec.endTime))
+    setManageReason(rec.reason ?? '')
+    setManageError('')
+    setManageOpen(true)
+  }
+
+  async function handleManageSave() {
+    if (!user || !manageUserId || !manageDate) { setManageError('Select an employee and a date.'); return }
+    if (manageStatus === 'absent' && !manageReason.trim()) { setManageError('Enter a reason for the absence.'); return }
+    const existing = records.find(r => r.userId === manageUserId && r.date === manageDate)
+    const now = new Date().toISOString()
+    const record: AttendanceRecord = {
+      id: existing?.id ?? `att_${manageUserId}_${manageDate}`,
+      userId: manageUserId, userName: manageUserName, date: manageDate,
+      status: manageStatus,
+      startTime: timeToIso(manageDate, manageStartTime),
+      endTime: timeToIso(manageDate, manageEndTime),
+      // Captures are device-verified (GPS + stamped photo) at the moment of a
+      // real Start/End tap — never fabricated here, only ever carried over
+      // unchanged from whatever the record already had.
+      startCapture: existing?.startCapture,
+      endCapture: existing?.endCapture,
+      reason: manageStatus === 'absent' ? manageReason.trim() : undefined,
+      markedBy: user.name,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    }
+    await saveRecord(record, existing)
+    setManageOpen(false)
   }
 
   // Start/End are always self-only and always for TODAY — the whole point is
@@ -411,49 +497,10 @@ export default function AttendanceScreen() {
         </div>
       </div>
 
-      <div className="px-4 pt-4">
-        <div className="bg-white rounded-2xl border border-slate-100 p-3">
-          <div className="grid grid-cols-7 gap-1 mb-1">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-              <div key={i} className="text-center text-[10px] font-bold text-slate-400">{d}</div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: firstWeekday }).map((_, i) => <div key={`pad-${i}`} />)}
-            {monthDays.map(d => {
-              const dateKey = toDateKey(d)
-              const status = canManageTeam ? undefined : effectiveStatus(user?.id ?? '', dateKey)
-              const isSelected = dateKey === selectedDateKey
-              const isToday = dateKey === todayKey
-              return (
-                <button
-                  key={dateKey}
-                  onClick={() => setSelectedDateKey(dateKey)}
-                  className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs font-semibold border transition-colors
-                    ${isSelected ? 'border-brand-primary' : 'border-transparent'}
-                    ${status ? STATUS_STYLE[status] : isToday ? 'font-extrabold text-slate-800' : 'text-slate-600'}`}
-                >
-                  {d.getDate()}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2.5 mt-3">
-          {STATUS_OPTIONS.map(opt => (
-            <div key={opt.value} className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${opt.dot}`} />
-              <span className="text-[11px] text-slate-500">{opt.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* My Attendance — always shown, everyone marks/clocks their own regardless of role. */}
       <div className="px-4 pt-4">
         <div className="bg-white rounded-2xl border border-slate-100 p-4">
-          <p className="text-xs font-bold text-slate-700 mb-1">My Attendance — {selectedDateKey}</p>
+          <p className="text-base font-extrabold text-slate-800 mb-1.5">My Attendance — {selectedDateKey}</p>
           {selectedDayLeaveNote ? (
             <p className="text-xs text-slate-500">Marked as Absent (covered by an approved leave application).</p>
           ) : (
@@ -531,43 +578,31 @@ export default function AttendanceScreen() {
         </div>
       </div>
 
-      {/* Payable-days impact — lets an employee see at a glance how the month's
-          marked attendance (Present/Half Day/Absent) adds up, without this app
-          computing an actual ₹ salary figure (no wage field exists anywhere
-          in this system). */}
-      {user && (() => {
-        const summary = monthSummaryFor(user.id)
-        if (summary.marked === 0) return null
-        return (
-          <div className="px-4 pt-3">
-            <div className="bg-white rounded-2xl border border-slate-100 p-4">
-              <p className="text-xs font-bold text-slate-700 mb-2">My Payable Days — {monthLabel}</p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
-                <span>Present: <span className="font-semibold text-emerald-700">{summary.present}</span></span>
-                <span>Half Day: <span className="font-semibold text-amber-700">{summary.half}</span></span>
-                <span>Absent: <span className="font-semibold text-red-700">{summary.absent}</span></span>
-              </div>
-              <p className="mt-2 text-lg font-extrabold text-slate-800">
-                {summary.payableDays} <span className="text-xs font-semibold text-slate-400">/ {summary.marked} days marked</span>
-              </p>
-              <p className="mt-1 text-[10px] text-slate-400">Half Day counts as 0.5; Absent counts as 0 toward payable days.</p>
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* History — self always sees only their own; MD/Admin see every team member stacked, each collapsible. */}
+      {/* History — self always sees only their own; MD/Admin see every team member stacked, each collapsible.
+          Collapsed by default; click the header to expand/collapse. */}
       <div className="px-4 pt-6 space-y-2.5">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">History — {monthLabel}</p>
-          <button onClick={handleDownload}
-            className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg active:opacity-80"
-            style={{ background: '#0F2A4A', color: 'white' }}>
-            <Download size={12} /> {canManageTeam ? 'Download Team Sheet' : 'Download'}
+          <button type="button" onClick={() => setHistoryOpen(o => !o)} aria-expanded={historyOpen}
+            className="flex items-center gap-1.5 text-left">
+            <p className="text-base font-extrabold text-slate-800">History — {monthLabel}</p>
+            <ChevronDown size={18} className={`text-slate-400 transition-transform ${historyOpen ? 'rotate-180' : ''}`} />
           </button>
+          <div className="flex items-center gap-2">
+            {canManageTeam && (
+              <button onClick={openAddDialog}
+                className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 active:bg-slate-50">
+                <Plus size={12} /> Add
+              </button>
+            )}
+            <button onClick={handleDownload}
+              className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg active:opacity-80"
+              style={{ background: '#0F2A4A', color: 'white' }}>
+              <Download size={12} /> {canManageTeam ? 'Download Team Sheet' : 'Download'}
+            </button>
+          </div>
         </div>
 
-        {canManageTeam ? (
+        {historyOpen && (canManageTeam ? (
           teamHistoryRows.length === 0 ? (
             !isLoading && (
               <div className="text-center py-10 text-slate-400">
@@ -587,6 +622,7 @@ export default function AttendanceScreen() {
                     <th className="text-left px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap">Duration</th>
                     <th className="text-left px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap">Late / Early</th>
                     <th className="text-left px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap">Photo / GPS</th>
+                    <th className="text-left px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -621,6 +657,16 @@ export default function AttendanceScreen() {
                       <td className="px-3 py-2 border border-slate-200 whitespace-nowrap">
                         {captureThumbnails(row.rec)}
                       </td>
+                      <td className="px-3 py-2 border border-slate-200 whitespace-nowrap">
+                        <button
+                          onClick={() => openEditDialog(row.rec ?? {
+                            id: `att_${row.member.id}_${row.dateKey}`, userId: row.member.id, userName: row.member.fullName,
+                            date: row.dateKey, status: row.status!, markedBy: user?.name ?? '', createdAt: '', updatedAt: '',
+                          })}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 active:opacity-70">
+                          <Pencil size={11} /> Edit
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -636,7 +682,71 @@ export default function AttendanceScreen() {
             )}
             {historyRowsFor(user?.id ?? '').map(renderHistoryRow)}
           </>
-        )}
+        ))}
+      </div>
+
+      {/* Payable-days impact — lets an employee see at a glance how the month's
+          marked attendance (Present/Half Day/Absent) adds up, without this app
+          computing an actual ₹ salary figure (no wage field exists anywhere
+          in this system). */}
+      {user && (() => {
+        const summary = monthSummaryFor(user.id)
+        if (summary.marked === 0) return null
+        return (
+          <div className="px-4 pt-6">
+            <div className="bg-white rounded-2xl border border-slate-100 p-4">
+              <p className="text-base font-extrabold text-slate-800 mb-2">My Payable Days — {monthLabel}</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                <span>Present: <span className="font-semibold text-emerald-700">{summary.present}</span></span>
+                <span>Half Day: <span className="font-semibold text-amber-700">{summary.half}</span></span>
+                <span>Absent: <span className="font-semibold text-red-700">{summary.absent}</span></span>
+              </div>
+              <p className="mt-2 text-lg font-extrabold text-slate-800">
+                {summary.payableDays} <span className="text-xs font-semibold text-slate-400">/ {summary.marked} days marked</span>
+              </p>
+              <p className="mt-1 text-[10px] text-slate-400">Half Day counts as 0.5; Absent counts as 0 toward payable days.</p>
+            </div>
+          </div>
+        )
+      })()}
+
+      <div className="px-4 pt-6">
+        <div className="bg-white rounded-2xl border border-slate-100 p-3">
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+              <div key={i} className="text-center text-[10px] font-bold text-slate-400">{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {Array.from({ length: firstWeekday }).map((_, i) => <div key={`pad-${i}`} />)}
+            {monthDays.map(d => {
+              const dateKey = toDateKey(d)
+              const status = effectiveStatus(user?.id ?? '', dateKey)
+              const isSelected = dateKey === selectedDateKey
+              const isToday = dateKey === todayKey
+              return (
+                <button
+                  key={dateKey}
+                  onClick={() => setSelectedDateKey(dateKey)}
+                  className={`w-full max-w-[46px] mx-auto aspect-square rounded-lg flex flex-col items-center justify-center text-xs font-semibold border transition-colors
+                    ${isSelected ? 'border-brand-primary' : 'border-transparent'}
+                    ${status ? STATUS_STYLE[status] : isToday ? 'font-extrabold text-slate-800' : 'text-slate-600'}`}
+                >
+                  {d.getDate()}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2.5 mt-3">
+          {STATUS_OPTIONS.map(opt => (
+            <div key={opt.value} className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${opt.dot}`} />
+              <span className="text-[11px] text-slate-500">{opt.label}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
@@ -653,8 +763,7 @@ export default function AttendanceScreen() {
         <div className="space-y-3">
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Date</label>
-            <input type="date" value={absentDate} onChange={e => setAbsentDate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand-primary" />
+            <DateField value={absentDate} onChange={setAbsentDate} />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Reason *</label>
@@ -664,6 +773,67 @@ export default function AttendanceScreen() {
           </div>
         </div>
       </Dialog>
+
+      <BottomSheet isOpen={manageOpen} onClose={() => setManageOpen(false)} title={manageIsNew ? 'Add Attendance' : `Edit Attendance — ${manageUserName}`}>
+        <div className="space-y-3">
+          {manageError && <p className="text-xs text-red-600 font-semibold">{manageError}</p>}
+          {manageIsNew ? (
+            <div>
+              <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Employee *</label>
+              <SearchableSelect
+                value={manageUserId}
+                onChange={v => { const m = historyOptions.find(o => o.id === v); setManageUserId(v); setManageUserName(m?.fullName ?? '') }}
+                options={historyOptions.map(o => ({ value: o.id, label: o.fullName }))}
+                searchPlaceholder="Search employees…"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Employee</label>
+              <p className="text-sm font-semibold text-slate-700">{manageUserName}</p>
+            </div>
+          )}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Date *</label>
+            <DateField value={manageDate} disabled={!manageIsNew} onChange={setManageDate} />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Status *</label>
+            <div className="flex flex-wrap gap-2">
+              {STATUS_OPTIONS.map(opt => (
+                <button key={opt.value} onClick={() => setManageStatus(opt.value)}
+                  className={`px-3 py-2 rounded-xl border text-xs font-semibold active:opacity-80 ${
+                    manageStatus === opt.value ? STATUS_STYLE[opt.value] : 'border-slate-200 text-slate-600'
+                  }`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs font-semibold text-slate-500 mb-1.5 block">In Time</label>
+              <TimeField value={manageStartTime} onChange={setManageStartTime} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Out Time</label>
+              <TimeField value={manageEndTime} onChange={setManageEndTime} />
+            </div>
+          </div>
+          {manageStatus === 'absent' && (
+            <div>
+              <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Reason *</label>
+              <textarea rows={2} value={manageReason} onChange={e => setManageReason(e.target.value)}
+                placeholder="Reason for absence…"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm resize-none focus:outline-none focus:border-brand-primary" />
+            </div>
+          )}
+          <button onClick={handleManageSave}
+            className="w-full py-3 rounded-xl text-white text-sm font-bold active:opacity-90" style={{ background: '#0F2A4A' }}>
+            {manageIsNew ? 'Add Attendance' : 'Save Changes'}
+          </button>
+        </div>
+      </BottomSheet>
 
       <AttendanceCaptureSheet
         isOpen={!!captureMode}
