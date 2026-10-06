@@ -127,7 +127,7 @@ describe('pipelineStageLabel', () => {
   it('labels synthetic stages with a readable description', () => {
     expect(pipelineStageLabel('qualified_no_appointment')).toBe('Qualified — No Appointment')
     expect(pipelineStageLabel('qualified_pending_approval')).toBe('Pending MD Approval')
-    expect(pipelineStageLabel('won_pending_project')).toBe('Won — Project Pending')
+    expect(pipelineStageLabel('won_pending_project')).toBe('Won')
   })
 
   it('labels project_<stage> via the real PROJECT_STAGE_LABEL map', () => {

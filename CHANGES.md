@@ -1,5 +1,29 @@
 ## 2026-10-06
 
+### Tasks pipeline — dropped the plain "Lead" backlog, fixed the duplicate Won stages, sorted by real date
+**Commit:** Uncommitted
+Two issues you flagged on the Pipeline Status section: (1) it showed every Lead that exists, including pure backlog (`new`/`contacted`, no appointment yet) that just clutters the view with nothing actionable; (2) "Won — Pending Project" and "Project" read as two separate Won-related stages, which looked like duplicate/incorrect Won tracking. You'd already set the real Lead/Project status to Won yourself — this only touches display logic, no status/data was changed.
+- **Changed:** `src/screens/Tasks/TasksScreen.tsx` — `pipelineLeads` now excludes `new`/`contacted` leads (they have no appointment date to anchor a Tasks card to, and still show in full in the Leads tab, untouched). The now-permanently-empty "Lead" filter chip is dropped rather than left showing a dead "Lead 0". Pipeline cards are now sorted by their real relevant date ascending — the actual appointment's `scheduledAt` for appointment-stage leads (straight from the existing Appointment flow, not a guess), lead `updatedAt` for every other stage — so a lead still needing an appointment scheduled (no date yet) or one overdue/due today naturally rises to the top, with future-dated ones following in order.
+- **Changed:** `src/screens/Tasks/pipelineStage.ts` — the "Won — Pending Project" bucket label and the "Won — Project Pending" per-card badge label are both now just "Won", so a won-but-not-yet-converted lead reads as plain Won everywhere, not a separate wordier stage from "Project" (which still means what it always did: a real Project record exists, at its own stage). Pipeline now reads cleanly top to bottom: Appointment → Site Visit → Requirements/Quotation → Won → Project → Lost.
+- **Changed:** `src/screens/Tasks/pipelineStage.test.ts` — updated the one test asserting the old "Won — Project Pending" label text.
+- No database/schema/RLS change — purely which leads Tasks surfaces and how they're labeled/ordered; the underlying `Lead.status`/`Appointment.scheduledAt`/`Project.stage` fields and the Leads tab are untouched.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean. No browser access this session — please confirm the "Lead" chip is gone, the Won chip/cards now just say "Won", and cards sort with today/overdue/no-appointment-yet leads at the top.
+
+### Tasks screen — removed the leftover project/task-count list below Pipeline Status
+**Commit:** Uncommitted
+You pointed at the plain project cards ("SKS-01 / No tasks yet", "nirmal home / 7 open of 8 tasks", etc.) still showing below the new Pipeline Status section on `/tasks` — this was the screen's original content, preserved as-is during the pipeline rebuild on your earlier instruction to keep existing Tasks functionality unchanged. You've now asked for it gone outright.
+- **Changed:** `src/screens/Tasks/TasksScreen.tsx` — removed the project-card list, its empty state, and the "Search projects…" search bar above it (that search only ever drove this list). Cleaned up what that removal made dead: the `tasks`/`search` state, the `getAllTasks()` fetch call, the `canManageTasks` permission check, and the now-unused `getAllTasks`/`Task` imports. The Pipeline Status section (search, filter chips, lead cards) is completely unaffected — it has its own independent search/data.
+- No database/schema change — purely removing a UI section.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean.
+
+### "Projects" renamed to "Won" (sidebar label + page title only)
+**Commit:** Uncommitted
+You asked to replace "Projects" with "Won" — confirmed scope via a quick question: just the sidebar nav label and the page's own title, not the underlying list or its content.
+- **Changed:** `src/components/navigation/navItems.ts` — the main sidebar item's label is now "Won" (still `/projects`, same icon, same `view_projects` permission).
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — the page's `<h1>` is now "Won" instead of "Projects". Everything else (the real project list, search, create button) is unchanged.
+- No database/schema change — purely a label.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean.
+
 ### Dashboard — tried bringing back the "Welcome, <name> / <role>" greeting, then removed it again
 **Commit:** Uncommitted
 Follow-up to removing the Home page: first added the same greeting (bold "Welcome, <name>" + role) above the Dashboard's title bar, since that text no longer appeared anywhere. You confirmed the placement, then asked for it removed outright a moment later — reverted `src/screens/Dashboard/DashboardScreen.tsx` back to its pre-greeting state (including the now-unused `useAuth`/`getRoleDisplayLabel` imports). Net effect for this date: no change to `DashboardScreen.tsx`.

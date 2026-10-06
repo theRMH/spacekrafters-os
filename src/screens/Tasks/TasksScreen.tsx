@@ -10,7 +10,6 @@ import { StatusBadge } from '../../components/badges/StatusBadge'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllProjects } from '../../services/projectService'
-import { getAllTasks } from '../../services/taskService'
 import { getAllAppointments } from '../../services/appointmentService'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { sendNotification } from '../../utils/notifications'
@@ -22,7 +21,7 @@ import {
   pipelineStage, pipelineBucket, pipelineStageLabel, pipelineBadgeStatus,
   BUCKET_LABEL, BUCKET_ORDER, type PipelineStage, type PipelineBucket,
 } from './pipelineStage'
-import type { Project, Task, Appointment, Lead, ManagedUser } from '../../types'
+import type { Project, Appointment, Lead, ManagedUser } from '../../types'
 
 type BucketFilter = 'all' | PipelineBucket
 
@@ -36,12 +35,19 @@ function pendingApptFor(lead: Lead, appointments: Appointment[]): Appointment | 
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
 }
 
+// The date a card is actually anchored to — the real appointment's scheduled
+// date/time for an appointment-stage lead (so Tasks reflects the existing
+// Appointment flow's own date, not a guess), and the lead's last activity for
+// every other stage. Raw ISO so it can double as a sort key; `relevantDate()`
+// below is the same thing formatted for display.
+function relevantDateIso(lead: Lead, stage: PipelineStage, appointments: Appointment[]): string | undefined {
+  if (stage.startsWith('qualified_')) return pendingApptFor(lead, appointments)?.scheduledAt
+  return lead.updatedAt
+}
+
 function relevantDate(lead: Lead, stage: PipelineStage, appointments: Appointment[]): string {
-  if (stage.startsWith('qualified_')) {
-    const appt = pendingApptFor(lead, appointments)
-    return appt ? fmtDateTime(appt.scheduledAt) : '—'
-  }
-  return fmtDateTime(lead.updatedAt)
+  const iso = relevantDateIso(lead, stage, appointments)
+  return iso ? fmtDateTime(iso) : '—'
 }
 
 export default function TasksScreen() {
@@ -49,11 +55,6 @@ export default function TasksScreen() {
   const { user, can } = useAuth()
   const { leads, updateLead } = useCRM()
 
-  // Same visibility rule as the project workspace's Tasks tab — managers
-  // (anyone who can edit_task) see the whole team's counts; everyone else
-  // only ever counts tasks assigned to themselves, so what's shown here
-  // matches exactly what they'll find once they tap into a project.
-  const canManageTasks = can('edit_task')
   // Mirrors LeadsScreen.tsx's own visibility rule for leads.
   const canManageLeads = can('edit_lead')
   // Gates loading appointment/user data for the qualified_* stage refinement
@@ -63,11 +64,9 @@ export default function TasksScreen() {
   const isOwner = can('view_md_tasks') // the only role allowed to approve/reject a reschedule
 
   const [projects, setProjects] = useState<Project[]>([])
-  const [tasks, setTasks] = useState<Task[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [search, setSearch] = useState('')
   const [pipelineOpen, setPipelineOpen] = useState(true)
   const [pipelineSearch, setPipelineSearch] = useState('')
   const [bucketFilter, setBucketFilter] = useState<BucketFilter>('all')
@@ -91,13 +90,12 @@ export default function TasksScreen() {
   useEffect(() => {
     async function load() {
       setIsLoading(true)
-      const [projs, allTasks, appts, users] = await Promise.all([
-        getAllProjects(), getAllTasks(),
+      const [projs, appts, users] = await Promise.all([
+        getAllProjects(),
         canSeeAppointments ? getAllAppointments() : Promise.resolve([]),
         canSeeAppointments ? getManagedUsersDirectory() : Promise.resolve([]),
       ])
       setProjects(projs)
-      setTasks(allTasks)
       setAppointments(appts)
       setManagedUsers(users)
       setIsLoading(false)
@@ -105,20 +103,30 @@ export default function TasksScreen() {
     load()
   }, [canSeeAppointments])
 
-  const filtered = projects.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()))
-
   // FGD leads and product-sale projects have their own separate module —
-  // same exclusions LeadsScreen.tsx/ProjectsScreen.tsx already apply.
+  // same exclusions LeadsScreen.tsx/ProjectsScreen.tsx already apply. Leads
+  // still at 'new'/'contacted' have no appointment yet and no current/upcoming
+  // workflow activity to anchor a Tasks card to — they stay fully visible in
+  // the Leads tab (nothing here hides or deletes them), but Tasks is scoped to
+  // leads that have actually entered the appointment-onward workflow.
   const pipelineLeads = leads
     .filter(l => l.businessDivision !== 'fgd')
+    .filter(l => l.status !== 'new' && l.status !== 'contacted')
     .filter(l => canManageLeads || l.assignedToId === user?.id)
   const pipelineItems = pipelineLeads
     .map(lead => ({ lead, stage: pipelineStage(lead, appointments, projects) }))
     .filter(({ lead }) => !pipelineSearch || lead.name.toLowerCase().includes(pipelineSearch.toLowerCase()))
+    // Soonest/most-overdue first — a lead still needing its appointment
+    // scheduled (no date yet) sorts to the very top since it has no date to
+    // wait on; everything else follows in ascending date order, exactly the
+    // real appointment date for appointment-stage leads.
+    .sort((a, b) => (relevantDateIso(a.lead, a.stage, appointments) ?? '').localeCompare(relevantDateIso(b.lead, b.stage, appointments) ?? ''))
 
   const bucketChips: { value: BucketFilter; label: string; count: number }[] = [
     { value: 'all', label: 'All', count: pipelineItems.length },
-    ...BUCKET_ORDER.map(b => ({ value: b, label: BUCKET_LABEL[b], count: pipelineItems.filter(i => pipelineBucket(i.stage) === b).length })),
+    // 'lead' is excluded above by definition, so that chip would only ever
+    // show a permanent 0 — dropped rather than kept as dead UI.
+    ...BUCKET_ORDER.filter(b => b !== 'lead').map(b => ({ value: b, label: BUCKET_LABEL[b], count: pipelineItems.filter(i => pipelineBucket(i.stage) === b).length })),
   ]
   const filteredPipelineItems = pipelineItems.filter(i => bucketFilter === 'all' || pipelineBucket(i.stage) === bucketFilter)
 
@@ -187,8 +195,7 @@ export default function TasksScreen() {
     <div className="min-h-screen bg-slate-50 pb-24">
       <AppHeader />
       <div className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-14 z-20">
-        <h1 className="text-lg font-extrabold text-slate-800 mb-3">Tasks</h1>
-        <SearchBar value={search} onChange={setSearch} placeholder="Search projects…" />
+        <h1 className="text-lg font-extrabold text-slate-800">Tasks</h1>
       </div>
 
       <div className="px-4 pt-4 space-y-2.5">
@@ -242,27 +249,6 @@ export default function TasksScreen() {
           </>
         )}
 
-        {!isLoading && filtered.map(project => {
-          const allProjectTasks = tasks.filter(t => t.projectId === project.id)
-          const projectTasks = canManageTasks ? allProjectTasks : allProjectTasks.filter(t => t.assigneeId === user?.id)
-          const openCount = projectTasks.filter(t => t.status !== 'completed').length
-          return (
-            <button key={project.id} onClick={() => navigate(`/projects/${project.id}?tab=tasks`)}
-              className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50">
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <span className="font-bold text-sm text-slate-800">{project.name}</span>
-                <StatusBadge status={project.status} />
-              </div>
-              <p className="text-xs text-slate-500">
-                {projectTasks.length === 0 ? 'No tasks yet' : `${openCount} open of ${projectTasks.length} task${projectTasks.length !== 1 ? 's' : ''}`}
-              </p>
-            </button>
-          )
-        })}
-
-        {!isLoading && filtered.length === 0 && (
-          <p className="text-sm text-slate-400 text-center py-16">No projects found.</p>
-        )}
       </div>
 
       {/* Reuses the real LeadStatusSheet unmodified for every lead-driven

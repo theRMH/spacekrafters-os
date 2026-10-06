@@ -366,7 +366,7 @@ export default function ProjectsScreen() {
       <AppHeader />
 
       <div className="bg-white px-4 pt-4 pb-4 border-b border-slate-200 sticky top-14 z-20">
-        <h1 className="text-lg font-extrabold text-slate-800 mb-3">Projects</h1>
+        <h1 className="text-lg font-extrabold text-slate-800 mb-3">Won</h1>
         <div className="flex items-center gap-2">
           <SearchBar value={search} onChange={setSearch} placeholder="Search projects…" className="flex-1" />
           <PermissionGate permission="create_project">

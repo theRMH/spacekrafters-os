@@ -61,7 +61,7 @@ export const BUCKET_LABEL: Record<PipelineBucket, string> = {
   qualified:               'Appointment',
   site_visit:              'Site Visit',
   requirements_quotation:  'Requirements/Quotation',
-  won_pending_project:     'Won — Pending Project',
+  won_pending_project:     'Won',
   project:                 'Project',
   lost:                    'Lost',
 }
@@ -81,7 +81,7 @@ export function pipelineStageLabel(stage: PipelineStage): string {
     case 'qualified_scheduled':        return 'Appointment Scheduled'
     case 'qualified_pending_approval': return 'Pending MD Approval'
     case 'qualified_rejected':         return 'Reschedule Rejected'
-    case 'won_pending_project':        return 'Won — Project Pending'
+    case 'won_pending_project':        return 'Won'
     default:                           return LEAD_STATUS_LABEL[stage as LeadStatus]
   }
 }

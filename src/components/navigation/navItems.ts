@@ -22,7 +22,7 @@ export function getMainItems(): NavItem[] {
   return [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', permission: 'view_dashboard' },
     { icon: Wrench,     label: 'Task',     path: '/my-tasks', permission: 'view_my_tasks' },
-    { icon: FolderOpen, label: 'Projects', path: '/projects', permission: 'view_projects' },
+    { icon: FolderOpen, label: 'Won',      path: '/projects', permission: 'view_projects' },
     { icon: Users,      label: 'Clients',  path: '/clients',  permission: 'view_projects' },
   ]
 }
