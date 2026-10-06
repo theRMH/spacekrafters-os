@@ -136,7 +136,6 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
 }
 
 export const SCREEN_PERMISSIONS: Record<string, Permission> = {
-  home:              'view_home',
   dashboard:         'view_dashboard',
   'my-tasks':        'view_my_tasks',
   'my-tasks/project':'view_my_tasks',

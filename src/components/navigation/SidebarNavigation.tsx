@@ -44,7 +44,7 @@ export function SidebarNavigation() {
                 {visible.map(({ icon: Icon, label, path }) => {
                   const active = path.includes('?')
                     ? fullPath === path
-                    : pathname === path || (path !== '/home' && pathname.startsWith(path))
+                    : pathname === path || pathname.startsWith(path)
                   return (
                     <button
                       key={path}

@@ -27,7 +27,7 @@ export default function LoginScreen() {
       setError(result.error ?? 'Invalid phone number or password.')
       return
     }
-    navigate(result.role ? getDefaultRoute(result.role) : '/home', { replace: true })
+    navigate(result.role ? getDefaultRoute(result.role) : '/login', { replace: true })
   }
 
   return (

@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
             Reload App
           </button>
           <button
-            onClick={() => { window.location.href = '/home' }}
+            onClick={() => { window.location.href = '/' }}
             className="px-5 py-2.5 bg-slate-200 text-slate-700 text-sm font-medium rounded-xl active:bg-slate-300"
           >
             Go to Home

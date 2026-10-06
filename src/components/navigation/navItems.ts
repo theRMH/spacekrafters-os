@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react'
 import type { LucideProps } from 'lucide-react'
 import {
-  Home, Users, Calendar, ClipboardList, MapPin, FileText, Layers,
+  Users, Calendar, ClipboardList, MapPin, FileText, Layers,
   FolderOpen, CheckSquare, GanttChartSquare, BookOpen, ShoppingCart,
   Truck, Wallet, Landmark, Receipt, CreditCard, BarChart2, ClipboardCheck,
   CalendarOff, UserCog, File, Settings, UploadCloud, History,
@@ -21,7 +21,6 @@ export interface NavItem {
 export function getMainItems(): NavItem[] {
   return [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', permission: 'view_dashboard' },
-    { icon: Home,       label: 'Home',     path: '/home',     permission: 'view_home'     },
     { icon: Wrench,     label: 'Task',     path: '/my-tasks', permission: 'view_my_tasks' },
     { icon: FolderOpen, label: 'Projects', path: '/projects', permission: 'view_projects' },
     { icon: Users,      label: 'Clients',  path: '/clients',  permission: 'view_projects' },

@@ -3,12 +3,12 @@ import type { LucideProps } from 'lucide-react'
 import { Home, Users, MapPin, CheckSquare, ShoppingCart, Wallet, Settings } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { getDefaultRoute } from '../../utils/permissions'
 import type { Permission, UserRole } from '../../types'
 
 interface NavItem { icon: ComponentType<LucideProps>; label: string; path: string; permission: Permission }
 
 const ALL_ITEMS: NavItem[] = [
-  { icon: Home,         label: 'Home',        path: '/home',        permission: 'view_home'        },
   { icon: Users,        label: 'Leads',       path: '/leads',       permission: 'view_leads'        },
   { icon: MapPin,       label: 'Site Visits', path: '/site-visits', permission: 'view_site_visits'  },
   { icon: CheckSquare,  label: 'Tasks',       path: '/tasks',       permission: 'view_tasks'         },
@@ -18,14 +18,14 @@ const ALL_ITEMS: NavItem[] = [
 ]
 
 const ROLE_PATHS: Record<UserRole, string[]> = {
-  owner:               ['/home', '/leads', '/tasks', '/company-accounts', '/settings'],
-  accounts:            ['/home', '/company-accounts', '/settings'],
-  project_coordinator: ['/home', '/leads', '/site-visits', '/tasks', '/settings'],
-  site_engineer:       ['/home', '/site-visits', '/tasks', '/settings'],
-  designer:            ['/home', '/tasks', '/settings'],
-  qs:                  ['/home', '/tasks', '/settings'],
-  purchase:            ['/home', '/procurement', '/settings'],
-  admin:               ['/home', '/settings'],
+  owner:               ['/leads', '/tasks', '/company-accounts', '/settings'],
+  accounts:            ['/company-accounts', '/settings'],
+  project_coordinator: ['/leads', '/site-visits', '/tasks', '/settings'],
+  site_engineer:       ['/site-visits', '/tasks', '/settings'],
+  designer:            ['/tasks', '/settings'],
+  qs:                  ['/tasks', '/settings'],
+  purchase:            ['/procurement', '/settings'],
+  admin:               ['/settings'],
 }
 
 export function NavigationBar() {
@@ -33,10 +33,12 @@ export function NavigationBar() {
   const { pathname } = useLocation()
   const { user, can } = useAuth()
 
-  const allowed = user ? ROLE_PATHS[user.role] ?? ['/home', '/settings'] : ['/home', '/settings']
-  const items = allowed
-    .map(path => ALL_ITEMS.find(i => i.path === path))
-    .filter((i): i is NavItem => Boolean(i))
+  // First tab is always the user's own real landing page (same route
+  // login/the catch-all route send them to) rather than a separate, mostly
+  // empty "Home" screen.
+  const homeItem: NavItem = { icon: Home, label: 'Home', path: user ? getDefaultRoute(user.role) : '/login', permission: 'view_home' }
+  const allowed = user ? ROLE_PATHS[user.role] ?? ['/settings'] : ['/settings']
+  const items = [homeItem, ...allowed.map(path => ALL_ITEMS.find(i => i.path === path)).filter((i): i is NavItem => Boolean(i))]
     .filter(i => can(i.permission))
     .slice(0, 5)
 
@@ -47,7 +49,7 @@ export function NavigationBar() {
     >
       <div className="flex items-center px-1">
         {items.map(({ icon: Icon, label, path }) => {
-          const active = pathname === path || (path !== '/home' && pathname.startsWith(path))
+          const active = pathname === path || pathname.startsWith(path)
           return (
             <button
               key={path}

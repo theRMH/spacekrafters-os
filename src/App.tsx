@@ -6,7 +6,6 @@ import { ErrorBoundary } from './components/layout/ErrorBoundary'
 import { SidebarNavigation } from './components/navigation/SidebarNavigation'
 import { NavigationBar } from './components/navigation/NavigationBar'
 import LoginScreen from './screens/Login/LoginScreen'
-import HomeScreen from './screens/Home/HomeScreen'
 import DashboardScreen from './screens/Dashboard/DashboardScreen'
 import OutstandingProjectDetailScreen from './screens/Dashboard/OutstandingProjectDetailScreen'
 import SalesPersonDetailScreen from './screens/Dashboard/SalesPersonDetailScreen'
@@ -85,13 +84,11 @@ function AuthedRoutes() {
 
   if (!isAuthReady) return <AppLoadingScreen />
 
-  // Every non-owner role's real landing page is /my-tasks, not /home (see
-  // getDefaultRoute) — the PWA's start_url is bare "/", which has no route of
-  // its own and falls through to the catch-all below, and the /login route
-  // hits this same question for an already-logged-in visitor. Both used to
-  // hardcode '/home' regardless of role, so a non-owner opening the app fresh
-  // (PWA launch, or a bookmark/shortcut at "/") would land on Home before
-  // anything corrected it to their actual Task tab.
+  // Every role's real landing page is role-specific (see getDefaultRoute) —
+  // owner lands on /dashboard, everyone else on /my-tasks. The PWA's
+  // start_url is bare "/", which has no route of its own and falls through
+  // to the catch-all below, and the /login route hits this same question for
+  // an already-logged-in visitor.
   const defaultRoute = isLoggedIn && user ? getDefaultRoute(user.role) : '/login'
 
   return (
@@ -99,14 +96,6 @@ function AuthedRoutes() {
       <Route
         path="/login"
         element={isLoggedIn ? <Navigate to={defaultRoute} replace /> : <LoginScreen />}
-      />
-      <Route
-        path="/home"
-        element={
-          <ProtectedRoute screenPath="home">
-            <AppShell><HomeScreen /></AppShell>
-          </ProtectedRoute>
-        }
       />
       <Route
         path="/dashboard"

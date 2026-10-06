@@ -1,5 +1,25 @@
 ## 2026-10-06
 
+### Dashboard — tried bringing back the "Welcome, <name> / <role>" greeting, then removed it again
+**Commit:** Uncommitted
+Follow-up to removing the Home page: first added the same greeting (bold "Welcome, <name>" + role) above the Dashboard's title bar, since that text no longer appeared anywhere. You confirmed the placement, then asked for it removed outright a moment later — reverted `src/screens/Dashboard/DashboardScreen.tsx` back to its pre-greeting state (including the now-unused `useAuth`/`getRoleDisplayLabel` imports). Net effect for this date: no change to `DashboardScreen.tsx`.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean.
+
+### Removed the empty "Home" page app-wide
+**Commit:** Uncommitted
+You pointed at `/home` (reached via the sidebar's "Home" item) — it only ever rendered a bare "Welcome, <name> / <role>" greeting with nothing else on it, and every role's real landing page had already moved to `/dashboard` (owner) or `/my-tasks` (everyone else) in an earlier session. Removed the page itself and every place that still pointed at it.
+- **Removed:** `src/screens/Home/HomeScreen.tsx` (and its now-empty directory) — dead code once every reference below was redirected.
+- **Changed:** `src/App.tsx` — dropped the `/home` route and its import.
+- **Changed:** `src/components/navigation/navItems.ts` — removed the "Home" entry from the desktop sidebar's main items (its `Home` icon import is gone too, since nothing else used it).
+- **Changed:** `src/components/navigation/NavigationBar.tsx` (mobile bottom nav) — every role had `/home` hardcoded as its first tab; it's now the user's own real landing route (`getDefaultRoute(user.role)` — the same function login and the catch-all route already use), still labeled "Home" and still first, just pointing somewhere real. `SidebarNavigation.tsx`/`MobileMenuDrawer.tsx`/this file each had a `path !== '/home'` special case in their "is this tab active" check (so Home never prefix-matched) — removed as dead now that no item has that path; all three now use plain prefix matching consistently with every other item.
+- **Changed:** `src/components/layout/NoPermission.tsx` — its "Go to Task" button hardcoded `navigate('/home')` (stale even before this change — the label never matched the destination); now navigates to `getDefaultRoute(user.role)`, matching what the label always claimed.
+- **Changed:** `src/components/layout/ErrorBoundary.tsx` — "Go to Home" button now goes to `/` (falls through to the same role-based default-route redirect everything else uses) instead of the removed route.
+- **Changed:** `src/screens/Login/LoginScreen.tsx` — the (defensive, shouldn't-happen) fallback for a login success with no role now goes to `/login` instead of the removed route.
+- **Changed:** `src/data/permissions.ts` — removed the now-dead `home: 'view_home'` entry from `SCREEN_PERMISSIONS`. The `view_home` permission itself is untouched — it's also the gate for Files and Settings in the sidebar and still needed there.
+- No database/schema change — purely routing/navigation.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean (1716 modules, one fewer than before — the removed screen). No browser access this session — please confirm the mobile bottom nav's first tab lands correctly for your role, and that the sidebar no longer shows "Home".
+
 ### MD Tasks — "MD Approvals – Ready for Next Step" moved to the top of the page
 **Commit:** Uncommitted
 You asked for the MD-approved/pending-action list to show first. Reordered the three collapsible sections on `/md-tasks`: **MD Approvals – Ready for Next Step** now comes right after the summary banner and the 4 count cards, followed by **Assigned Tasks**, then **Done History**, then **Reschedule History** (unchanged at the bottom).
