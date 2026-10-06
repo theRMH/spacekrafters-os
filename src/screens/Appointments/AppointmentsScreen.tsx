@@ -19,6 +19,7 @@ import { addAuditLog } from '../../services/auditLogService'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getRoleDisplayLabel } from '../../data/permissions'
 import { sendNotification } from '../../utils/notifications'
+import { fmtDateTime, toLocalInputValue, todayInputValue, nowTimeInputValue, isPastScheduledAt, toProperIso } from './appointmentDate'
 import type { Appointment, AppointmentStatus, AuditLog, ManagedUser } from '../../types'
 
 type Filter = 'all' | AppointmentStatus
@@ -30,36 +31,6 @@ const CHIPS: { value: Filter; label: string }[] = [
   { value: 'rescheduled', label: 'Rescheduled' },
   { value: 'cancelled',   label: 'Cancelled'   },
 ]
-
-function fmtDateTime(val: string): string {
-  const d = new Date(val)
-  if (isNaN(d.getTime())) return val
-  return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-}
-
-function toLocalInputValue(val: string): string {
-  const d = new Date(val)
-  if (isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-function todayInputValue(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-function nowTimeInputValue(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-function isPastScheduledAt(value: string): boolean {
-  const d = new Date(value)
-  return !isNaN(d.getTime()) && d.getTime() < Date.now()
-}
 
 // Older appointments only ever had a single coordinator — fall back to that
 // when assignedToNames isn't there.
@@ -96,6 +67,7 @@ export default function AppointmentsScreen() {
   const [formError, setFormError] = useState('')
   const [assignableMembers, setAssignableMembers] = useState<ManagedUser[]>([])
   const [assignedToIds, setAssignedToIds] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
 
   async function refresh() {
     setIsLoading(true)
@@ -128,6 +100,21 @@ export default function AppointmentsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routerLocation.state])
 
+  // Deep-link from the Tasks screen's Appointment Status section — opens this
+  // appointment's Detail sheet directly. Waits for the list to actually finish
+  // loading (not just a non-empty check — zero appointments is itself a valid
+  // loaded state) before searching, and always clears the router state once
+  // resolved, found or not, same as the leadId effect above.
+  useEffect(() => {
+    const state = routerLocation.state as { appointmentId?: string } | null
+    if (!state?.appointmentId) return
+    if (isLoading) return
+    const found = appointments.find(a => a.id === state.appointmentId)
+    if (found) setSelected(found)
+    navigate(routerLocation.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.state, appointments, isLoading])
+
   function resetForm() {
     setLeadId(''); setClientName(''); setScheduledAt(`${todayInputValue()}T`); setLocation('')
     setStatus('scheduled'); setNotes(''); setFormError('')
@@ -159,6 +146,7 @@ export default function AppointmentsScreen() {
   }
 
   async function handleAddAppointment() {
+    if (saving) return
     if (!leadId || !clientName.trim() || !scheduledAt.split('T')[1] || !location.trim() || assignedToIds.length === 0) {
       setFormError('Lead, client name, date/time, location, and at least one assignee are required.')
       return
@@ -167,12 +155,13 @@ export default function AppointmentsScreen() {
       setFormError('Please select a date & time that has not already passed.')
       return
     }
+    setSaving(true)
     const now = new Date().toISOString()
     const assignedToNames = namesFor(assignedToIds)
     const appt: Appointment = {
       id: `appt_${Date.now()}`,
       leadId, clientName: clientName.trim(),
-      scheduledAt: new Date(scheduledAt).toISOString(),
+      scheduledAt: toProperIso(scheduledAt),
       location: location.trim(),
       coordinatorId: assignedToIds[0], coordinatorName: assignedToNames[0],
       assignedToIds, assignedToNames,
@@ -180,6 +169,7 @@ export default function AppointmentsScreen() {
       createdAt: now, updatedAt: now,
     }
     const result = await upsertAppointment(appt)
+    setSaving(false)
     if (!result.ok) { setFormError(result.error ?? 'Could not save appointment.'); return }
     setAppointments(prev => [appt, ...prev])
     setShowNew(false)
@@ -197,21 +187,33 @@ export default function AppointmentsScreen() {
   }
 
   async function handleUpdateAppointment() {
+    if (saving) return
     if (!selected) return
     if (!clientName.trim() || !scheduledAt.split('T')[1] || !location.trim() || assignedToIds.length === 0) {
       setFormError('Client name, date/time, location, and at least one assignee are required.')
       return
     }
+    // Only non-owners are blocked from editing the date/time at all (see the
+    // read-only field below) — but an owner editing it directly should still
+    // be held to the same "not in the past" rule new appointments get. Only
+    // checked when the value actually changed, so editing notes/location on
+    // an appointment that already happened in the past isn't blocked.
+    if (scheduledAt !== toLocalInputValue(selected.scheduledAt) && isPastScheduledAt(scheduledAt)) {
+      setFormError('Please select a date & time that has not already passed.')
+      return
+    }
+    setSaving(true)
     const assignedToNames = namesFor(assignedToIds)
     const updated: Appointment = {
       ...selected, leadId, clientName: clientName.trim(),
-      scheduledAt: new Date(scheduledAt).toISOString(),
+      scheduledAt: toProperIso(scheduledAt),
       location: location.trim(), status, notes: notes.trim() || undefined,
       coordinatorId: assignedToIds[0], coordinatorName: assignedToNames[0],
       assignedToIds, assignedToNames,
       updatedAt: new Date().toISOString(),
     }
     const result = await upsertAppointment(updated)
+    setSaving(false)
     if (!result.ok) { setFormError(result.error ?? 'Could not update appointment.'); return }
     setAppointments(prev => prev.map(a => (a.id === updated.id ? updated : a)))
     setShowEdit(false)
@@ -291,7 +293,7 @@ export default function AppointmentsScreen() {
                 <p className="text-xs text-slate-600 flex items-center gap-1 mb-1">
                   <MapPin size={12} className="text-slate-400" /> {appt.location}
                 </p>
-                <p className="text-[11px] text-slate-400">{assigneeSummary(appt)}</p>
+                <p className="text-[12px] text-slate-400">{assigneeSummary(appt)}</p>
               </div>
               <StatusBadge status={appt.status} size="xs" />
             </div>
@@ -389,7 +391,7 @@ export default function AppointmentsScreen() {
                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left active:bg-slate-100">
                     {isChecked ? <CheckSquare size={17} className="text-indigo-600 shrink-0" /> : <Square size={17} className="text-slate-300 shrink-0" />}
                     <span className="text-sm text-slate-700 truncate w-40 sm:w-64 shrink-0">{m.fullName}</span>
-                    <span className="text-[11px] text-slate-400 truncate">{getRoleDisplayLabel(m.role, m.displayRole)}</span>
+                    <span className="text-[12px] text-slate-400 truncate">{getRoleDisplayLabel(m.role, m.displayRole)}</span>
                   </button>
                 )
               })}
@@ -400,21 +402,32 @@ export default function AppointmentsScreen() {
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Date & Time *</label>
-            <div className="grid grid-cols-2 gap-2">
-              <DateField value={scheduledAt.split('T')[0] || ''} min={todayInputValue()}
-                onChange={date => {
-                  let time = scheduledAt.split('T')[1] || '09:00'
-                  if (date === todayInputValue() && time < nowTimeInputValue()) time = nowTimeInputValue()
-                  setScheduledAt(`${date}T${time}`)
-                }} />
-              <TimeField value={scheduledAt.split('T')[1] || ''}
-                min={(scheduledAt.split('T')[0] || todayInputValue()) === todayInputValue() ? nowTimeInputValue() : undefined}
-                onChange={time => {
-                  const date = scheduledAt.split('T')[0] || todayInputValue()
-                  if (date === todayInputValue() && time < nowTimeInputValue()) time = nowTimeInputValue()
-                  setScheduledAt(`${date}T${time}`)
-                }} />
-            </div>
+            {showEdit && user?.role !== 'owner' ? (
+              <>
+                <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 opacity-60">
+                  {fmtDateTime(selected?.scheduledAt ?? '')}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  To change the date/time, use "Rescheduled" on the lead — the MD needs to approve it.
+                </p>
+              </>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <DateField value={scheduledAt.split('T')[0] || ''} min={todayInputValue()}
+                  onChange={date => {
+                    let time = scheduledAt.split('T')[1] || '09:00'
+                    if (date === todayInputValue() && time < nowTimeInputValue()) time = nowTimeInputValue()
+                    setScheduledAt(`${date}T${time}`)
+                  }} />
+                <TimeField value={scheduledAt.split('T')[1] || ''}
+                  min={(scheduledAt.split('T')[0] || todayInputValue()) === todayInputValue() ? nowTimeInputValue() : undefined}
+                  onChange={time => {
+                    const date = scheduledAt.split('T')[0] || todayInputValue()
+                    if (date === todayInputValue() && time < nowTimeInputValue()) time = nowTimeInputValue()
+                    setScheduledAt(`${date}T${time}`)
+                  }} />
+              </div>
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Location *</label>
@@ -424,7 +437,13 @@ export default function AppointmentsScreen() {
           {showEdit && (
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1 block">Status</label>
-              <SearchableSelect value={status} onChange={v => setStatus(v as AppointmentStatus)} options={CHIPS.filter(c => c.value !== 'all')} />
+              {/* 'Rescheduled' is deliberately not selectable here — that status only
+                  ever comes from the "Rescheduled" lead action + MD approval flow
+                  (see LeadStatusSheet.submitReschedule); picking it directly here
+                  would set status='rescheduled' with none of the reason/approval
+                  fields that flow needs, a dead end no one could act on. */}
+              <SearchableSelect value={status} onChange={v => setStatus(v as AppointmentStatus)}
+                options={CHIPS.filter(c => c.value !== 'all' && (c.value !== 'rescheduled' || status === 'rescheduled'))} />
             </div>
           )}
           <div>
@@ -434,10 +453,11 @@ export default function AppointmentsScreen() {
           </div>
           <button
             onClick={showEdit ? handleUpdateAppointment : handleAddAppointment}
-            className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
+            disabled={saving}
+            className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90 disabled:opacity-60"
             style={{ background: '#C9A24B' }}
           >
-            {showEdit ? 'Save Changes' : 'Schedule Appointment'}
+            {saving ? 'Saving…' : showEdit ? 'Save Changes' : 'Schedule Appointment'}
           </button>
         </div>
       </BottomSheet>

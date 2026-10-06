@@ -11,9 +11,9 @@ function fmtCurrency(n: number): string {
 function StatCard({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'good' | 'bad' }) {
   return (
     <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-      <p className="text-[11px] text-slate-400 mb-0.5">{label}</p>
+      <p className="text-[12px] text-slate-400 mb-0.5">{label}</p>
       <p className={`text-base font-extrabold ${tone === 'good' ? 'text-emerald-600' : tone === 'bad' ? 'text-red-600' : 'text-slate-800'}`}>{value}</p>
-      {sub && <p className="text-[11px] text-slate-400 mt-0.5">{sub}</p>}
+      {sub && <p className="text-[12px] text-slate-400 mt-0.5">{sub}</p>}
     </div>
   )
 }

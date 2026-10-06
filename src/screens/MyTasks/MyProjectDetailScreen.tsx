@@ -149,17 +149,17 @@ export default function MyProjectDetailScreen() {
         <div className="grid grid-cols-3 gap-2 mt-4">
           <div className="bg-white/10 rounded-xl p-2.5 text-center">
             <p className="text-xs font-bold">{fmtDate(project.startDate)}</p>
-            <p className="text-[10px] text-white/60 mt-0.5">Start Date</p>
+            <p className="text-[11px] text-white/60 mt-0.5">Start Date</p>
           </div>
           <div className="bg-white/10 rounded-xl p-2.5 text-center">
             <p className="text-xs font-bold">{fmtDate(project.expectedHandoverDate)}</p>
-            <p className="text-[10px] text-white/60 mt-0.5">Due Date</p>
+            <p className="text-[11px] text-white/60 mt-0.5">Due Date</p>
           </div>
           <div className="bg-white/10 rounded-xl p-2.5 text-center">
             <p className={`text-xs font-bold ${daysToDue != null && daysToDue < 0 ? 'text-red-300' : ''}`}>
               {daysToDue == null ? '—' : daysToDue < 0 ? `${Math.abs(daysToDue)}d over` : `${daysToDue}d left`}
             </p>
-            <p className="text-[10px] text-white/60 mt-0.5">Remaining</p>
+            <p className="text-[11px] text-white/60 mt-0.5">Remaining</p>
           </div>
         </div>
       </div>
@@ -194,7 +194,7 @@ export default function MyProjectDetailScreen() {
         {/* Current Action Needed */}
         {project.status !== 'closed' && (
           <div className="rounded-2xl border p-4" style={{ background: '#EEF2FF', borderColor: '#E0E7FF' }}>
-            <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#4338CA' }}>Current Action Needed</p>
+            <p className="text-[12px] font-bold uppercase tracking-wide" style={{ color: '#4338CA' }}>Current Action Needed</p>
             <p className="text-base font-extrabold text-slate-800 mt-1">{PROJECT_STAGE_LABEL[project.stage]}</p>
             <p className="text-xs text-slate-500 mt-0.5">{project.name} · {project.clientName}</p>
             {project.pendingStageRequest && (
@@ -218,8 +218,8 @@ export default function MyProjectDetailScreen() {
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-slate-800">{e.label}</p>
-                    {e.note && <p className="text-[11px] text-slate-500">{e.note}</p>}
-                    <p className="text-[10px] text-slate-400">{e.by ?? '—'} · {fmtDateTime(e.at)}</p>
+                    {e.note && <p className="text-[12px] text-slate-500">{e.note}</p>}
+                    <p className="text-[11px] text-slate-400">{e.by ?? '—'} · {fmtDateTime(e.at)}</p>
                   </div>
                 </div>
               ))}
@@ -261,11 +261,11 @@ export default function MyProjectDetailScreen() {
           <Section id="payment" title="Payment Summary" sub={`${PROJECT_STAGE_LABEL[project.stage]}`}>
             <div className="grid grid-cols-2 gap-2.5">
               <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[11px] text-slate-400">Contract Value</p>
+                <p className="text-[12px] text-slate-400">Contract Value</p>
                 <p className="text-sm font-extrabold text-slate-800">₹{Math.round(project.contractValue ?? 0).toLocaleString('en-IN')}</p>
               </div>
               <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[11px] text-slate-400">Advance Received</p>
+                <p className="text-[12px] text-slate-400">Advance Received</p>
                 <p className="text-sm font-extrabold text-emerald-600">₹{Math.round(project.advanceReceived ?? 0).toLocaleString('en-IN')}</p>
               </div>
             </div>

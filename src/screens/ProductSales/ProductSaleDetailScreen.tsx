@@ -177,7 +177,7 @@ export default function ProductSaleDetailScreen() {
         {/* Current Action Needed — once a shell exists */}
         {shell && shell.status !== 'closed' && (
           <div className="rounded-2xl border p-4" style={{ background: '#EEF2FF', borderColor: '#E0E7FF' }}>
-            <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#4338CA' }}>Current Action Needed</p>
+            <p className="text-[12px] font-bold uppercase tracking-wide" style={{ color: '#4338CA' }}>Current Action Needed</p>
             <p className="text-base font-extrabold text-slate-800 mt-1">{PRODUCT_SALE_STAGE_LABEL[stage]}</p>
             {shell.pendingProductSaleStageRequest && (
               <p className="text-xs text-indigo-600 mt-1">Waiting for MD approval to move to {PRODUCT_SALE_STAGE_LABEL[shell.pendingProductSaleStageRequest.toStage]}.</p>
@@ -195,11 +195,11 @@ export default function ProductSaleDetailScreen() {
             <p className="text-sm font-extrabold text-slate-800 mb-2">Payment Summary</p>
             <div className="grid grid-cols-2 gap-2.5">
               <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[11px] text-slate-400">Order Value</p>
+                <p className="text-[12px] text-slate-400">Order Value</p>
                 <p className="text-sm font-extrabold text-slate-800">{fmtCurrency(shell.contractValue)}</p>
               </div>
               <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[11px] text-slate-400">Advance Received</p>
+                <p className="text-[12px] text-slate-400">Advance Received</p>
                 <p className="text-sm font-extrabold text-emerald-600">{fmtCurrency(shell.advanceReceived)}</p>
               </div>
             </div>
@@ -233,8 +233,8 @@ export default function ProductSaleDetailScreen() {
                   </div>
                   <div className="min-w-0 pb-3">
                     <p className="text-xs font-bold text-slate-800">{e.label}</p>
-                    <p className="text-[10px] text-slate-400">{fmtDateTime(e.at)}{e.by ? ` · ${e.by}` : ''}</p>
-                    {e.note && <p className="text-[11px] text-slate-500 mt-0.5">{e.note}</p>}
+                    <p className="text-[11px] text-slate-400">{fmtDateTime(e.at)}{e.by ? ` · ${e.by}` : ''}</p>
+                    {e.note && <p className="text-[12px] text-slate-500 mt-0.5">{e.note}</p>}
                   </div>
                 </div>
               ))}

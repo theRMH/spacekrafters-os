@@ -116,9 +116,9 @@ export default function MRFScreen() {
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-bold text-slate-800">{projectName(mrf.projectId)}</span>
-                <p className="text-[11px] text-slate-400 mt-0.5">{fmtDate(mrf.createdAt)}</p>
+                <p className="text-[12px] text-slate-400 mt-0.5">{fmtDate(mrf.createdAt)}</p>
                 {mrf.requestingDate && (
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-[12px] text-slate-400 mt-0.5">
                     Req: {fmtDate(mrf.requestingDate)} · Delivery: {fmtDate(mrf.expectedDeliveryDate)}
                   </p>
                 )}

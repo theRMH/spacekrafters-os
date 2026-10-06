@@ -105,7 +105,7 @@ export default function MyTaskScreen() {
         {/* Summary banner */}
         <div className="rounded-2xl border p-5 flex items-center justify-between" style={{ background: '#DBEAFE', borderColor: '#BFDBFE' }}>
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#1D4ED8' }}>Your Tasks</p>
+            <p className="text-[12px] font-bold uppercase tracking-wide" style={{ color: '#1D4ED8' }}>Your Tasks</p>
             <p className="text-4xl font-extrabold leading-tight" style={{ color: '#1D4ED8' }}>{feed.length}</p>
             <p className="text-sm" style={{ color: '#1D4ED8' }}>waiting for your action</p>
           </div>
@@ -123,7 +123,7 @@ export default function MyTaskScreen() {
             <div key={label} className="bg-white rounded-2xl shadow-card border border-slate-100 py-3.5 px-1.5 flex flex-col items-center text-center">
               <span className={`w-9 h-9 rounded-xl flex items-center justify-center mb-1.5 ${tint}`}><Icon size={17} /></span>
               <span className="text-2xl font-extrabold text-slate-800 leading-none">{value}</span>
-              <span className="text-[10px] font-semibold text-slate-400 mt-1.5">{label}</span>
+              <span className="text-[11px] font-semibold text-slate-400 mt-1.5">{label}</span>
             </div>
           ))}
         </div>
@@ -144,7 +144,7 @@ export default function MyTaskScreen() {
             <div key={item.key} className="bg-white rounded-2xl shadow-card border border-slate-100 p-5">
               <div className="flex items-start justify-between gap-2">
                 <span className={`text-[11px] font-bold px-3 py-1 rounded-full ${item.badgeCls}`}>{item.badge}</span>
-                <span className="text-[11px] text-slate-400 shrink-0 mt-0.5">{fmtShort(item.at)}</span>
+                <span className="text-[12px] text-slate-400 shrink-0 mt-0.5">{fmtShort(item.at)}</span>
               </div>
               <h3 className="text-base font-extrabold text-slate-800 mt-2">{item.title}</h3>
               <p className="text-sm text-slate-600 mt-1.5 break-words">

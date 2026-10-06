@@ -113,7 +113,7 @@ export function ApprovalSection({ tab, onTabChange, onDecided }: {
                 <p className="text-sm text-slate-700 font-semibold">{lead?.name ?? q.leadId}</p>
                 <p className="text-xs text-slate-500">Lead ID: {lead?.leadNumber ?? '—'} · v{q.version}</p>
                 <p className="text-xs text-slate-500">Net Amount: <span className="font-semibold text-slate-700">{fmtCurrency(q.netAmount)}</span></p>
-                <p className="text-[11px] text-slate-400 mt-1">Submitted by {submittedBy(q.statusHistory, q.updatedAt)}</p>
+                <p className="text-[12px] text-slate-400 mt-1">Submitted by {submittedBy(q.statusHistory, q.updatedAt)}</p>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
                   {pendingPill}
                   {reviewBtn(() => setSelectedQuote(q))}
@@ -132,7 +132,7 @@ export function ApprovalSection({ tab, onTabChange, onDecided }: {
                 <p className="text-sm text-slate-700 font-semibold">{lead?.name ?? q.leadId}</p>
                 <p className="text-xs text-slate-500">Lead ID: {lead?.leadNumber ?? '—'} · v{q.version}</p>
                 <p className="text-xs text-slate-500">Net Amount: <span className="font-semibold text-slate-700">{fmtCurrency(q.netAmount)}</span></p>
-                <p className="text-[11px] text-slate-400 mt-1">Sent to client — {submittedBy(q.statusHistory, q.updatedAt)}</p>
+                <p className="text-[12px] text-slate-400 mt-1">Sent to client — {submittedBy(q.statusHistory, q.updatedAt)}</p>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
                   {pendingPill}
                   {reviewBtn(() => setSelectedQuote(q))}
@@ -155,7 +155,7 @@ export function ApprovalSection({ tab, onTabChange, onDecided }: {
               <p className="text-sm text-slate-700 font-semibold">{p.name}</p>
               <p className="text-xs text-slate-500">{designLink(p)}</p>
               <p className="text-xs text-slate-500">{versions.filter(v => v.designPackageId === p.id).length} version(s) uploaded</p>
-              <p className="text-[11px] text-slate-400 mt-1">Submitted by {submittedBy(p.statusHistory, p.updatedAt)}</p>
+              <p className="text-[12px] text-slate-400 mt-1">Submitted by {submittedBy(p.statusHistory, p.updatedAt)}</p>
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
                 {pendingPill}
                 {reviewBtn(() => setSelectedDesign(p))}
@@ -180,7 +180,7 @@ export function ApprovalSection({ tab, onTabChange, onDecided }: {
                 <p className="text-sm text-slate-700 font-semibold">{project?.name ?? m.projectId}</p>
                 <p className="text-xs text-slate-500">Client: {project?.clientName ?? '—'}</p>
                 <p className="text-xs text-slate-500 truncate">{m.materialDetails || 'No details entered yet.'}</p>
-                <p className="text-[11px] text-slate-400 mt-1">Submitted by {lastEntry?.updatedBy ?? '—'}</p>
+                <p className="text-[12px] text-slate-400 mt-1">Submitted by {lastEntry?.updatedBy ?? '—'}</p>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
                   {pendingPill}
                   {reviewBtn(() => setSelectedMrf(m))}

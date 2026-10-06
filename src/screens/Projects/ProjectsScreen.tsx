@@ -544,7 +544,7 @@ export default function ProjectsScreen() {
             {selected.status !== 'closed' && (
               <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                 <div>
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
+                  <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
                   <p className="text-sm font-bold text-slate-800 mt-1">{PROJECT_STAGE_LABEL[selected.stage]}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Responsible: {selected.assignedToName ?? (ROLE_FOR_PROJECT_STAGE[selected.stage] ? ROLE_LABELS[ROLE_FOR_PROJECT_STAGE[selected.stage]!] : '—')}

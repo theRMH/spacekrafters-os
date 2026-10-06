@@ -165,21 +165,21 @@ export default function CompanyAccountsScreen() {
 
       <div className="px-4 pt-4 grid grid-cols-2 gap-2.5">
         <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-          <p className="text-[11px] text-slate-400 mb-0.5">Cash on Hand</p>
+          <p className="text-[12px] text-slate-400 mb-0.5">Cash on Hand</p>
           <p className="text-base font-extrabold text-slate-800">{fmtCurrency(totalBalance)}</p>
         </div>
         <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-          <p className="text-[11px] text-slate-400 mb-0.5">This Month Net</p>
+          <p className="text-[12px] text-slate-400 mb-0.5">This Month Net</p>
           <p className={`text-base font-extrabold ${monthNetCashflow >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
             {monthNetCashflow >= 0 ? '+' : ''}{fmtCurrency(monthNetCashflow)}
           </p>
         </div>
         <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-          <p className="text-[11px] text-slate-400 mb-0.5">Outstanding Receivables</p>
+          <p className="text-[12px] text-slate-400 mb-0.5">Outstanding Receivables</p>
           <p className="text-base font-extrabold text-slate-800">{fmtCurrency(outstandingReceivables)}</p>
         </div>
         <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-          <p className="text-[11px] text-slate-400 mb-0.5">Outstanding Payables</p>
+          <p className="text-[12px] text-slate-400 mb-0.5">Outstanding Payables</p>
           <p className="text-base font-extrabold text-slate-800">{fmtCurrency(outstandingPayables)}</p>
         </div>
       </div>
@@ -232,7 +232,7 @@ export default function CompanyAccountsScreen() {
             <div className="bg-slate-50 rounded-xl p-4 text-center">
               <p className="text-xs text-slate-500 mb-1">Current Balance</p>
               <p className="text-2xl font-extrabold text-slate-800">{fmtCurrency(accountBalance(selected, transactions))}</p>
-              <p className="text-[11px] text-slate-400 mt-1">Opening: {fmtCurrency(selected.openingBalance)}</p>
+              <p className="text-[12px] text-slate-400 mt-1">Opening: {fmtCurrency(selected.openingBalance)}</p>
             </div>
 
             <PermissionGate permission="manage_company_accounts">
@@ -249,7 +249,7 @@ export default function CompanyAccountsScreen() {
                 <div key={t.id} className="bg-white rounded-xl p-3 border border-slate-100 flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{t.description}</p>
-                    <p className="text-[11px] text-slate-400">{fmtDate(t.date)}{t.reference ? ` · ${t.reference}` : ''}</p>
+                    <p className="text-[12px] text-slate-400">{fmtDate(t.date)}{t.reference ? ` · ${t.reference}` : ''}</p>
                   </div>
                   <span className={`text-sm font-bold ${t.type === 'credit' ? 'text-emerald-600' : 'text-red-600'}`}>
                     {t.type === 'credit' ? '+' : '−'}{fmtCurrency(t.amount)}

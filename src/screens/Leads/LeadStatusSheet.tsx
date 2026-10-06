@@ -12,6 +12,7 @@ import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllRequirements } from '../../services/requirementService'
 import { getAllDesignPackages } from '../../services/designService'
 import { getAllAppointments, upsertAppointment } from '../../services/appointmentService'
+import { toProperIso } from '../Appointments/appointmentDate'
 import { sendNotification } from '../../utils/notifications'
 import type { Appointment, Lead, LeadStatus, ManagedUser, UserRole } from '../../types'
 
@@ -150,7 +151,11 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
       ...latestAppointment,
       status: 'rescheduled',
       rescheduleReason: rescheduleReasonText.trim(),
-      rescheduledDate: rescheduledDateInput || undefined,
+      // Stored as a proper UTC ISO string (not the bare "YYYY-MM-DDTHH:mm"
+      // the date/time fields produce) so it's unambiguous once read back —
+      // a bare string is interpreted as local time by whichever device/server
+      // reads it, which can silently shift the actual scheduled time.
+      rescheduledDate: rescheduledDateInput ? toProperIso(rescheduledDateInput) : undefined,
       rescheduleRequestStatus: 'requested',
       rescheduleRequestedBy: user?.name,
       rescheduleRequestedAt: now,

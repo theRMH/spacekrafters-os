@@ -36,6 +36,26 @@
   }
 }
 
+/* Pin buttons, rounded-full badges/pills, and global nav/menu chrome
+   (.app-chrome) back to their pre-bump text sizes — tailwind.config.js's
+   fontSize override is global, but only free-standing reading text (titles,
+   headings, labels, body/list text) should actually grow. Deliberately
+   outside any @layer: Tailwind's own utilities live in @layer utilities, and
+   un-layered rules always win over layered ones regardless of specificity
+   (CSS Cascade Layers), so no !important is needed here. */
+button.text-xs, button .text-xs, .rounded-full.text-xs, .app-chrome.text-xs, .app-chrome .text-xs
+  { font-size: 0.75rem; line-height: 1rem; }
+button.text-sm, button .text-sm, .rounded-full.text-sm, .app-chrome.text-sm, .app-chrome .text-sm
+  { font-size: 0.875rem; line-height: 1.25rem; }
+button.text-base, button .text-base, .rounded-full.text-base, .app-chrome.text-base, .app-chrome .text-base
+  { font-size: 1rem; line-height: 1.5rem; }
+button.text-lg, button .text-lg, .rounded-full.text-lg, .app-chrome.text-lg, .app-chrome .text-lg
+  { font-size: 1.125rem; line-height: 1.75rem; }
+button.text-xl, button .text-xl, .rounded-full.text-xl, .app-chrome.text-xl, .app-chrome .text-xl
+  { font-size: 1.25rem; line-height: 1.75rem; }
+button.text-2xl, button .text-2xl, .rounded-full.text-2xl, .app-chrome.text-2xl, .app-chrome .text-2xl
+  { font-size: 1.5rem; line-height: 2rem; }
+
 @media print {
   body * {
     visibility: hidden;

@@ -308,7 +308,7 @@ export default function StatementImportScreen() {
                             {row.type === 'credit' ? '+' : '−'}{fmtCurrency(row.amount)}
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-400 mb-2">{row.date}</p>
+                        <p className="text-[12px] text-slate-400 mb-2">{row.date}</p>
                         <div className="flex gap-1.5">
                           <input className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
                             value={row.category} onChange={e => updateRow(row.key, { category: e.target.value })} placeholder="Category" />

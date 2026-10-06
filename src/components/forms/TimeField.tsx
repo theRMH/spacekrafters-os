@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Clock } from 'lucide-react'
+import { useTriggerRect } from './useOverlayPosition'
 
 interface Props {
   value: string // 'HH:mm' (24h) or ''
@@ -22,15 +24,18 @@ function fmtDisplay(value: string): string {
 }
 
 // Same reasoning as DateField/SearchableSelect: a native <input type="time">'s
-// picker is positioned by the browser, not page CSS — this renders two plain
-// scrollable hour/minute columns in normal page flow instead, so it can't
-// escape its own scrollable container.
+// picker is positioned by the browser, not page CSS. This renders two plain
+// scrollable hour/minute columns in a panel that portals to document.body,
+// positioned from the trigger's live screen coordinates (see useTriggerRect)
+// — a BottomSheet's scrollable content can clip or paint over a plain
+// `position: absolute` panel regardless of z-index, which the portal avoids.
 const PANEL_WIDTH = 180
 
 export function TimeField({ value, onChange, min, max, placeholder = 'Select time' }: Props) {
   const [open, setOpen] = useState(false)
-  const [alignRight, setAlignRight] = useState(false)
-  const wrapRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const rect = useTriggerRect(open, triggerRef, () => setOpen(false), panelRef)
   const [h, m] = value ? value.split(':') : ['', '']
   const [minH, minM] = min ? min.split(':') : ['', '']
   const [maxH, maxM] = max ? max.split(':') : ['', '']
@@ -38,18 +43,12 @@ export function TimeField({ value, onChange, min, max, placeholder = 'Select tim
   useEffect(() => {
     if (!open) return
     function onDocPointerDown(e: PointerEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (triggerRef.current?.contains(t) || panelRef.current?.contains(t)) return
+      setOpen(false)
     }
     document.addEventListener('pointerdown', onDocPointerDown)
     return () => document.removeEventListener('pointerdown', onDocPointerDown)
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    // Same right-hand-column overflow fix as DateField — flip to right-anchored
-    // when there isn't room to the right of the trigger.
-    const rect = wrapRef.current?.getBoundingClientRect()
-    if (rect) setAlignRight(rect.left + PANEL_WIDTH > window.innerWidth - 8)
   }, [open])
 
   function pick(hh: string, mm: string) {
@@ -68,16 +67,27 @@ export function TimeField({ value, onChange, min, max, placeholder = 'Select tim
     return false
   }
 
+  const left = rect ? Math.min(Math.max(rect.left, 8), window.innerWidth - PANEL_WIDTH - 8) : 0
+  // The hour/minute columns are internally capped at max-h-56 (224px) already,
+  // so a ~240px panel just needs to flip above the trigger when there isn't
+  // room below, same reasoning as the horizontal clamp above.
+  const spaceBelow = rect ? window.innerHeight - rect.bottom - 14 : 0
+  const spaceAbove = rect ? rect.top - 14 : 0
+  const openUpward = rect ? spaceBelow < 240 && spaceAbove > spaceBelow : false
+
   return (
-    <div ref={wrapRef} className="relative">
-      <button type="button" onClick={() => setOpen(o => !o)}
+    <>
+      <button ref={triggerRef} type="button" onClick={() => setOpen(o => !o)}
         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-left flex items-center justify-between gap-2 focus:outline-none focus:border-indigo-400">
         <span className={value ? 'text-slate-800' : 'text-slate-400'}>{value ? fmtDisplay(value) : placeholder}</span>
         <Clock size={15} className="text-slate-400 shrink-0" />
       </button>
 
-      {open && (
-        <div className={`absolute z-50 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg flex overflow-hidden ${alignRight ? 'right-0' : 'left-0'}`} style={{ width: PANEL_WIDTH }}>
+      {open && rect && createPortal(
+        <div ref={panelRef} className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-lg flex overflow-hidden"
+          style={openUpward
+            ? { bottom: window.innerHeight - rect.top + 6, left, width: PANEL_WIDTH }
+            : { top: rect.bottom + 6, left, width: PANEL_WIDTH }}>
           <div className="flex-1 max-h-56 overflow-y-auto border-r border-slate-100">
             {HOURS.map(hh => (
               <button key={hh} type="button" disabled={hourDisabled(hh)} onClick={() => pick(hh, m || '00')}
@@ -94,8 +104,9 @@ export function TimeField({ value, onChange, min, max, placeholder = 'Select tim
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   )
 }

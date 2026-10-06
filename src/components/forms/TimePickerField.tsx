@@ -38,7 +38,7 @@ export function TimePickerField({ label = 'Visit Time', value, onChange }: Props
         })}
       </div>
       {value && (
-        <p className="text-[11px] text-blue-600 font-semibold mt-1.5">Selected: {value}</p>
+        <p className="text-[12px] text-blue-600 font-semibold mt-1.5">Selected: {value}</p>
       )}
     </div>
   )

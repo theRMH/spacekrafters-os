@@ -178,7 +178,7 @@ export default function FollowUpsScreen() {
                     <span className="text-slate-300 text-xs">|</span>
                     <span className="text-xs text-slate-500">Due {fmtDate(followUp.dueDate)}</span>
                   </div>
-                  <p className="text-[11px] text-slate-400">{followUp.ownerName}</p>
+                  <p className="text-[12px] text-slate-400">{followUp.ownerName}</p>
                   {followUp.outcomeNote && <p className="text-xs text-slate-600 truncate mt-1">{followUp.outcomeNote}</p>}
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">

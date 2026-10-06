@@ -78,7 +78,7 @@ export default function SalesPersonDetailScreen() {
       <div className="px-4 pt-4 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Sales Team Performance</p>
+            <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wide">Sales Team Performance</p>
             <div className="flex items-center gap-3 mt-1">
               <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-white text-sm font-extrabold" style={{ background: '#0F2A4A' }}>
                 {(person?.name ?? '?').slice(0, 1).toUpperCase()}
@@ -143,7 +143,7 @@ export default function SalesPersonDetailScreen() {
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-slate-800 truncate">{r.name}</p>
                   <p className="text-xs text-slate-400 truncate">{r.stageLabel} · Updated {fmtDateTime(r.updatedAt)}</p>
-                  <p className="text-[11px] text-slate-400">{r.assignedTo}</p>
+                  <p className="text-[12px] text-slate-400">{r.assignedTo}</p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {r.amount > 0 && <span className="text-sm font-extrabold text-slate-800">{fmtCurrency(r.amount)}</span>}

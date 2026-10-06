@@ -256,7 +256,7 @@ export default function SiteVisitsScreen() {
                     <span className="text-xs text-slate-500">{fmtDate(visit.visitDate)}</span>
                   </div>
                   <p className="text-xs text-slate-600">{visit.rooms.length} room{visit.rooms.length !== 1 ? 's' : ''} measured</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{checked}/{visit.checklist.length} checklist items done</p>
+                  <p className="text-[12px] text-slate-400 mt-0.5">{checked}/{visit.checklist.length} checklist items done</p>
                 </div>
               </div>
             </div>
@@ -290,7 +290,7 @@ export default function SiteVisitsScreen() {
             )}
 
             <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rooms</p>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rooms</p>
               <div className="space-y-2">
                 {selected.rooms.map(room => (
                   <div key={room.id} className="bg-slate-50 rounded-2xl p-3.5">
@@ -306,7 +306,7 @@ export default function SiteVisitsScreen() {
             </div>
 
             <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Checklist</p>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Checklist</p>
               <div className="bg-white border border-slate-100 rounded-2xl p-3.5 space-y-2">
                 {selected.checklist.map(item => (
                   <div key={item.id} className="flex items-center gap-2">
@@ -319,7 +319,7 @@ export default function SiteVisitsScreen() {
 
             {selected.notes && (
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Notes</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Notes</p>
                 <p className="text-xs text-slate-600">{selected.notes}</p>
               </div>
             )}
@@ -373,7 +373,7 @@ export default function SiteVisitsScreen() {
                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left active:bg-slate-100">
                     {isChecked ? <CheckSquare size={17} className="text-indigo-600 shrink-0" /> : <Square size={17} className="text-slate-300 shrink-0" />}
                     <span className="text-sm text-slate-700 truncate">{m.fullName}</span>
-                    <span className="text-[11px] text-slate-400 ml-auto shrink-0">{getRoleDisplayLabel(m.role, m.displayRole)}</span>
+                    <span className="text-[12px] text-slate-400 ml-auto shrink-0">{getRoleDisplayLabel(m.role, m.displayRole)}</span>
                   </button>
                 )
               })}

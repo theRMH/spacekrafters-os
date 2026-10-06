@@ -52,7 +52,7 @@ export default function AttendanceSettingsScreen() {
 
       <div className="px-4 pt-4 space-y-4">
         <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-4">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Office Timing</p>
+          <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Office Timing</p>
           <p className="text-xs text-slate-500">
             Used to work out late arrival / early departure from each employee's actual clock-in/out time. Attendance is not restricted by location — GPS and a photo are still captured on every Start/End for verification.
           </p>

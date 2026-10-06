@@ -38,16 +38,25 @@ function fmtDateTime(val: string): string {
 // Nothing here is stored separately: it is read from the records' own append-only
 // histories, so completed decisions are never removed and survive refresh / re-login.
 // Rows are compact (title + status badge); clicking one expands its full details.
-export function ApprovalHistory({ refreshKey, types, title = 'Approval History' }: {
+export function ApprovalHistory({ refreshKey, types, title = 'Approval History', showTitle = true }: {
   refreshKey: number
   types: ApprovalType[]
   title?: string
+  // The caller renders its own collapsible header (icon + title + count +
+  // chevron) and just toggles whether this whole section is mounted — set
+  // false there so the title isn't shown twice.
+  showTitle?: boolean
 }) {
   const { leads } = useCRM()
   const [rows, setRows] = useState<HistoryRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAll, setShowAll] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // Only meaningful when showTitle is true — a caller that suppresses the
+  // title (MDTasksScreen) builds its own external collapsible header instead
+  // and only mounts this component while that's open, so there's nothing for
+  // this state to gate in that case.
+  const [sectionOpen, setSectionOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -158,15 +167,24 @@ export function ApprovalHistory({ refreshKey, types, title = 'Approval History' 
   })
 
   const visible = showAll ? rows : rows.slice(0, INITIAL_COUNT)
+  const contentOpen = !showTitle || sectionOpen
 
   return (
     <section className="space-y-3">
-      <h2 className="text-base font-extrabold text-slate-800">{title}</h2>
+      {showTitle && (
+        <button type="button" onClick={() => setSectionOpen(o => !o)} aria-expanded={sectionOpen}
+          className="w-full flex items-center gap-2 text-left">
+          <h2 className="text-base font-extrabold text-slate-800">{title}</h2>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{rows.length}</span>
+          <ChevronDown size={18} className={`ml-auto text-slate-400 transition-transform ${sectionOpen ? 'rotate-180' : ''}`} />
+        </button>
+      )}
 
-      {!isLoading && rows.length === 0 && (
+      {contentOpen && !isLoading && rows.length === 0 && (
         <p className="text-sm text-slate-400 text-center py-8">No approvals or rejections recorded yet.</p>
       )}
 
+      {contentOpen && (
       <div className="space-y-2">
         {visible.map(r => {
           const open = expanded.has(r.key)
@@ -205,8 +223,9 @@ export function ApprovalHistory({ refreshKey, types, title = 'Approval History' 
           )
         })}
       </div>
+      )}
 
-      {!showAll && rows.length > INITIAL_COUNT && (
+      {contentOpen && !showAll && rows.length > INITIAL_COUNT && (
         <button onClick={() => setShowAll(true)}
           className="w-full py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-600 active:bg-slate-50">
           Show all ({rows.length})

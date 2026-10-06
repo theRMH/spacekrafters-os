@@ -63,7 +63,7 @@ export function buildSalesPerformance(leads: Lead[], projects: Project[]): Sales
       const record: SalesRecord = project
         ? { key: project.id, name: project.name, stageLabel: PROJECT_STAGE_LABEL[project.stage], amount: value, updatedAt: project.updatedAt, assignedTo: name, linkTo: `/projects/${project.id}` }
         : { key: lead.id, name: lead.name, stageLabel: 'Won', amount: 0, updatedAt: lead.updatedAt, assignedTo: name, linkTo: `/leads/${lead.id}` }
-      if (project?.stage === 'closed') { person.done.count++; person.done.value += value; person.done.records.push(record) }
+      if (project?.status === 'closed') { person.done.count++; person.done.value += value; person.done.records.push(record) }
       else { person.production.count++; person.production.value += value; person.production.records.push(record) }
     }
   }

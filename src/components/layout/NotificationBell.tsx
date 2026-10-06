@@ -93,7 +93,7 @@ export function NotificationBell() {
                 <div className={`flex-1 min-w-0 ${n.readAt ? 'pl-4' : ''}`}>
                   <p className={`text-sm break-words ${!n.readAt ? 'font-bold text-slate-800' : 'font-semibold text-slate-600'}`}>{n.title}</p>
                   <p className="text-xs text-slate-500 mt-0.5 break-words">{n.body}</p>
-                  <p className="text-[11px] text-slate-400 mt-1">{timeAgo(n.createdAt)}</p>
+                  <p className="text-[12px] text-slate-400 mt-1">{timeAgo(n.createdAt)}</p>
                 </div>
               </div>
             </button>

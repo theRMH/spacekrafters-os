@@ -81,9 +81,9 @@ export default function SiteVisitReportScreen() {
                     </p>
                   )}
                   {visit.teamMemberNames && visit.teamMemberNames.length > 0 && (
-                    <p className="text-[11px] text-slate-400">Team: {visit.teamMemberNames.join(', ')}</p>
+                    <p className="text-[12px] text-slate-400">Team: {visit.teamMemberNames.join(', ')}</p>
                   )}
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-[12px] text-slate-400 mt-0.5">
                     {visit.rooms.length} room{visit.rooms.length !== 1 ? 's' : ''} · {totalPhotos(visit)} photo{totalPhotos(visit) !== 1 ? 's' : ''}
                   </p>
                 </div>
@@ -134,7 +134,7 @@ export default function SiteVisitReportScreen() {
               </div>
 
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rooms</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rooms</p>
                 <div className="space-y-2">
                   {selected.rooms.map(room => (
                     <div key={room.id} className="bg-slate-50 rounded-2xl p-3.5">
@@ -150,7 +150,7 @@ export default function SiteVisitReportScreen() {
               </div>
 
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Checklist</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Checklist</p>
                 <div className="bg-white border border-slate-100 rounded-2xl p-3.5 space-y-2">
                   {selected.checklist.map(item => (
                     <div key={item.id} className="flex items-center gap-2">
@@ -163,7 +163,7 @@ export default function SiteVisitReportScreen() {
 
               {selected.notes && (
                 <div>
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Notes</p>
+                  <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Notes</p>
                   <p className="text-xs text-slate-600">{selected.notes}</p>
                 </div>
               )}

@@ -92,7 +92,7 @@ export function LocationAddressField({ value, onChange, error, label = 'Address 
             ${geocoding ? 'bg-teal-50' : ''}`}
         />
         {geocoding && (
-          <p className="absolute bottom-2 right-3 text-[10px] text-teal-500 font-semibold">Fetching address…</p>
+          <p className="absolute bottom-2 right-3 text-[11px] text-teal-500 font-semibold">Fetching address…</p>
         )}
       </div>
 
@@ -130,7 +130,7 @@ export function LocationAddressField({ value, onChange, error, label = 'Address 
       {/* Paste Google Maps link panel */}
       {showPin && (
         <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
-          <p className="text-[11px] text-slate-500 font-semibold">Paste Google Maps link:</p>
+          <p className="text-[12px] text-slate-500 font-semibold">Paste Google Maps link:</p>
           <input
             type="url"
             inputMode="url"
@@ -156,8 +156,8 @@ export function LocationAddressField({ value, onChange, error, label = 'Address 
         </div>
       )}
 
-      {locError && <p className="text-[11px] text-amber-600 font-medium">{locError}</p>}
-      {error    && <p className="text-[11px] text-red-500 font-semibold">{error}</p>}
+      {locError && <p className="text-[12px] text-amber-600 font-medium">{locError}</p>}
+      {error    && <p className="text-[12px] text-red-500 font-semibold">{error}</p>}
     </div>
   )
 }

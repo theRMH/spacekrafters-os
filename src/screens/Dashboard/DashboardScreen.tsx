@@ -201,7 +201,7 @@ export default function DashboardScreen() {
           <path d={line} fill="none" stroke="#059669" strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
           {points.map((p, i) => <circle key={p.date} cx={xFor(i)} cy={yFor(p.amount)} r={3} fill="#059669" />)}
         </svg>
-        <div className="relative h-4 text-[11px] text-slate-400">
+        <div className="relative h-4 text-[12px] text-slate-400">
           {labelIdxs.map(i => {
             const pctLeft = (xFor(i) / w) * 100
             const align = i === 0 ? 'left' : i === points.length - 1 ? 'right' : 'center'
@@ -225,12 +225,12 @@ export default function DashboardScreen() {
             <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" className={tint} strokeWidth="3.5"
               strokeDasharray={`${(clamped / 100) * 97.4} 97.4`} strokeLinecap="round" />
           </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-slate-700">{clamped}%</span>
+          <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-700">{clamped}%</span>
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold text-slate-800 truncate">{label}</p>
           <p className={`text-sm font-extrabold leading-tight truncate ${tint}`}>{big}</p>
-          <p className="text-[11px] text-slate-400 truncate">{fraction} {sub}</p>
+          <p className="text-[12px] text-slate-400 truncate">{fraction} {sub}</p>
         </div>
       </button>
     )
@@ -254,7 +254,7 @@ export default function DashboardScreen() {
             </button>
           ))}
         </div>
-        <p className="text-[11px] text-slate-400 -mt-2">{rangeCaption}</p>
+        <p className="text-[12px] text-slate-400 -mt-2">{rangeCaption}</p>
         {filter === 'custom' && (
           <div className="flex items-center gap-2 flex-wrap">
             <DateField value={customFrom} onChange={setCustomFrom} />
@@ -268,12 +268,12 @@ export default function DashboardScreen() {
           <div className="flex items-start justify-between mb-1">
             <div>
               <h2 className="text-xs font-extrabold text-slate-800">Revenue Overview</h2>
-              <p className="text-[11px] text-slate-400">Collected revenue — {FILTERS.find(f => f.key === filter)?.label}</p>
+              <p className="text-[12px] text-slate-400">Collected revenue — {FILTERS.find(f => f.key === filter)?.label}</p>
             </div>
             <div className="flex items-center gap-1.5">
               <p className="text-sm font-extrabold" style={{ color: '#059669' }}>{fmtCurrency(revenueSeries.total)}</p>
               {revenueTrend && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${revenueTrend.up ? 'text-emerald-700 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>
+                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-md ${revenueTrend.up ? 'text-emerald-700 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>
                   {revenueTrend.up ? '↑' : '↓'}{revenueTrend.pct}%
                 </span>
               )}
@@ -308,7 +308,7 @@ export default function DashboardScreen() {
 
         {/* Leads */}
         <div className="rounded-xl border p-3.5" style={{ background: '#EEF2FF', borderColor: '#E0E7FF' }}>
-          <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: '#4338CA' }}>{periodLabel} Leads</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#4338CA' }}>{periodLabel} Leads</p>
           <p className="text-2xl font-extrabold leading-tight" style={{ color: '#4338CA' }}>{periodLeads.length}</p>
         </div>
 
@@ -316,7 +316,7 @@ export default function DashboardScreen() {
         <div>
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">Sales Team Performance</h2>
-            <div className="flex items-center gap-2.5 text-[10px] text-slate-500">
+            <div className="flex items-center gap-2.5 text-[11px] text-slate-500">
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-600" />Active</span>
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-violet-600" />Negotiation</span>
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Production</span>
@@ -342,12 +342,12 @@ export default function DashboardScreen() {
                   className="w-full text-left bg-white rounded-xl shadow-card border border-slate-100 p-3 active:bg-slate-50">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-extrabold" style={{ background: '#0F2A4A' }}>
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white text-[12px] font-extrabold" style={{ background: '#0F2A4A' }}>
                         {person.name.slice(0, 1).toUpperCase()}
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-slate-800 truncate">{person.name}</p>
-                        <p className="text-[10px] text-slate-400">{totalLeads} total leads</p>
+                        <p className="text-[11px] text-slate-400">{totalLeads} total leads</p>
                       </div>
                     </div>
                     <ChevronDown size={14} className="text-slate-300 shrink-0" />
@@ -357,11 +357,11 @@ export default function DashboardScreen() {
                       const barHeight = s.data.value > 0 ? Math.max(8, Math.round((s.data.value / maxValue) * BAR_TRACK)) : 2
                       return (
                       <div key={s.key}>
-                        <p className="text-[11px] font-bold text-center" style={{ color: s.color }}>{fmtCurrency(s.data.value)}</p>
+                        <p className="text-[12px] font-bold text-center" style={{ color: s.color }}>{fmtCurrency(s.data.value)}</p>
                         <div className="flex items-end mt-1 mb-1" style={{ height: BAR_TRACK }}>
                           <div className="w-full rounded-md" style={{ height: barHeight, background: s.color }} />
                         </div>
-                        <p className="text-[10px] text-slate-400 text-center">{s.label} <span className="whitespace-nowrap">({s.data.count} {s.unit})</span></p>
+                        <p className="text-[11px] text-slate-400 text-center">{s.label} <span className="whitespace-nowrap">({s.data.count} {s.unit})</span></p>
                       </div>
                       )
                     })}
@@ -398,9 +398,9 @@ export default function DashboardScreen() {
                           className="w-full text-left bg-slate-50 rounded-lg p-2.5 active:bg-slate-100 disabled:active:bg-slate-50">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <p className="text-[11px] font-bold text-slate-800 truncate">{item.project?.name ?? 'Unknown Project'} — {item.milestone.title}</p>
-                              <p className="text-[10px] text-slate-400 truncate">{item.project?.clientName ?? ''} · {item.project?.coordinatorName ?? '—'}</p>
-                              <p className="text-[10px] text-slate-500 mt-1">
+                              <p className="text-[12px] font-bold text-slate-800 truncate">{item.project?.name ?? 'Unknown Project'} — {item.milestone.title}</p>
+                              <p className="text-[11px] text-slate-400 truncate">{item.project?.clientName ?? ''} · {item.project?.coordinatorName ?? '—'}</p>
+                              <p className="text-[11px] text-slate-500 mt-1">
                                 Value: {fmtCurrency(item.milestone.amount)}  Paid: {fmtCurrency(item.milestone.receivedAmount)}
                                 {item.milestone.dueDate && `  Due: ${item.milestone.dueDate.slice(0, 10)}`}
                               </p>

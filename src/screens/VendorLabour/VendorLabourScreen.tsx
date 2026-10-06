@@ -101,7 +101,7 @@ export default function VendorLabourScreen() {
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-bold text-slate-800">{entry.name}</span>
                 <p className="text-xs text-slate-600 mt-0.5">{entry.natureOfWork}</p>
-                {entry.number && <p className="text-[11px] text-slate-400 mt-1">No.: {entry.number}</p>}
+                {entry.number && <p className="text-[12px] text-slate-400 mt-1">No.: {entry.number}</p>}
               </div>
               {canManage && (
                 <button onClick={() => setDeleteTarget(entry)} className="text-red-400 p-1.5 shrink-0">

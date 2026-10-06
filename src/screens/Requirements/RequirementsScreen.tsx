@@ -255,7 +255,7 @@ export default function RequirementsScreen() {
             </div>
 
             <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Line Items</p>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Line Items</p>
               <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden">
                 {selected.lineItems.map((item, i) => (
                   <div key={item.id} className={`p-3.5 ${i > 0 ? 'border-t border-slate-100' : ''}`}>
@@ -263,7 +263,7 @@ export default function RequirementsScreen() {
                       <span className="text-xs font-bold text-slate-800">{item.roomName}</span>
                       <span className="text-xs font-semibold text-slate-600">{item.quantity} {item.unit}</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{item.description}</p>
+                    <p className="text-[12px] text-slate-500 mt-0.5">{item.description}</p>
                   </div>
                 ))}
               </div>
@@ -271,14 +271,14 @@ export default function RequirementsScreen() {
 
             {selected.notes && (
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Notes</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Notes</p>
                 <p className="text-xs text-slate-600">{selected.notes}</p>
               </div>
             )}
 
             {selected.files && selected.files.length > 0 && (
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Attachments</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Attachments</p>
                 <MultiFileUploadField label="" files={selected.files} onChange={() => {}} readOnly />
               </div>
             )}
@@ -315,7 +315,7 @@ export default function RequirementsScreen() {
                 placeholder="Select a site visit…" searchPlaceholder="Search site visits…"
               />
             )}
-            {!showEdit && <p className="text-[10px] text-slate-400 mt-1">Selecting a site visit pre-fills one line item per room measured.</p>}
+            {!showEdit && <p className="text-[11px] text-slate-400 mt-1">Selecting a site visit pre-fills one line item per room measured.</p>}
           </div>
 
           <div>

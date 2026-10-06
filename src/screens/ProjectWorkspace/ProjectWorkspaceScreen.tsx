@@ -391,7 +391,7 @@ export default function ProjectWorkspaceScreen() {
             {project.status !== 'closed' && (
               <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3 mb-4">
                 <div>
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
+                  <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</p>
                   <p className="text-sm font-bold text-slate-800 mt-1">{PROJECT_STAGE_LABEL[project.stage]}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Responsible: {project.assignedToName ?? (ROLE_FOR_PROJECT_STAGE[project.stage] ? ROLE_LABELS[ROLE_FOR_PROJECT_STAGE[project.stage]!] : '—')}
@@ -406,15 +406,15 @@ export default function ProjectWorkspaceScreen() {
             )}
             {(project.statusHistory?.length ?? 0) > 0 && (
               <div className="bg-white rounded-2xl border border-slate-100 p-4 mb-4">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Stage History</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Stage History</p>
                 <div className="space-y-2.5">
                   {[...(project.statusHistory ?? [])].reverse().map((h, i) => (
                     <div key={i} className="flex items-start gap-2.5">
                       <span className="w-2 h-2 rounded-full bg-slate-800 mt-1.5 shrink-0" />
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-slate-800">{(PROJECT_STAGE_LABEL as Record<string, string>)[h.stage] ?? h.stage}</p>
-                        <p className="text-[11px] text-slate-500">{h.note}</p>
-                        <p className="text-[10px] text-slate-400">
+                        <p className="text-[12px] text-slate-500">{h.note}</p>
+                        <p className="text-[11px] text-slate-400">
                           {h.updatedBy} · {new Date(h.updatedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                         </p>
                       </div>
@@ -611,29 +611,29 @@ export default function ProjectWorkspaceScreen() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2.5">
               <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-                <p className="text-[11px] text-slate-400 mb-0.5">Contract Value</p>
+                <p className="text-[12px] text-slate-400 mb-0.5">Contract Value</p>
                 <p className="text-base font-extrabold text-slate-800">{fmtCurrency(contractValue)}</p>
               </div>
               <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-                <p className="text-[11px] text-slate-400 mb-0.5">Internal Budget</p>
+                <p className="text-[12px] text-slate-400 mb-0.5">Internal Budget</p>
                 <p className="text-base font-extrabold text-slate-800">{fmtCurrency(internalBudget)}</p>
               </div>
               <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-                <p className="text-[11px] text-slate-400 mb-0.5">Actual Spend</p>
+                <p className="text-[12px] text-slate-400 mb-0.5">Actual Spend</p>
                 <p className="text-base font-extrabold text-slate-800">{fmtCurrency(actualSpend)}</p>
               </div>
               <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-                <p className="text-[11px] text-slate-400 mb-0.5">Collections</p>
+                <p className="text-[12px] text-slate-400 mb-0.5">Collections</p>
                 <p className="text-base font-extrabold text-slate-800">{fmtCurrency(totalCollected)}</p>
               </div>
               <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-                <p className="text-[11px] text-slate-400 mb-0.5">Margin</p>
+                <p className="text-[12px] text-slate-400 mb-0.5">Margin</p>
                 <p className={`text-base font-extrabold ${margin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {fmtCurrency(margin)} <span className="text-xs font-semibold">({marginPct.toFixed(1)}%)</span>
                 </p>
               </div>
               <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-                <p className="text-[11px] text-slate-400 mb-0.5">Budget Variance</p>
+                <p className="text-[12px] text-slate-400 mb-0.5">Budget Variance</p>
                 <p className={`text-base font-extrabold ${budgetVariance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {fmtCurrency(budgetVariance)}
                 </p>
@@ -796,16 +796,16 @@ export default function ProjectWorkspaceScreen() {
               </button>
             </PermissionGate>
             <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Version History</p>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Version History</p>
               <div className="space-y-2.5">
                 {docVersionsFor(selectedDocument.id).map(v => (
                   <div key={v.id} className="bg-white border border-slate-100 rounded-2xl p-3.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-800">Version {v.versionNumber}</span>
-                      <span className="text-[11px] text-slate-400">{fmtDate(v.createdAt)}</span>
+                      <span className="text-[12px] text-slate-400">{fmtDate(v.createdAt)}</span>
                     </div>
-                    {v.note && <p className="text-[11px] text-slate-500 mt-1">{v.note}</p>}
-                    <p className="text-[11px] text-slate-400 mt-1 mb-1.5">by {v.createdBy}</p>
+                    {v.note && <p className="text-[12px] text-slate-500 mt-1">{v.note}</p>}
+                    <p className="text-[12px] text-slate-400 mt-1 mb-1.5">by {v.createdBy}</p>
                     <MultiFileUploadField label="" files={v.files} onChange={() => {}} readOnly />
                   </div>
                 ))}

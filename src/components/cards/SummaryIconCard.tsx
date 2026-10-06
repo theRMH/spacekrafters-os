@@ -27,7 +27,7 @@ export function SummaryIconCard({ icon: Icon, iconColor, iconBg, bgClass = 'bg-w
       </div>
       <p className="text-2xl font-extrabold text-slate-800 mt-3 leading-none">{value}</p>
       <p className={`text-xs font-bold mt-1 ${iconColor}`}>{title}</p>
-      {description && <p className="text-[11px] text-slate-400 mt-0.5">{description}</p>}
+      {description && <p className="text-[12px] text-slate-400 mt-0.5">{description}</p>}
     </button>
   )
 }

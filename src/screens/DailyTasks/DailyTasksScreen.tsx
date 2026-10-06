@@ -134,7 +134,7 @@ export default function DailyTasksScreen() {
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-800">{task.title}</p>
             {task.notes && <p className="text-xs text-slate-500 mt-0.5">{task.notes}</p>}
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className="text-[12px] text-slate-400 mt-1">
               {fmtDate(task.date)}{opts.showAssignedBy ? ` · Assigned by ${task.assignedBy}` : ''}
             </p>
           </div>
@@ -168,7 +168,7 @@ export default function DailyTasksScreen() {
 
       <div className="sticky top-14 z-20 bg-white px-4 pt-3.5 pb-3.5 border-b border-slate-100">
         <h1 className="text-base font-extrabold text-slate-800">Daily Task</h1>
-        <p className="text-[11px] text-slate-400 mt-1">
+        <p className="text-[12px] text-slate-400 mt-1">
           {canAssign ? 'Assign day-to-day tasks directly to any team member.' : 'Tasks assigned to you — tap Mark Done once complete.'}
         </p>
       </div>
@@ -184,7 +184,7 @@ export default function DailyTasksScreen() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-slate-800 truncate">{member.fullName}</p>
-                    <p className="text-[11px] text-slate-400">{getRoleDisplayLabel(member.role, member.displayRole)}</p>
+                    <p className="text-[12px] text-slate-400">{getRoleDisplayLabel(member.role, member.displayRole)}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {pendingCount > 0 && (
@@ -192,7 +192,7 @@ export default function DailyTasksScreen() {
                         {pendingCount} pending
                       </span>
                     )}
-                    <span className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600">
+                    <span className="flex items-center gap-1 text-[12px] font-semibold text-indigo-600">
                       <Plus size={13} /> Assign
                     </span>
                   </div>
@@ -245,7 +245,7 @@ export default function DailyTasksScreen() {
           </div>
 
           <div className="space-y-2.5">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Assigned so far</p>
+            <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Assigned so far</p>
             {assignTarget && tasksFor(assignTarget.id).map(task => renderTaskRow(task, { canManage: true }))}
             {assignTarget && tasksFor(assignTarget.id).length === 0 && (
               <p className="text-xs text-slate-400 text-center py-6">No tasks assigned yet</p>

@@ -406,13 +406,13 @@ export default function LeadsScreen() {
                   </div>
                   {lead.requirement && <p className="text-xs text-slate-600 truncate mb-1">{lead.requirement}</p>}
                   {lead.businessDivision && (
-                    <p className="text-[11px] text-indigo-500 font-medium truncate mb-1">
+                    <p className="text-[12px] text-indigo-500 font-medium truncate mb-1">
                       {BUSINESS_DIVISION_LABEL[lead.businessDivision]}
                       {lead.businessCategory ? ` · ${BUSINESS_CATEGORY_LABEL[lead.businessCategory]}` : ''}
                       {lead.businessBrand ? ` · ${BUSINESS_BRAND_LABEL[lead.businessBrand]}` : ''}
                     </p>
                   )}
-                  <p className="text-[11px] text-slate-400">{sourceLabel(lead)} · {lead.ownerName}</p>
+                  <p className="text-[12px] text-slate-400">{sourceLabel(lead)} · {lead.ownerName}</p>
                 </div>
                 {!selectMode && (
                   <div className="flex flex-col items-end gap-1 shrink-0">
@@ -503,7 +503,7 @@ export default function LeadsScreen() {
             </div>
 
             <div className="bg-white border border-slate-100 rounded-2xl p-4">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Activity Log</p>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-3">Activity Log</p>
               <div className="space-y-3 divide-y divide-slate-100">
                 {[...selected.activity].reverse().map((entry, i) => (
                   <div key={entry.id} className={i > 0 ? 'pt-3' : ''}>
@@ -512,9 +512,9 @@ export default function LeadsScreen() {
                         <div className="w-2 h-2 rounded-full" style={{ background: '#0F2A4A' }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-bold uppercase mb-0.5" style={{ color: '#0F2A4A' }}>{entry.label}</p>
+                        <p className="text-[11px] font-bold uppercase mb-0.5" style={{ color: '#0F2A4A' }}>{entry.label}</p>
                         {entry.note && <p className="text-xs text-slate-700 leading-relaxed">{entry.note}</p>}
-                        <p className="text-[10px] text-slate-400 mt-1">{entry.updatedBy} · {fmtDateTime(entry.updatedAt)}</p>
+                        <p className="text-[11px] text-slate-400 mt-1">{entry.updatedBy} · {fmtDateTime(entry.updatedAt)}</p>
                       </div>
                     </div>
                   </div>
@@ -530,7 +530,7 @@ export default function LeadsScreen() {
             {(can('edit_lead') || selected.assignedToId === user?.id) && selected.status !== 'won' && selected.status !== 'lost' && (
               <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                 <div>
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>
+                  <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>
                   <p className="text-sm font-bold text-slate-800 mt-1">{LEAD_STATUS_LABEL[selected.status]}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Responsible: {selected.assignedToName ?? (ROLE_FOR_LEAD_STATUS[selected.status] ? ROLE_LABELS[ROLE_FOR_LEAD_STATUS[selected.status]!] : '—')}

@@ -254,7 +254,7 @@ export default function FilesScreen() {
                 {CATEGORY_LABELS[f.category]}
               </span>
             </div>
-            <span className="text-[11px] text-slate-400 flex-shrink-0">{fmtDate(f.date)}</span>
+            <span className="text-[12px] text-slate-400 flex-shrink-0">{fmtDate(f.date)}</span>
           </button>
         ))}
 

@@ -191,7 +191,7 @@ export default function PersonalPlansScreen() {
                 <div className="text-right">
                   <p className="text-sm font-extrabold text-slate-800">{fmtCurrency(totalProjected)}</p>
                   {rows.length > 0 && (
-                    <p className={`text-[10px] font-semibold ${totalVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{fmtSigned(totalVariance)} vs actual</p>
+                    <p className={`text-[11px] font-semibold ${totalVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{fmtSigned(totalVariance)} vs actual</p>
                   )}
                 </div>
               </div>

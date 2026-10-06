@@ -502,7 +502,7 @@ export default function QuotationsScreen() {
                   <span className="text-xs text-slate-500">v{q.version}</span>
                 </div>
                 <p className="text-sm font-bold" style={{ color: '#0F2A4A' }}>{fmtCurrency(q.netAmount)}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">{fmtDate(q.updatedAt)}</p>
+                <p className="text-[12px] text-slate-400 mt-0.5">{fmtDate(q.updatedAt)}</p>
               </div>
               <StatusBadge status={q.status} label={QUOTATION_STATUS_LABEL[q.status]} size="xs" />
             </div>
@@ -544,7 +544,7 @@ export default function QuotationsScreen() {
             </div>
 
             <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Sections</p>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Sections</p>
               <div className="space-y-3">
                 {selected.sections.map(section => {
                   const sectionTotal = section.items.reduce((sum, i) => sum + i.amount, 0)
@@ -560,7 +560,7 @@ export default function QuotationsScreen() {
                             <span className="text-xs font-semibold text-slate-700">{item.description}</span>
                             <span className="text-xs font-bold text-slate-800">{fmtCurrency(item.amount)}</span>
                           </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5">
+                          <p className="text-[12px] text-slate-400 mt-0.5">
                             {item.quantity} {item.unit} × {fmtCurrency(item.rate)}{item.taxPercent ? ` · ${item.taxPercent}% tax` : ''}
                           </p>
                         </div>
@@ -583,7 +583,7 @@ export default function QuotationsScreen() {
 
             {selected.documentFiles && selected.documentFiles.length > 0 && (
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quotation Document</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quotation Document</p>
                 <MultiFileUploadField label="" files={selected.documentFiles} onChange={() => {}} readOnly />
               </div>
             )}
@@ -591,16 +591,16 @@ export default function QuotationsScreen() {
             {(selected.terms || selected.paymentTerms) && (
               <div className="space-y-2">
                 {selected.terms && (
-                  <div><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p><p className="text-xs text-slate-600">{selected.terms}</p></div>
+                  <div><p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p><p className="text-xs text-slate-600">{selected.terms}</p></div>
                 )}
                 {selected.paymentTerms && (
-                  <div><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p><p className="text-xs text-slate-600">{selected.paymentTerms}</p></div>
+                  <div><p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p><p className="text-xs text-slate-600">{selected.paymentTerms}</p></div>
                 )}
               </div>
             )}
 
             <div className="space-y-2">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status Actions</p>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Status Actions</p>
               <div className="flex flex-wrap gap-2">
                 {/* Quotations created before the approval flow was enforced can still be sitting in Draft. */}
                 {selected.status === 'draft' && can('create_quotation') && (
@@ -659,21 +659,21 @@ export default function QuotationsScreen() {
               <div className="bg-red-50 border border-red-100 rounded-2xl p-3.5">
                 <p className="text-xs font-bold text-red-700">Rejected by MD</p>
                 <p className="text-xs text-red-600 mt-0.5">{selected.rejectionReason}</p>
-                <p className="text-[11px] text-red-500 mt-1">Edit the quotation to address this and it goes back to the MD for approval.</p>
+                <p className="text-[12px] text-red-500 mt-1">Edit the quotation to address this and it goes back to the MD for approval.</p>
               </div>
             )}
 
             {(selected.statusHistory?.length ?? 0) > 0 && (
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Approval History</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Approval History</p>
                 <div className="space-y-2.5">
                   {[...(selected.statusHistory ?? [])].reverse().map((h, i) => (
                     <div key={i} className="flex items-start gap-2.5">
                       <span className="w-2 h-2 rounded-full bg-slate-800 mt-1.5 shrink-0" />
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-slate-800">{h.label}</p>
-                        {h.note && <p className="text-[11px] text-slate-500">{h.note}</p>}
-                        <p className="text-[10px] text-slate-400">
+                        {h.note && <p className="text-[12px] text-slate-500">{h.note}</p>}
+                        <p className="text-[11px] text-slate-400">
                           {h.by}{h.byRole ? ` (${ROLE_LABELS[h.byRole]})` : ''} · {new Date(h.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                         </p>
                       </div>
@@ -686,7 +686,7 @@ export default function QuotationsScreen() {
             {selected.status === 'client_approved' && selected.advanceStatus === 'without_advance' && !selected.advancePaymentReceived && (
               <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3.5">
                 <p className="text-xs font-bold text-amber-700">Advance status: Without Advance</p>
-                <p className="text-[11px] text-amber-600 mt-1">Design can be started for this lead in Design Center. Record the advance when the client pays it.</p>
+                <p className="text-[12px] text-amber-600 mt-1">Design can be started for this lead in Design Center. Record the advance when the client pays it.</p>
               </div>
             )}
 
@@ -697,7 +697,7 @@ export default function QuotationsScreen() {
                   {fmtCurrency(selected.advancePaymentAmount ?? 0)}{selected.advancePaymentRef ? ` · Ref: ${selected.advancePaymentRef}` : ''}
                   {selected.advancePaymentAt ? ` · ${fmtDate(selected.advancePaymentAt)}` : ''}
                 </p>
-                <p className="text-[11px] text-emerald-600 mt-1">Design can now be started for this lead in Design Center.</p>
+                <p className="text-[12px] text-emerald-600 mt-1">Design can now be started for this lead in Design Center.</p>
               </div>
             )}
 
@@ -756,7 +756,7 @@ export default function QuotationsScreen() {
               </div>
 
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Client</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Client</p>
                 <p className="text-sm font-semibold text-slate-800">{leadName(selected.leadId)}</p>
               </div>
 
@@ -768,7 +768,7 @@ export default function QuotationsScreen() {
                   + (sourceLead.businessBrand ? ` (${BUSINESS_BRAND_LABEL[sourceLead.businessBrand]})` : '')
                 return (
                   <div>
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Company / Brand</p>
+                    <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Company / Brand</p>
                     <p className="text-sm font-semibold text-slate-800">{label}</p>
                   </div>
                 )
@@ -812,10 +812,10 @@ export default function QuotationsScreen() {
               </div>
 
               {selected.terms && (
-                <div><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p><p className="text-xs text-slate-600">{selected.terms}</p></div>
+                <div><p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p><p className="text-xs text-slate-600">{selected.terms}</p></div>
               )}
               {selected.paymentTerms && (
-                <div><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p><p className="text-xs text-slate-600">{selected.paymentTerms}</p></div>
+                <div><p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p><p className="text-xs text-slate-600">{selected.paymentTerms}</p></div>
               )}
             </div>
           </div>
@@ -854,7 +854,7 @@ export default function QuotationsScreen() {
                 options={requirementsForLead(leadId).map(r => ({ value: r.id, label: requirementLabel(r) }))}
                 placeholder="None — build sections manually" searchPlaceholder="Search requirements…"
               />
-              <p className="text-[10px] text-slate-400 mt-1">Selecting a requirement pre-fills one section per room with its captured line items (rate defaults to 0).</p>
+              <p className="text-[11px] text-slate-400 mt-1">Selecting a requirement pre-fills one section per room with its captured line items (rate defaults to 0).</p>
             </div>
           )}
 
@@ -893,30 +893,30 @@ export default function QuotationsScreen() {
                           </div>
                           <div className="flex items-end gap-1.5">
                             <div className="w-[18%]">
-                              <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Qty</label>
+                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">Qty</label>
                               <input type="number" min="0" step="0.01" value={item.quantity || ''}
                                 onChange={e => updateItem(section.id, item.id, { quantity: parseFloat(e.target.value) || 0 })}
                                 className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
                             </div>
                             <div className="w-[22%]">
-                              <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Unit</label>
+                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">Unit</label>
                               <SearchableSelect compact value={item.unit} onChange={v => updateItem(section.id, item.id, { unit: v })}
                                 options={UNIT_OPTIONS.map(u => ({ value: u, label: u }))} />
                             </div>
                             <div className="w-[20%]">
-                              <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Rate</label>
+                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">Rate</label>
                               <input type="number" min="0" step="0.01" value={item.rate || ''}
                                 onChange={e => updateItem(section.id, item.id, { rate: parseFloat(e.target.value) || 0 })}
                                 className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
                             </div>
                             <div className="w-[15%]">
-                              <label className="block text-[9px] font-semibold text-slate-400 mb-0.5">Tax%</label>
+                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">Tax%</label>
                               <input type="number" min="0" step="0.01" value={item.taxPercent ?? ''}
                                 onChange={e => updateItem(section.id, item.id, { taxPercent: e.target.value ? parseFloat(e.target.value) : undefined })}
                                 className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
                             </div>
                             <div className="w-[25%]">
-                              <label className="block text-[9px] font-semibold text-slate-400 mb-0.5 text-right">Amount</label>
+                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5 text-right">Amount</label>
                               <span className="block text-right text-xs font-bold text-slate-700 py-1.5 truncate">{fmtCurrency(item.quantity * item.rate)}</span>
                             </div>
                           </div>

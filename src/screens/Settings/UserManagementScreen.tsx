@@ -324,7 +324,7 @@ export default function UserManagementScreen() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <h3 className="text-sm font-extrabold text-slate-800 truncate">{u.fullName}</h3>
-                        <p className="text-[11px] text-slate-400 mt-0.5">{u.mobile}</p>
+                        <p className="text-[12px] text-slate-400 mt-0.5">{u.mobile}</p>
                       </div>
                       <span className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
                         u.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
@@ -341,7 +341,7 @@ export default function UserManagementScreen() {
                       {getRoleDisplayLabel(u.role, u.displayRole)}
                     </span>
                     {u.department && (
-                      <span className="text-[10px] text-slate-400 truncate">{u.department}</span>
+                      <span className="text-[11px] text-slate-400 truncate">{u.department}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -370,7 +370,7 @@ export default function UserManagementScreen() {
                   </div>
                 </div>
 
-                <p className="text-[10px] text-slate-300 mt-2">
+                <p className="text-[11px] text-slate-300 mt-2">
                   Added {new Date(u.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                   {' '}by {u.createdBy}
                 </p>
@@ -418,7 +418,7 @@ export default function UserManagementScreen() {
                 />
                 {errors.mobile
                   ? <p className="text-xs text-red-500 mt-1">{errors.mobile}</p>
-                  : editUser && <p className="text-[11px] text-slate-400 mt-1">Changing this will update the login phone number (+91).</p>
+                  : editUser && <p className="text-[12px] text-slate-400 mt-1">Changing this will update the login phone number (+91).</p>
                 }
               </div>
 
@@ -473,7 +473,7 @@ export default function UserManagementScreen() {
                 <label className={lbl}>Display Title <span className="text-slate-300 font-normal normal-case">(optional)</span></label>
                 <input {...field('displayTitle')} className={inp}
                   placeholder={form.role ? ROLE_LABELS[form.role as UserRole] : 'e.g. MD, Junior Architect, Site Supervisor'} />
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-[12px] text-slate-400 mt-1">
                   What's shown for this person around the app (their real job title). Leave blank to just use the Role label above — the Role itself still controls what they can access.
                 </p>
               </div>
@@ -526,8 +526,8 @@ export default function UserManagementScreen() {
 
       {!isSupabaseConfigured && (
         <div className="mx-4 mb-4 mt-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
-          <p className="text-[11px] text-amber-700 font-semibold">Cross-device sync requires Supabase configuration.</p>
-          <p className="text-[10px] text-amber-600 mt-0.5">
+          <p className="text-[12px] text-amber-700 font-semibold">Cross-device sync requires Supabase configuration.</p>
+          <p className="text-[11px] text-amber-600 mt-0.5">
             Users are saved locally on this device only. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable cloud sync.
           </p>
         </div>

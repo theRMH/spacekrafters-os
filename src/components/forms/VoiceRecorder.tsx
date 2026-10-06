@@ -68,9 +68,9 @@ function VoiceNoteItem({ id, label, onRemove, uploading, failed, tooLarge, onRet
       </button>
       <div className="flex-1">
         <p className="text-xs font-semibold text-purple-700">{label}</p>
-        {uploading && <p className="text-[10px] text-purple-400">Saving — don't submit yet…</p>}
-        {failed && tooLarge && <p className="text-[10px] text-red-500 font-semibold">Recording too long — delete and re-record something shorter.</p>}
-        {failed && !tooLarge && <p className="text-[10px] text-red-500 font-semibold">Couldn't save — won't play for others.</p>}
+        {uploading && <p className="text-[11px] text-purple-400">Saving — don't submit yet…</p>}
+        {failed && tooLarge && <p className="text-[11px] text-red-500 font-semibold">Recording too long — delete and re-record something shorter.</p>}
+        {failed && !tooLarge && <p className="text-[11px] text-red-500 font-semibold">Couldn't save — won't play for others.</p>}
       </div>
       {failed && !tooLarge && (
         <button type="button" onClick={onRetry} className="text-[10px] font-extrabold text-red-600 underline flex-shrink-0">
@@ -188,12 +188,12 @@ export function VoiceRecorder({ label, savedIds, onAdd, onRemove, onReplace, hel
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-red-300 text-red-600 bg-red-50 text-sm font-semibold active:opacity-70">
             <Mic size={15} /> {savedIds.length > 0 ? 'Add Another Voice Note' : 'Start Recording'}
           </button>
-          {micErr && <p className="text-[11px] text-red-500">{micErr}</p>}
+          {micErr && <p className="text-[12px] text-red-500">{micErr}</p>}
         </>
       )}
 
       {helperText && (
-        <p className="text-[11px] text-slate-400">{helperText}</p>
+        <p className="text-[12px] text-slate-400">{helperText}</p>
       )}
     </div>
   )

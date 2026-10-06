@@ -214,7 +214,7 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
                           <span className="text-xs font-semibold text-slate-700">{item.description}</span>
                           <span className="text-xs font-bold text-slate-800">{fmtCurrency(item.amount)}</span>
                         </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
+                        <p className="text-[12px] text-slate-400 mt-0.5">
                           {item.quantity} {item.unit} × {fmtCurrency(item.rate)}{item.taxPercent ? ` · ${item.taxPercent}% tax` : ''}
                         </p>
                       </div>
@@ -235,12 +235,12 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
 
               {q.documentFiles && q.documentFiles.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quotation Documents</p>
+                  <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quotation Documents</p>
                   <MultiFileUploadField label="" files={q.documentFiles} onChange={() => {}} readOnly />
                 </div>
               )}
-              {q.terms && <div><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p><p className="text-xs text-slate-600">{q.terms}</p></div>}
-              {q.paymentTerms && <div><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p><p className="text-xs text-slate-600">{q.paymentTerms}</p></div>}
+              {q.terms && <div><p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p><p className="text-xs text-slate-600">{q.terms}</p></div>}
+              {q.paymentTerms && <div><p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p><p className="text-xs text-slate-600">{q.paymentTerms}</p></div>}
 
               {isClientStage
                 ? decisionFooter(() => decideClientApproval(true), () => decideClientApproval(false), 'Request Revision')
@@ -264,16 +264,16 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
               </div>
 
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Design Files</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Design Files</p>
                 <div className="space-y-2.5">
                   {pkgVersions.map(v => (
                     <div key={v.id} className="bg-white border border-slate-100 rounded-2xl p-3.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-800">Version {v.versionNumber}</span>
-                        <span className="text-[11px] text-slate-400">{fmtDateTime(v.createdAt)}</span>
+                        <span className="text-[12px] text-slate-400">{fmtDateTime(v.createdAt)}</span>
                       </div>
-                      {v.note && <p className="text-[11px] text-slate-500 mt-1">{v.note}</p>}
-                      <p className="text-[11px] text-slate-400 mt-1 mb-1.5">by {v.createdBy}</p>
+                      {v.note && <p className="text-[12px] text-slate-500 mt-1">{v.note}</p>}
+                      <p className="text-[12px] text-slate-400 mt-1 mb-1.5">by {v.createdBy}</p>
                       <MultiFileUploadField label="" files={v.files} onChange={() => {}} readOnly />
                     </div>
                   ))}

@@ -105,7 +105,7 @@ export function GanttChart({ tasks, dependencies, onTaskUpdated, canEditDeadline
           })}
         </div>
       </div>
-      <p className="text-[10px] text-slate-400 mt-3">Bar spans creation date → deadline. Red = overdue and not completed. Tap a bar to edit its deadline.</p>
+      <p className="text-[11px] text-slate-400 mt-3">Bar spans creation date → deadline. Red = overdue and not completed. Tap a bar to edit its deadline.</p>
 
       <BottomSheet isOpen={!!editing} onClose={() => setEditing(null)} title={editing ? `Edit Deadline — ${editing.title}` : ''}>
         <div className="space-y-4 pb-4">

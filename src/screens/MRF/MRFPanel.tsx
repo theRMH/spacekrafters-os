@@ -357,7 +357,7 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
       {/* Account Details — LO / MD only */}
       {isLoOrMd && (
         <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3.5 space-y-2">
-          <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Account Details</p>
+          <p className="text-[12px] font-bold text-amber-700 uppercase tracking-wider">Account Details</p>
           <div className="flex justify-between gap-3"><span className="text-xs text-slate-500">Payment Status</span><span className="text-xs font-semibold text-slate-700">{mrf.status === 'paid' ? 'Released / Paid' : 'Pending'}</span></div>
           <div className="flex justify-between gap-3"><span className="text-xs text-slate-500">Released Amount</span><span className="text-xs font-semibold text-slate-700">{fmtCurrency(mrf.releasedAmount)}</span></div>
           <div className="flex justify-between gap-3"><span className="text-xs text-slate-500">Release Date</span><span className="text-xs font-semibold text-slate-700">{fmtDate(mrf.releaseDate)}</span></div>
@@ -372,7 +372,7 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
       {/* Rejected — sent back to QS with the reason, for them to revise and resubmit */}
       {mrf.status === 'rejected' && (
         <div className="bg-red-50 border border-red-100 rounded-2xl p-3.5 space-y-1">
-          <p className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Rejected by Lead Owner</p>
+          <p className="text-[12px] font-bold text-red-700 uppercase tracking-wider">Rejected by Lead Owner</p>
           <p className="text-xs font-semibold text-slate-700 whitespace-pre-wrap">{mrf.approvalNotes || 'No reason given.'}</p>
         </div>
       )}
@@ -437,7 +437,7 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
           Procurement tab needs this as a permanent record, not just while pending. */}
       {(mrf.status === 'pending_procurement' || mrf.status === 'paid') && (
         <div className="space-y-3">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Vendors</p>
+          <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Vendors</p>
           {vendors.length === 0 && (
             <p className="text-xs text-slate-400">No vendors added yet.</p>
           )}
@@ -480,7 +480,7 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
       {(mrf.status === 'pending_procurement' || mrf.status === 'paid') && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Procurement Status</p>
+            <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Procurement Status</p>
             <PermissionGate permission="set_mrf_dates">
               <button onClick={() => setShowProcurementStatus(true)} className="text-xs font-semibold text-indigo-600">
                 Update
@@ -507,8 +507,8 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
                   <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: h.isDelay ? '#d97706' : '#0F2A4A' }} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-slate-700">{h.status}{h.isDelay ? ' (Delay)' : ''}</p>
-                    {h.notes && <p className="text-[11px] text-slate-500">{h.notes}</p>}
-                    <p className="text-[11px] text-slate-400">{h.updatedBy} · {fmtDateTime(h.updatedAt)}</p>
+                    {h.notes && <p className="text-[12px] text-slate-500">{h.notes}</p>}
+                    <p className="text-[12px] text-slate-400">{h.updatedBy} · {fmtDateTime(h.updatedAt)}</p>
                   </div>
                 </div>
               ))}
@@ -520,7 +520,7 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
       {/* Accounts: release the payment */}
       {mrf.status === 'pending_procurement' && can('release_mrf_payment') && (
         <div className="space-y-2">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Release Payment</p>
+          <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Release Payment</p>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Released Amount (₹) *</label>
             <input type="number" min="0" value={releasedAmount} onChange={e => setReleasedAmount(e.target.value)}
@@ -548,14 +548,14 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
       )}
 
       <div>
-        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">History</p>
+        <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">History</p>
         <div className="space-y-2.5">
           {[...mrf.history].reverse().map((h, i) => (
             <div key={i} className="flex gap-2.5">
               <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: '#0F2A4A' }} />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-slate-700">{h.note}</p>
-                <p className="text-[11px] text-slate-400">{h.updatedBy} · {fmtDateTime(h.updatedAt)}</p>
+                <p className="text-[12px] text-slate-400">{h.updatedBy} · {fmtDateTime(h.updatedAt)}</p>
               </div>
             </div>
           ))}
@@ -684,7 +684,7 @@ export function MRFPanel({ projectId, projectName, leadId }: { projectId: string
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-slate-800">{fmtDate(mrf.createdAt)}</p>
                 {mrf.requestingDate && (
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-[12px] text-slate-400 mt-0.5">
                     Req: {fmtDate(mrf.requestingDate)} · Delivery: {fmtDate(mrf.expectedDeliveryDate)}
                   </p>
                 )}
@@ -777,20 +777,20 @@ export function ProjectProcurementPanel({ projectId, projectName, leadId }: { pr
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-slate-800 truncate">{mrf.materialDetails || 'Untitled MRF'}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">{fmtDate(mrf.createdAt)}</p>
+                <p className="text-[12px] text-slate-400 mt-0.5">{fmtDate(mrf.createdAt)}</p>
                 {(() => {
                   const vendorNames = migrateMrfVendors(mrf).map(v => v.name)
                   return vendorNames.length > 0 && (
-                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">Vendor(s): {vendorNames.join(', ')}</p>
+                    <p className="text-[12px] text-slate-500 mt-0.5 truncate">Vendor(s): {vendorNames.join(', ')}</p>
                   )
                 })()}
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
                 <StatusBadge status={mrf.status} label={MRF_STATUS_LABEL[mrf.status]} size="xs" />
                 {mrf.status === 'paid' ? (
-                  <span className="text-[11px] font-semibold text-emerald-700">{fmtCurrency(mrf.releasedAmount)} paid</span>
+                  <span className="text-[12px] font-semibold text-emerald-700">{fmtCurrency(mrf.releasedAmount)} paid</span>
                 ) : (
-                  <span className="text-[11px] font-semibold text-amber-600">Payment pending</span>
+                  <span className="text-[12px] font-semibold text-amber-600">Payment pending</span>
                 )}
               </div>
             </div>

@@ -41,7 +41,7 @@ export function Timeline({ items }: Props) {
               {item.label}
             </p>
             {item.date && (
-              <p className="text-[11px] text-slate-400 mt-0.5">{item.date}</p>
+              <p className="text-[12px] text-slate-400 mt-0.5">{item.date}</p>
             )}
             {item.description && (
               <p className={`text-xs mt-1 ${item.status === 'rejected' ? 'text-red-500' : 'text-slate-500'}`}>{item.description}</p>

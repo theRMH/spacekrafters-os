@@ -125,7 +125,7 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
         </button>
       )}
       {atMax && !readOnly && (
-        <p className="text-[11px] text-slate-400 mt-1">File uploaded. Remove it below to upload a different one.</p>
+        <p className="text-[12px] text-slate-400 mt-1">File uploaded. Remove it below to upload a different one.</p>
       )}
 
       {!readOnly && (
@@ -140,10 +140,10 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
       )}
 
       {helperText && !error && !uploadError && (
-        <p className="text-[11px] text-slate-400 mt-1">{helperText}</p>
+        <p className="text-[12px] text-slate-400 mt-1">{helperText}</p>
       )}
       {(error || uploadError) && (
-        <p className="text-[11px] text-red-500 font-semibold mt-1">{uploadError ?? error}</p>
+        <p className="text-[12px] text-red-500 font-semibold mt-1">{uploadError ?? error}</p>
       )}
 
       {/* File list */}
@@ -166,7 +166,7 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-slate-700 truncate">{getDisplayFileName(name)}</p>
-                  <p className="text-[10px] text-slate-400 truncate">
+                  <p className="text-[11px] text-slate-400 truncate">
                     {getFileTypeLabel(name)}{uploadedAt ? ` · ${fmtUploadedAt(uploadedAt)}` : ''}
                   </p>
                 </div>
@@ -192,7 +192,7 @@ export function MultiFileUploadField({ label, files, onChange, accept = DEFAULT_
               </div>
             )
           })}
-          <p className="text-[11px] text-slate-400">{files.length} file{files.length > 1 ? 's' : ''} selected</p>
+          <p className="text-[12px] text-slate-400">{files.length} file{files.length > 1 ? 's' : ''} selected</p>
         </div>
       )}
 

@@ -290,7 +290,7 @@ export default function VendorMasterScreen() {
                         <StatusBadge status={po.status} />
                         <span className="text-sm font-bold text-slate-800">{fmtCurrency(po.amount)}</span>
                       </div>
-                      <p className="text-[11px] text-slate-400">Issued {fmtDate(po.issuedAt)}</p>
+                      <p className="text-[12px] text-slate-400">Issued {fmtDate(po.issuedAt)}</p>
                     </div>
                   ))
                 )}

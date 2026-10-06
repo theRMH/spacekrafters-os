@@ -158,7 +158,7 @@ export default function SettingsScreen() {
         {/* User Management */}
         {user && can('manage_users') && (
           <div>
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-2">User Management</p>
+            <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-2">User Management</p>
             <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
               <button
                 onClick={() => navigate('/settings/users')}
@@ -169,7 +169,7 @@ export default function SettingsScreen() {
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-slate-700">Manage Users</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Create, edit and deactivate users</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Create, edit and deactivate users</p>
                 </div>
                 <ChevronRight size={15} className="text-slate-300 flex-shrink-0" />
               </button>
@@ -180,7 +180,7 @@ export default function SettingsScreen() {
         {/* Attendance Settings */}
         {user && can('manage_settings') && (
           <div>
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-2">Attendance</p>
+            <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-2">Attendance</p>
             <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
               <button
                 onClick={() => navigate('/settings/attendance')}
@@ -191,7 +191,7 @@ export default function SettingsScreen() {
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-slate-700">Attendance Settings</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Office timing for late/early calculation</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Office timing for late/early calculation</p>
                 </div>
                 <ChevronRight size={15} className="text-slate-300 flex-shrink-0" />
               </button>
@@ -202,7 +202,7 @@ export default function SettingsScreen() {
         {/* Preferences */}
         {notifSupported && (
           <div>
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-2">Preferences</p>
+            <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-2">Preferences</p>
             <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
               <div className="flex items-center gap-3 px-4 py-3.5">
                 <div className="w-8 h-8 bg-slate-50 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -210,7 +210,7 @@ export default function SettingsScreen() {
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-slate-700">Push Notifications</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Get notified when work is assigned to you</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Get notified when work is assigned to you</p>
                 </div>
                 <button
                   onClick={handleToggleNotifications}
@@ -226,7 +226,7 @@ export default function SettingsScreen() {
 
         {/* Account */}
         <div>
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-2">Account</p>
+          <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-2">Account</p>
           <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
             <button
               onClick={() => setShowLogout(true)}
@@ -243,7 +243,7 @@ export default function SettingsScreen() {
 
       <div className="text-center py-8 space-y-1">
         <p className="text-xs text-slate-400 font-medium">SpaceKrafters Operations</p>
-        <p className="text-[10px] text-slate-300">v1.0.0</p>
+        <p className="text-[11px] text-slate-300">v1.0.0</p>
       </div>
 
       {/* Profile Edit Sheet */}

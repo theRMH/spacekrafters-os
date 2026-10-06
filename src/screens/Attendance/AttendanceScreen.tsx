@@ -418,7 +418,7 @@ export default function AttendanceScreen() {
           )}
         </div>
         {row.rec && (row.rec.startTime || row.rec.endTime) && (
-          <div className="flex items-center gap-4 mt-1.5 text-[11px] text-slate-500">
+          <div className="flex items-center gap-4 mt-1.5 text-[12px] text-slate-500">
             <span>In: <span className="font-semibold text-slate-700">{fmtTime(row.rec.startTime)}</span></span>
             <span>Out: <span className="font-semibold text-slate-700">{fmtTime(row.rec.endTime)}</span></span>
             <span>Duration: <span className="font-semibold text-slate-700">{fmtDuration(row.rec.startTime, row.rec.endTime)}</span></span>
@@ -427,7 +427,7 @@ export default function AttendanceScreen() {
         {attendanceSettings && row.rec?.startTime && (() => {
           const diff = minutesFromOfficeTime(row.rec!.startTime!, attendanceSettings.startTime)
           return (
-            <p className="mt-1 text-[11px] font-semibold">
+            <p className="mt-1 text-[12px] font-semibold">
               <span className={diff > 0 ? 'text-red-600' : 'text-emerald-600'}>
                 {diff > 0 ? `Late by ${fmtMinutes(diff)}` : 'On time'}
               </span>
@@ -440,7 +440,7 @@ export default function AttendanceScreen() {
           )
         })()}
         {row.status === 'absent' && row.rec?.reason && (
-          <p className="mt-1.5 text-[11px] text-slate-500">Reason: {row.rec.reason}</p>
+          <p className="mt-1.5 text-[12px] text-slate-500">Reason: {row.rec.reason}</p>
         )}
         {captureThumbnails(row.rec)}
       </div>
@@ -508,7 +508,7 @@ export default function AttendanceScreen() {
               {selectedDateKey === todayKey && (
                 <>
                   {!attendanceSettings && (
-                    <p className="text-[11px] text-amber-600 font-medium mb-2">
+                    <p className="text-[12px] text-amber-600 font-medium mb-2">
                       Office timing has not been configured yet. Contact your administrator.
                     </p>
                   )}
@@ -531,7 +531,7 @@ export default function AttendanceScreen() {
                     </button>
                   </div>
                   {attendanceSettings && (myTodayRecord?.startTime || myTodayRecord?.endTime) && (
-                    <div className="flex gap-4 mb-3 mt-1.5 text-[11px]">
+                    <div className="flex gap-4 mb-3 mt-1.5 text-[12px]">
                       {myTodayRecord?.startTime && (() => {
                         const diff = minutesFromOfficeTime(myTodayRecord.startTime, attendanceSettings.startTime)
                         return <span className={diff > 0 ? 'text-red-600 font-semibold' : 'text-emerald-600 font-semibold'}>
@@ -548,7 +548,7 @@ export default function AttendanceScreen() {
                   )}
                 </>
               )}
-              <p className="text-[11px] text-slate-400 mb-2">
+              <p className="text-[12px] text-slate-400 mb-2">
                 Status: <span className={`font-bold ${effectiveStatus(user?.id ?? '', selectedDateKey) ? STATUS_STYLE[effectiveStatus(user?.id ?? '', selectedDateKey)!].split(' ')[1] : 'text-slate-400'}`}>
                   {effectiveStatus(user?.id ?? '', selectedDateKey)
                     ? STATUS_OPTIONS.find(o => o.value === effectiveStatus(user?.id ?? '', selectedDateKey))?.label
@@ -696,7 +696,7 @@ export default function AttendanceScreen() {
           <div className="px-4 pt-6">
             <div className="bg-white rounded-2xl border border-slate-100 p-4">
               <p className="text-base font-extrabold text-slate-800 mb-2">My Payable Days — {monthLabel}</p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-slate-500">
                 <span>Present: <span className="font-semibold text-emerald-700">{summary.present}</span></span>
                 <span>Half Day: <span className="font-semibold text-amber-700">{summary.half}</span></span>
                 <span>Absent: <span className="font-semibold text-red-700">{summary.absent}</span></span>
@@ -704,7 +704,7 @@ export default function AttendanceScreen() {
               <p className="mt-2 text-lg font-extrabold text-slate-800">
                 {summary.payableDays} <span className="text-xs font-semibold text-slate-400">/ {summary.marked} days marked</span>
               </p>
-              <p className="mt-1 text-[10px] text-slate-400">Half Day counts as 0.5; Absent counts as 0 toward payable days.</p>
+              <p className="mt-1 text-[11px] text-slate-400">Half Day counts as 0.5; Absent counts as 0 toward payable days.</p>
             </div>
           </div>
         )
@@ -714,7 +714,7 @@ export default function AttendanceScreen() {
         <div className="bg-white rounded-2xl border border-slate-100 p-3">
           <div className="grid grid-cols-7 gap-1 mb-1">
             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-              <div key={i} className="text-center text-[10px] font-bold text-slate-400">{d}</div>
+              <div key={i} className="text-center text-[11px] font-bold text-slate-400">{d}</div>
             ))}
           </div>
           <div className="grid grid-cols-7 gap-1">
@@ -743,7 +743,7 @@ export default function AttendanceScreen() {
           {STATUS_OPTIONS.map(opt => (
             <div key={opt.value} className="flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${opt.dot}`} />
-              <span className="text-[11px] text-slate-500">{opt.label}</span>
+              <span className="text-[12px] text-slate-500">{opt.label}</span>
             </div>
           ))}
         </div>

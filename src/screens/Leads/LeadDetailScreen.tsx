@@ -155,7 +155,7 @@ export default function LeadDetailScreen() {
             {(can('edit_lead') || lead.assignedToId === user?.id) && lead.status !== 'won' && lead.status !== 'lost' && (
               <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                 <div>
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>
+                  <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>
                   <p className="text-sm font-bold text-slate-800 mt-1">{LEAD_STATUS_LABEL[lead.status]}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Responsible: {lead.assignedToName ?? (ROLE_FOR_LEAD_STATUS[lead.status] ? ROLE_LABELS[ROLE_FOR_LEAD_STATUS[lead.status]!] : '—')}
@@ -174,7 +174,7 @@ export default function LeadDetailScreen() {
             )}
             {lead.status === 'lost' && lead.lostReason && (
               <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
-                <p className="text-[11px] font-bold text-red-400 uppercase tracking-wider mb-1">Lost Reason</p>
+                <p className="text-[12px] font-bold text-red-400 uppercase tracking-wider mb-1">Lost Reason</p>
                 <p className="text-sm text-red-700">{lead.lostReason}</p>
               </div>
             )}
@@ -189,7 +189,7 @@ export default function LeadDetailScreen() {
                   <div>
                     <p className="text-sm font-bold text-slate-800">{fmtDateTime(a.scheduledAt)}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{a.location}</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Coordinator: {a.coordinatorName}</p>
+                    <p className="text-[12px] text-slate-400 mt-0.5">Coordinator: {a.coordinatorName}</p>
                   </div>
                   <StatusBadge status={a.status} size="xs" />
                 </div>
@@ -208,7 +208,7 @@ export default function LeadDetailScreen() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-bold text-slate-800">Due {fmtDate(f.dueDate)}</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{f.ownerName}</p>
+                    <p className="text-[12px] text-slate-400 mt-0.5">{f.ownerName}</p>
                     {f.outcomeNote && <p className="text-xs text-slate-600 mt-1">{f.outcomeNote}</p>}
                   </div>
                   <StatusBadge status={f.status} size="xs" />
@@ -227,7 +227,7 @@ export default function LeadDetailScreen() {
               <div key={v.id} className="bg-white rounded-2xl border border-slate-100 p-4">
                 <p className="text-sm font-bold text-slate-800">{fmtDate(v.visitDate)}</p>
                 <p className="text-xs text-slate-600 mt-1">{v.rooms.length} room{v.rooms.length !== 1 ? 's' : ''} measured</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-[12px] text-slate-400 mt-0.5">
                   {v.checklist.filter(c => c.checked).length}/{v.checklist.length} checklist items done
                 </p>
               </div>
@@ -248,9 +248,9 @@ export default function LeadDetailScreen() {
                       <div className="w-2 h-2 rounded-full" style={{ background: '#0F2A4A' }} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-bold uppercase mb-0.5" style={{ color: '#0F2A4A' }}>{entry.label}</p>
+                      <p className="text-[11px] font-bold uppercase mb-0.5" style={{ color: '#0F2A4A' }}>{entry.label}</p>
                       {entry.note && <p className="text-xs text-slate-700 leading-relaxed">{entry.note}</p>}
-                      <p className="text-[10px] text-slate-400 mt-1">{entry.updatedBy} · {fmtDateTime(entry.updatedAt)}</p>
+                      <p className="text-[11px] text-slate-400 mt-1">{entry.updatedBy} · {fmtDateTime(entry.updatedAt)}</p>
                     </div>
                   </div>
                 </div>

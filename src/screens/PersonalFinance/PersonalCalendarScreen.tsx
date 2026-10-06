@@ -93,7 +93,7 @@ export default function PersonalCalendarScreen() {
         <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
           <div className="grid grid-cols-7 mb-1">
             {WEEKDAY_LABEL.map((w, i) => (
-              <p key={i} className="text-center text-[10px] font-bold text-slate-300 py-1">{w}</p>
+              <p key={i} className="text-center text-[11px] font-bold text-slate-300 py-1">{w}</p>
             ))}
           </div>
           <div className="grid grid-cols-7 gap-1">

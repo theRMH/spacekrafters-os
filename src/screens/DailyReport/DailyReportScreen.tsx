@@ -239,7 +239,7 @@ export default function DailyReportScreen() {
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-bold text-slate-800">{projectName(report.projectId)}</span>
                 <p className="text-xs text-slate-500 mt-0.5">{fmtDate(report.date)} · {report.totalLabourCount} labour</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">{report.natureOfWork}</p>
+                <p className="text-[12px] text-slate-400 mt-0.5">{report.natureOfWork}</p>
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
                 {report.locked ? (
@@ -290,7 +290,7 @@ export default function DailyReportScreen() {
 
             {selected.areas.length > 0 && (
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Labour by Area</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Labour by Area</p>
                 <div className="space-y-1.5">
                   {selected.areas.map(a => (
                     <div key={a.id} className="flex justify-between text-xs bg-white border border-slate-100 rounded-xl px-3.5 py-2.5">
@@ -330,15 +330,15 @@ export default function DailyReportScreen() {
             )}
 
             <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">History</p>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">History</p>
               <div className="space-y-2.5">
                 {[...selected.editHistory].reverse().map((h, i) => (
                   <div key={i} className="flex gap-2.5">
                     <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: '#0F2A4A' }} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-slate-700 capitalize">{h.action.replace(/_/g, ' ')}</p>
-                      {h.note && <p className="text-[11px] text-slate-500">{h.note}</p>}
-                      <p className="text-[11px] text-slate-400">{h.updatedBy} · {fmtDateTime(h.updatedAt)}</p>
+                      {h.note && <p className="text-[12px] text-slate-500">{h.note}</p>}
+                      <p className="text-[12px] text-slate-400">{h.updatedBy} · {fmtDateTime(h.updatedAt)}</p>
                     </div>
                   </div>
                 ))}
@@ -435,7 +435,7 @@ export default function DailyReportScreen() {
         <div className="space-y-3 pb-4">
           {selected?.editRequestReason && (
             <div className="bg-slate-50 rounded-xl p-3">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Reason for edit</p>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Reason for edit</p>
               <p className="text-xs text-slate-700">{selected.editRequestReason}</p>
             </div>
           )}

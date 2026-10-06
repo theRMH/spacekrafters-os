@@ -43,7 +43,7 @@ export function NavigationBar() {
   return (
     <nav
       aria-label="Bottom navigation"
-      className="lg:hidden fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] bg-white border-t border-slate-200 shadow-nav z-40 safe-bottom"
+      className="app-chrome lg:hidden fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] bg-white border-t border-slate-200 shadow-nav z-40 safe-bottom"
     >
       <div className="flex items-center px-1">
         {items.map(({ icon: Icon, label, path }) => {

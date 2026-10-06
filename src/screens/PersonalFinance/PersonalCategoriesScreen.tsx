@@ -165,7 +165,7 @@ export default function PersonalCategoriesScreen() {
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="font-bold text-sm text-slate-800">{category.name}</p>
-                <p className="text-[11px] text-slate-400">{category.groupName}</p>
+                <p className="text-[12px] text-slate-400">{category.groupName}</p>
               </div>
               {category.code && (
                 <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{category.code}</span>

@@ -184,7 +184,7 @@ export default function WeeklyPlannerScreen() {
             <ChevronRight size={18} className="text-slate-500" />
           </button>
         </div>
-        <p className="text-[11px] text-slate-400 mt-1">
+        <p className="text-[12px] text-slate-400 mt-1">
           {canManageTeam ? 'Visible to the whole team — tap a day on your own row to plan it.' : 'Only you can see this — tap a day to plan it.'}
         </p>
       </div>
@@ -197,7 +197,7 @@ export default function WeeklyPlannerScreen() {
               <div className="flex items-center justify-between mb-2.5">
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-slate-800 truncate">{member.fullName}{isSelf ? ' (Me)' : ''}</p>
-                  <p className="text-[11px] text-slate-400">{getRoleDisplayLabel(member.role, member.displayRole)}</p>
+                  <p className="text-[12px] text-slate-400">{getRoleDisplayLabel(member.role, member.displayRole)}</p>
                 </div>
               </div>
               <div className="grid grid-cols-7 gap-1">
@@ -217,8 +217,8 @@ export default function WeeklyPlannerScreen() {
                         entry ? 'bg-indigo-50 border-indigo-200' : hasActivity ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'
                       } ${!clickable ? 'opacity-60' : 'active:opacity-80'}`}
                     >
-                      <p className="text-[8px] font-bold text-slate-400">{DAY_LABELS[i]}</p>
-                      <p className={`text-[9px] leading-tight mt-0.5 line-clamp-2 ${
+                      <p className="text-[9px] font-bold text-slate-400">{DAY_LABELS[i]}</p>
+                      <p className={`text-[10px] leading-tight mt-0.5 line-clamp-2 ${
                         entry ? 'text-indigo-700 font-semibold' : hasActivity ? 'text-emerald-700 font-semibold' : 'text-slate-400'
                       }`}>
                         {cellText ?? (isSelf ? '+ Add' : '—')}

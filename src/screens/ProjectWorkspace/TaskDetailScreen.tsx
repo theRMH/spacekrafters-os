@@ -258,7 +258,7 @@ export default function TaskDetailScreen() {
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Subtasks</p>
+            <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Subtasks</p>
             <PermissionGate permission="add_subtask">
               <button onClick={() => setShowSubtaskSheet(true)} className="text-xs font-semibold text-indigo-600 flex items-center gap-1">
                 <Plus size={13} /> Add
@@ -273,7 +273,7 @@ export default function TaskDetailScreen() {
                 <div key={sub.id} className="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
                   <div>
                     <span className="text-sm text-slate-800">{sub.title}</span>
-                    {canManageTasks && sub.assigneeName && <p className="text-[11px] text-slate-400 mt-0.5">{sub.assigneeName}</p>}
+                    {canManageTasks && sub.assigneeName && <p className="text-[12px] text-slate-400 mt-0.5">{sub.assigneeName}</p>}
                   </div>
                   <StatusBadge status={sub.status} size="xs" />
                 </div>
@@ -284,7 +284,7 @@ export default function TaskDetailScreen() {
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Dependencies</p>
+            <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Dependencies</p>
             <PermissionGate permission="edit_task">
               <button onClick={() => setShowDepSheet(true)} className="text-xs font-semibold text-indigo-600 flex items-center gap-1">
                 <Plus size={13} /> Add

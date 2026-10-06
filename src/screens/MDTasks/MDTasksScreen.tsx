@@ -9,6 +9,7 @@ import { ApprovalReviewSheets, fmtCurrency, fmtDateTime, submitter } from './App
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllAppointments, upsertAppointment } from '../../services/appointmentService'
+import { toProperIso } from '../Appointments/appointmentDate'
 import { getAllQuotations } from '../../services/quotationService'
 import { getAllDesignPackages, getAllDesignVersions } from '../../services/designService'
 import { getAllProjects } from '../../services/projectService'
@@ -17,7 +18,7 @@ import { getManagedUsersDirectory } from '../../services/userService'
 import { PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
 import { ROLE_FOR_LEAD_STATUS } from '../Leads/LeadStatusSheet'
 import { sendNotification } from '../../utils/notifications'
-import { countMdDecisions } from '../../utils/approvalHistory'
+import { countMdDecisions, rescheduleDecisions } from '../../utils/approvalHistory'
 import type { Appointment, Quotation, DesignPackage, DesignVersion, Project, Task, TaskStatus, ManagedUser } from '../../types'
 
 const TASK_STATUS: Record<TaskStatus, { label: string; cls: string }> = {
@@ -57,6 +58,7 @@ export default function MDTasksScreen() {
   const [doneHistoryOpen, setDoneHistoryOpen] = useState(false)
   const [assignedTasksOpen, setAssignedTasksOpen] = useState(false)
   const [mdApprovalsOpen, setMdApprovalsOpen] = useState(false)
+  const [rescheduleHistoryOpen, setRescheduleHistoryOpen] = useState(false)
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [packages, setPackages] = useState<DesignPackage[]>([])
@@ -85,6 +87,7 @@ export default function MDTasksScreen() {
   useEffect(() => { load() }, [])
 
   const pending = appointments.filter(a => a.rescheduleRequestStatus === 'requested')
+  const rescheduleHistoryCount = appointments.reduce((n, a) => n + rescheduleDecisions(a).length, 0)
   const pendingQuotes = quotations.filter(q => q.status === 'internal_review')
   const pendingDesigns = packages.filter(p => p.status === 'internal_review')
   const pendingStageProjects = projects.filter(p => p.pendingStageRequest)
@@ -164,7 +167,12 @@ export default function MDTasksScreen() {
     const updated: Appointment = {
       ...selected,
       status: approved ? 'scheduled' : selected.status,
-      scheduledAt: approved ? (selected.rescheduledDate || selected.scheduledAt) : selected.scheduledAt,
+      // Normalized through Date/toISOString rather than used raw — protects
+      // against any already-stored rescheduledDate that predates it being
+      // saved as a proper ISO string (see LeadStatusSheet.tsx submitReschedule).
+      scheduledAt: approved
+        ? (selected.rescheduledDate ? toProperIso(selected.rescheduledDate) : selected.scheduledAt)
+        : selected.scheduledAt,
       rescheduleRequestStatus: approved ? 'accepted' : 'rejected',
       rescheduleAcceptedBy: approved ? user?.name : undefined,
       rescheduleAcceptedAt: approved ? now : undefined,
@@ -237,7 +245,7 @@ export default function MDTasksScreen() {
           onKeyDown={e => { if (e.key === 'Enter') { setMdApprovalsOpen(true); approvalsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) } }}
           className="rounded-2xl border p-5 flex items-center justify-between cursor-pointer" style={{ background: '#DBEAFE', borderColor: '#BFDBFE' }}>
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#1D4ED8' }}>MD Approvals</p>
+            <p className="text-[12px] font-bold uppercase tracking-wide" style={{ color: '#1D4ED8' }}>MD Approvals</p>
             <p className="text-4xl font-extrabold leading-tight" style={{ color: '#1D4ED8' }}>{taskItems.length}</p>
             <p className="text-sm" style={{ color: '#1D4ED8' }}>waiting for your review</p>
           </div>
@@ -255,15 +263,58 @@ export default function MDTasksScreen() {
             <div key={label} className="bg-white rounded-2xl shadow-card border border-slate-100 py-3.5 px-1.5 flex flex-col items-center text-center">
               <span className={`w-9 h-9 rounded-xl flex items-center justify-center mb-1.5 ${tint}`}><Icon size={17} /></span>
               <span className="text-2xl font-extrabold text-slate-800 leading-none">{value}</span>
-              <span className="text-[10px] font-semibold text-slate-400 mt-1.5">{label}</span>
+              <span className="text-[11px] font-semibold text-slate-400 mt-1.5">{label}</span>
             </div>
           ))}
         </div>
 
-        {/* Assigned tasks — the real project tasks, kept separate from the MD approvals below.
+        {/* MD approvals (reschedule requests, quotations, designs) — shown
+            first since this is the action list the MD needs to clear.
+            Collapsed by default; click the header to expand/collapse. */}
+        <button ref={approvalsRef} type="button" onClick={() => setMdApprovalsOpen(o => !o)} aria-expanded={mdApprovalsOpen}
+          className="w-full flex items-center gap-2 pt-1 text-left">
+          <span className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0"><CalendarCheck size={16} /></span>
+          <h2 className="text-base font-extrabold text-slate-800">MD Approvals – Ready for Next Step</h2>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">{taskItems.length}</span>
+          <ChevronDown size={18} className={`ml-auto text-slate-400 transition-transform ${mdApprovalsOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {mdApprovalsOpen && (
+          <>
+            {!isLoading && taskItems.length === 0 && (
+              <p className="text-sm text-slate-400 text-center py-10">No pending tasks.</p>
+            )}
+
+            <div className="grid gap-3 xl:grid-cols-2">
+              {taskItems.map(item => (
+                <div key={item.key} className="bg-white rounded-2xl shadow-card border border-slate-100 p-5">
+                  <div className="flex justify-end">
+                    <span className={`text-[11px] font-bold px-3 py-1 rounded-full ${item.badgeCls}`}>{item.badge}</span>
+                  </div>
+                  <h3 className="text-base font-extrabold text-slate-800 mt-1">{item.title}</h3>
+                  <p className="text-sm text-slate-600 mt-3 break-words">
+                    <span className="text-slate-400">{item.subjectLabel}: </span>
+                    <span className="font-semibold">{item.client}</span>
+                  </p>
+                  {item.details.map((d, i) => <p key={i} className="text-sm text-slate-400 break-words mt-1">{d}</p>)}
+                  <p className="text-sm font-semibold text-teal-700 mt-3">{item.person}</p>
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+                    <span className="text-xs font-semibold px-3.5 py-1.5 rounded-full bg-slate-100 text-slate-500">Pending</span>
+                    <button onClick={item.open}
+                      className="px-5 py-2.5 rounded-2xl text-sm font-bold text-white bg-blue-600 active:bg-blue-700">
+                      Update Status
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Assigned tasks — the real project tasks, kept separate from the MD approvals above.
             Collapsed by default; click the header to expand/collapse. */}
         <button type="button" onClick={() => setAssignedTasksOpen(o => !o)} aria-expanded={assignedTasksOpen}
-          className="w-full flex items-center gap-2 pt-1 text-left">
+          className="w-full flex items-center gap-2 pt-3 text-left">
           <span className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0"><ClipboardList size={16} /></span>
           <h2 className="text-base font-extrabold text-slate-800">Assigned Tasks</h2>
           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">{sortedTasks.length}</span>
@@ -313,9 +364,8 @@ export default function MDTasksScreen() {
         <button type="button" onClick={() => setDoneHistoryOpen(o => !o)} aria-expanded={doneHistoryOpen}
           className="w-full flex items-center gap-2 pt-3 text-left">
           <span className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><CheckCircle2 size={16} /></span>
-          <h2 className="text-base font-extrabold text-slate-800">
-            Done History <span className="text-slate-400 font-semibold">({completedTasks.length})</span>
-          </h2>
+          <h2 className="text-base font-extrabold text-slate-800">Done History</h2>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{completedTasks.length}</span>
           <ChevronDown size={18} className={`ml-auto text-slate-400 transition-transform ${doneHistoryOpen ? 'rotate-180' : ''}`} />
         </button>
 
@@ -353,49 +403,18 @@ export default function MDTasksScreen() {
           </>
         )}
 
-        {/* MD approvals (reschedule requests, quotations, designs) —
-            collapsed by default; click the header to expand/collapse. */}
-        <button ref={approvalsRef} type="button" onClick={() => setMdApprovalsOpen(o => !o)} aria-expanded={mdApprovalsOpen}
+        {/* Reschedule History — collapsed by default, same pattern as the sections above. */}
+        <button type="button" onClick={() => setRescheduleHistoryOpen(o => !o)} aria-expanded={rescheduleHistoryOpen}
           className="w-full flex items-center gap-2 pt-3 text-left">
-          <span className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0"><CalendarCheck size={16} /></span>
-          <h2 className="text-base font-extrabold text-slate-800">MD Approvals – Ready for Next Step</h2>
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">{taskItems.length}</span>
-          <ChevronDown size={18} className={`ml-auto text-slate-400 transition-transform ${mdApprovalsOpen ? 'rotate-180' : ''}`} />
+          <span className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0"><Clock size={16} /></span>
+          <h2 className="text-base font-extrabold text-slate-800">Reschedule History</h2>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{rescheduleHistoryCount}</span>
+          <ChevronDown size={18} className={`ml-auto text-slate-400 transition-transform ${rescheduleHistoryOpen ? 'rotate-180' : ''}`} />
         </button>
 
-        {mdApprovalsOpen && (
-          <>
-            {!isLoading && taskItems.length === 0 && (
-              <p className="text-sm text-slate-400 text-center py-10">No pending tasks.</p>
-            )}
-
-            <div className="grid gap-3 xl:grid-cols-2">
-              {taskItems.map(item => (
-                <div key={item.key} className="bg-white rounded-2xl shadow-card border border-slate-100 p-5">
-                  <div className="flex justify-end">
-                    <span className={`text-[11px] font-bold px-3 py-1 rounded-full ${item.badgeCls}`}>{item.badge}</span>
-                  </div>
-                  <h3 className="text-base font-extrabold text-slate-800 mt-1">{item.title}</h3>
-                  <p className="text-sm text-slate-600 mt-3 break-words">
-                    <span className="text-slate-400">{item.subjectLabel}: </span>
-                    <span className="font-semibold">{item.client}</span>
-                  </p>
-                  {item.details.map((d, i) => <p key={i} className="text-sm text-slate-400 break-words mt-1">{d}</p>)}
-                  <p className="text-sm font-semibold text-teal-700 mt-3">{item.person}</p>
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
-                    <span className="text-xs font-semibold px-3.5 py-1.5 rounded-full bg-slate-100 text-slate-500">Pending</span>
-                    <button onClick={item.open}
-                      className="px-5 py-2.5 rounded-2xl text-sm font-bold text-white bg-blue-600 active:bg-blue-700">
-                      Update Status
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
+        {rescheduleHistoryOpen && (
+          <ApprovalHistory refreshKey={historyKey} types={['Rescheduled Appointment']} title="Reschedule History" showTitle={false} />
         )}
-
-        <ApprovalHistory refreshKey={historyKey} types={['Rescheduled Appointment']} title="Reschedule History" />
       </div>
 
       <ApprovalReviewSheets
@@ -420,7 +439,7 @@ export default function MDTasksScreen() {
               <p className="text-slate-600">Appointment: {fmtDateTime(selected.scheduledAt)} — {selected.location}</p>
               {selected.rescheduledDate && <p className="text-slate-600">Requested new date: {fmtDateTime(selected.rescheduledDate)}</p>}
               <p className="text-slate-600">Reason: {selected.rescheduleReason}</p>
-              <p className="text-[11px] text-slate-400">Requested by {selected.rescheduleRequestedBy} · {selected.rescheduleRequestedAt ? fmtDateTime(selected.rescheduleRequestedAt) : ''}</p>
+              <p className="text-[12px] text-slate-400">Requested by {selected.rescheduleRequestedBy} · {selected.rescheduleRequestedAt ? fmtDateTime(selected.rescheduleRequestedAt) : ''}</p>
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1 block">MD Notes <span className="font-normal text-slate-400">(optional)</span></label>

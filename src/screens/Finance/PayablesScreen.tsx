@@ -403,7 +403,7 @@ export default function PayablesScreen() {
                         </div>
                       ))}
                       <button onClick={addSplitRow} className="text-xs font-semibold text-indigo-600">+ Add Split</button>
-                      <p className="text-[11px] text-slate-400">Split amounts must add up to {fmtCurrency(Number(payAmount) || 0)}.</p>
+                      <p className="text-[12px] text-slate-400">Split amounts must add up to {fmtCurrency(Number(payAmount) || 0)}.</p>
                     </div>
                   )}
 

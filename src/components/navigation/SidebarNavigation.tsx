@@ -17,7 +17,7 @@ export function SidebarNavigation() {
   }
 
   return (
-    <div className="hidden lg:flex fixed left-0 top-0 h-screen w-[260px] bg-white border-r border-slate-200 flex-col z-40">
+    <div className="app-chrome hidden lg:flex fixed left-0 top-0 h-screen w-[260px] bg-white border-r border-slate-200 flex-col z-40">
       {/* Logo */}
       <div className="px-5 h-16 flex items-center border-b border-slate-100 flex-shrink-0">
         <img

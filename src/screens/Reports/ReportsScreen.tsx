@@ -15,9 +15,9 @@ function fmtCurrency(n?: number): string {
 function StatCard({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'good' | 'bad' }) {
   return (
     <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-      <p className="text-[11px] text-slate-400 mb-0.5">{label}</p>
+      <p className="text-[12px] text-slate-400 mb-0.5">{label}</p>
       <p className={`text-base font-extrabold ${tone === 'good' ? 'text-emerald-600' : tone === 'bad' ? 'text-red-600' : 'text-slate-800'}`}>{value}</p>
-      {sub && <p className="text-[11px] text-slate-400 mt-0.5">{sub}</p>}
+      {sub && <p className="text-[12px] text-slate-400 mt-0.5">{sub}</p>}
     </div>
   )
 }
@@ -140,7 +140,7 @@ export default function ReportsScreen() {
                 <div key={row.name} className="bg-white rounded-xl p-3 border border-slate-100 flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{row.name}</p>
-                    <p className="text-[11px] text-slate-400">{row.completed} of {row.total} tasks completed</p>
+                    <p className="text-[12px] text-slate-400">{row.completed} of {row.total} tasks completed</p>
                   </div>
                   <span className={`text-sm font-bold ${row.onTimeRate >= 80 ? 'text-emerald-600' : row.onTimeRate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
                     {row.completed > 0 ? `${row.onTimeRate.toFixed(0)}% on time` : '—'}

@@ -81,10 +81,10 @@ export default function AuditLogScreen() {
               <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
                 {ACTION_LABEL[log.action] ?? log.action}
               </span>
-              <span className="text-[11px] text-slate-400 whitespace-nowrap">{fmtDateTime(log.createdAt)}</span>
+              <span className="text-[12px] text-slate-400 whitespace-nowrap">{fmtDateTime(log.createdAt)}</span>
             </div>
             <p className="text-sm text-slate-700">{log.description}</p>
-            <p className="text-[11px] text-slate-400 mt-1">{log.createdBy} · {log.createdByRole}</p>
+            <p className="text-[12px] text-slate-400 mt-1">{log.createdBy} · {log.createdByRole}</p>
           </div>
         ))}
       </div>

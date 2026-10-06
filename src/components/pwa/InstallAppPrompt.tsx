@@ -39,7 +39,7 @@ export function InstallAppPrompt() {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-bold text-slate-800 leading-tight">Install Fenster</p>
-        <p className="text-[11px] text-slate-500 mt-0.5">Use this app faster from your home screen.</p>
+        <p className="text-[12px] text-slate-500 mt-0.5">Use this app faster from your home screen.</p>
       </div>
       <button type="button" onClick={handleInstall}
         className="px-3 py-1.5 text-xs font-bold rounded-lg flex-shrink-0 active:opacity-80"

@@ -34,11 +34,11 @@ export function AttendanceCapturePreview({ capture, label, timestamp, onClose }:
         <img src={capture.photoUrl} alt={`${label} attendance photo`} className="w-full max-h-72 object-cover bg-slate-100" />
         <div className="px-3.5 py-2.5 bg-slate-50 flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold text-slate-700">{label}{timestamp ? ` · ${fmtTimestamp(timestamp)}` : ''}</p>
-            <p className="text-[10px] text-slate-500 truncate">{capture.lat.toFixed(6)}, {capture.lng.toFixed(6)}</p>
+            <p className="text-[12px] font-semibold text-slate-700">{label}{timestamp ? ` · ${fmtTimestamp(timestamp)}` : ''}</p>
+            <p className="text-[11px] text-slate-500 truncate">{capture.lat.toFixed(6)}, {capture.lng.toFixed(6)}</p>
           </div>
           <a href={`https://maps.google.com/?q=${capture.lat},${capture.lng}`} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 shrink-0 text-[11px] font-semibold text-indigo-600 active:opacity-70">
+            className="flex items-center gap-1 shrink-0 text-[12px] font-semibold text-indigo-600 active:opacity-70">
             <MapPin size={12} /> Map
           </a>
         </div>

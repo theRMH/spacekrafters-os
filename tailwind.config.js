@@ -6,6 +6,21 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
+      // Readability bump — each tier reuses the next tier's own existing
+      // values (text-xs gets what text-sm used to be, etc.) so the type
+      // scale's proportions stay intact. text-3xl/4xl are left at Tailwind's
+      // defaults — real usage in this app is empty-state emoji and large
+      // stat-counter numbers, not headings. src/index.css pins buttons,
+      // rounded-full badges/pills, and nav/menu chrome (.app-chrome) back to
+      // the original pre-bump sizes, since this scale change is global.
+      fontSize: {
+        xs:    ['0.875rem', { lineHeight: '1.25rem' }],
+        sm:    ['1rem',     { lineHeight: '1.5rem'  }],
+        base:  ['1.125rem', { lineHeight: '1.75rem' }],
+        lg:    ['1.25rem',  { lineHeight: '1.75rem' }],
+        xl:    ['1.5rem',   { lineHeight: '2rem'    }],
+        '2xl': ['1.875rem', { lineHeight: '2.25rem' }],
+      },
       colors: {
         brand: {
           primary: '#0F2A4A',

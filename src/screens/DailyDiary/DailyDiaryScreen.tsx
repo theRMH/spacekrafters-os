@@ -141,22 +141,22 @@ export default function DailyDiaryScreen() {
         {selected && (
           <div className="space-y-4">
             <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Work Done</p>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Work Done</p>
               <p className="text-sm text-slate-700">{selected.workDone}</p>
             </div>
             {selected.blockers && (
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Blockers</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Blockers</p>
                 <p className="text-sm text-slate-700">{selected.blockers}</p>
               </div>
             )}
             {selected.photos.length > 0 && (
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Photos</p>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Photos</p>
                 <MultiFileUploadField label="" files={selected.photos} onChange={() => {}} readOnly />
               </div>
             )}
-            <p className="text-[11px] text-slate-400">Logged by {selected.createdByName}</p>
+            <p className="text-[12px] text-slate-400">Logged by {selected.createdByName}</p>
           </div>
         )}
       </BottomSheet>

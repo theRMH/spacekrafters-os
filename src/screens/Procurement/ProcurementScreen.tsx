@@ -434,7 +434,7 @@ export default function ProcurementScreen() {
             <div className="flex items-center justify-between bg-slate-50 rounded-xl p-4">
               <div>
                 <p className="text-xs text-slate-500">{selected.quantity} {selected.unit}{projectName(selected.projectId) ? ` · ${projectName(selected.projectId)}` : ''}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Needed by {fmtDate(selected.neededBy)}</p>
+                <p className="text-[12px] text-slate-400 mt-0.5">Needed by {fmtDate(selected.neededBy)}</p>
               </div>
               <StatusBadge status={selected.status} />
             </div>
@@ -465,7 +465,7 @@ export default function ProcurementScreen() {
                     <div key={q.id} className="bg-white rounded-xl p-3 border border-slate-100 flex items-center justify-between">
                       <div>
                         <p className="text-sm font-semibold text-slate-800">{vendorName(q.vendorId)}</p>
-                        {q.notes && <p className="text-[11px] text-slate-400">{q.notes}</p>}
+                        {q.notes && <p className="text-[12px] text-slate-400">{q.notes}</p>}
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-bold text-slate-800">{fmtCurrency(q.amount)}</span>
@@ -520,7 +520,7 @@ export default function ProcurementScreen() {
                         )}
 
                         {receipts.length > 0 && (
-                          <p className="text-[11px] text-slate-400">Received {fmtDate(receipts[0].receivedAt)}</p>
+                          <p className="text-[12px] text-slate-400">Received {fmtDate(receipts[0].receivedAt)}</p>
                         )}
 
                         {po.status === 'received' && !bill && (

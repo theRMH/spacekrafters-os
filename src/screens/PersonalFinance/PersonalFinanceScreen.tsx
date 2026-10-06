@@ -305,7 +305,7 @@ export default function PersonalFinanceScreen() {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{t.narration || t.payeePayer || TXN_TYPE_LABEL[t.type]}</p>
-                    <p className="text-[11px] text-slate-400">{fmtDate(t.date)} · {accounts.find(a => a.id === t.accountId)?.name ?? '—'}</p>
+                    <p className="text-[12px] text-slate-400">{fmtDate(t.date)} · {accounts.find(a => a.id === t.accountId)?.name ?? '—'}</p>
                   </div>
                   <span className={`text-sm font-bold whitespace-nowrap ${INFLOW_TYPES.has(t.type) ? 'text-emerald-600' : 'text-red-600'}`}>
                     {INFLOW_TYPES.has(t.type) ? '+' : '−'}{fmtCurrency(t.amount)}
@@ -377,7 +377,7 @@ export default function PersonalFinanceScreen() {
             <div className="bg-slate-50 rounded-xl p-4 text-center">
               <p className="text-xs text-slate-500 mb-1">Current Balance</p>
               <p className="text-2xl font-extrabold text-slate-800">{fmtCurrency(accountBalance(selectedAccount, transactions))}</p>
-              <p className="text-[11px] text-slate-400 mt-1">Opening: {fmtCurrency(selectedAccount.openingBalance)}</p>
+              <p className="text-[12px] text-slate-400 mt-1">Opening: {fmtCurrency(selectedAccount.openingBalance)}</p>
             </div>
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Transaction History</h3>
             <div className="space-y-2">
@@ -387,7 +387,7 @@ export default function PersonalFinanceScreen() {
                   className="w-full text-left bg-white rounded-xl p-3 border border-slate-100 flex items-center justify-between active:bg-slate-50">
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{t.narration || t.payeePayer || TXN_TYPE_LABEL[t.type]}</p>
-                    <p className="text-[11px] text-slate-400">{fmtDate(t.date)}{t.reference ? ` · ${t.reference}` : ''}</p>
+                    <p className="text-[12px] text-slate-400">{fmtDate(t.date)}{t.reference ? ` · ${t.reference}` : ''}</p>
                   </div>
                   <span className={`text-sm font-bold ${INFLOW_TYPES.has(t.type) ? 'text-emerald-600' : 'text-red-600'}`}>
                     {INFLOW_TYPES.has(t.type) ? '+' : '−'}{fmtCurrency(t.amount)}

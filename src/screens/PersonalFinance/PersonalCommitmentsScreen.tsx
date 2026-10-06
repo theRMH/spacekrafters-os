@@ -173,7 +173,7 @@ export default function PersonalCommitmentsScreen() {
             <div className="flex items-start justify-between gap-2 mb-1">
               <div>
                 <p className="font-bold text-sm text-slate-800">{c.name}</p>
-                <p className="text-[11px] text-slate-400">{TYPE_LABEL[c.commitmentType]} · Due {fmtDate(c.dueDate)}</p>
+                <p className="text-[12px] text-slate-400">{TYPE_LABEL[c.commitmentType]} · Due {fmtDate(c.dueDate)}</p>
               </div>
               <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${STATUS_TONE[c.status]}`}>{c.status}</span>
             </div>

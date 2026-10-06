@@ -152,7 +152,7 @@ export default function ClientMasterScreen() {
                 <span className="font-bold text-sm text-slate-800">{client.name}</span>
               </div>
               <p className="text-xs text-slate-500">{client.phone}</p>
-              <p className="text-[11px] text-slate-400 mt-1">{clientProjects.length} project{clientProjects.length !== 1 ? 's' : ''}</p>
+              <p className="text-[12px] text-slate-400 mt-1">{clientProjects.length} project{clientProjects.length !== 1 ? 's' : ''}</p>
             </button>
           )
         })}
@@ -242,7 +242,7 @@ export default function ClientMasterScreen() {
                         <span className="text-sm font-bold text-slate-800">{p.name}</span>
                         <StatusBadge status={p.status} size="xs" />
                       </div>
-                      <p className="text-[11px] text-slate-400">{p.stage.replace(/_/g, ' ')}</p>
+                      <p className="text-[12px] text-slate-400">{p.stage.replace(/_/g, ' ')}</p>
                     </button>
                   ))
                 )}

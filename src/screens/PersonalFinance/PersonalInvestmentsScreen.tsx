@@ -143,15 +143,15 @@ export default function PersonalInvestmentsScreen() {
         <div className="px-4 pt-4">
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex justify-between">
             <div>
-              <p className="text-[11px] text-slate-400">Invested</p>
+              <p className="text-[12px] text-slate-400">Invested</p>
               <p className="text-sm font-extrabold text-slate-800">{fmtCurrency(totalInvested)}</p>
             </div>
             <div>
-              <p className="text-[11px] text-slate-400">Current Value</p>
+              <p className="text-[12px] text-slate-400">Current Value</p>
               <p className="text-sm font-extrabold text-slate-800">{fmtCurrency(totalCurrent)}</p>
             </div>
             <div>
-              <p className="text-[11px] text-slate-400">Gain / Loss</p>
+              <p className="text-[12px] text-slate-400">Gain / Loss</p>
               <p className={`text-sm font-extrabold ${totalGain >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                 {totalGain >= 0 ? '+' : ''}{fmtCurrency(totalGain)}
               </p>
@@ -170,7 +170,7 @@ export default function PersonalInvestmentsScreen() {
               <div className="flex items-start justify-between gap-2 mb-1">
                 <div>
                   <p className="font-bold text-sm text-slate-800">{i.name}</p>
-                  <p className="text-[11px] text-slate-400">{TYPE_LABEL[i.investmentType]} · {fmtDate(i.purchaseDate)}</p>
+                  <p className="text-[12px] text-slate-400">{TYPE_LABEL[i.investmentType]} · {fmtDate(i.purchaseDate)}</p>
                 </div>
                 {i.currentValue != null && (
                   <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${gain >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>

@@ -44,7 +44,7 @@ export function MobileMenuDrawer({ isOpen, onClose }: Props) {
       <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} />
 
       {/* Side panel */}
-      <div className="relative w-[78%] max-w-[300px] h-full bg-white shadow-sheet animate-slide-in-left flex flex-col">
+      <div className="app-chrome relative w-[78%] max-w-[300px] h-full bg-white shadow-sheet animate-slide-in-left flex flex-col">
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between px-5 h-14 border-b border-slate-100">
           <h2 className="text-base font-bold text-slate-800">Menu</h2>

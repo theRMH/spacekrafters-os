@@ -178,7 +178,7 @@ export default function LeaveScreen() {
                 <p className="text-sm font-bold text-slate-800">{l.userName}</p>
                 <p className="text-xs text-slate-500 mt-0.5">{l.fromDate} → {l.toDate}</p>
                 <p className="text-xs text-slate-600 mt-1">{l.reason}</p>
-                {l.notes && <p className="text-[11px] text-slate-400 mt-1">Notes: {l.notes}</p>}
+                {l.notes && <p className="text-[12px] text-slate-400 mt-1">Notes: {l.notes}</p>}
               </div>
               <StatusBadge status={l.status} size="xs" />
             </div>

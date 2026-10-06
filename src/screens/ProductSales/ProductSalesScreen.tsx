@@ -68,7 +68,7 @@ export default function ProductSalesScreen() {
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-slate-800 truncate">{lead.name}</p>
                   <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Phone size={11} />{lead.phone}</p>
-                  {lead.businessBrand && <p className="text-[11px] text-slate-400 mt-0.5">{BUSINESS_BRAND_LABEL[lead.businessBrand]}</p>}
+                  {lead.businessBrand && <p className="text-[12px] text-slate-400 mt-0.5">{BUSINESS_BRAND_LABEL[lead.businessBrand]}</p>}
                 </div>
                 <StatusBadge status={stage} label={PRODUCT_SALE_STAGE_LABEL[stage]} />
               </div>

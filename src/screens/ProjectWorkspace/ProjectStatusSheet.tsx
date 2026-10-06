@@ -234,7 +234,7 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1 text-sm">
           <p className="font-bold text-slate-800">Move to {PROJECT_STAGE_LABEL[req.toStage]}</p>
           <p className="text-slate-600">{req.note}</p>
-          <p className="text-[11px] text-slate-400">Submitted by {req.requestedBy}</p>
+          <p className="text-[12px] text-slate-400">Submitted by {req.requestedBy}</p>
         </div>
         {showRejectBox ? (
           <div className="space-y-2">
