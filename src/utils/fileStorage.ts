@@ -21,8 +21,9 @@ async function uploadToHostinger(file: File): Promise<string> {
       headers: { 'X-Upload-Key': UPLOAD_KEY },
       body: form,
     })
-  } catch {
-    throw new Error('Upload failed — check your internet connection and try again.')
+  } catch (err) {
+    console.error('[upload] request to upload server failed', UPLOAD_URL, err)
+    throw new Error('Could not reach the upload server. The request was blocked (often a CORS setting on the server) or failed before it arrived — see the browser console.')
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string }

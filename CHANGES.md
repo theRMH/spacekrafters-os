@@ -1,5 +1,53 @@
 ## 2026-10-06
 
+### File uploads on the live site — root cause is the Hostinger upload server's CORS allowlist; error message corrected
+**Commit:** Uncommitted
+Uploads go to a PHP endpoint on Hostinger (`VITE_UPLOAD_URL`, source `hostinger/upload.php`), not Supabase Storage. The live server's deployed copy only allows `https://spacekrafters.com` and localhost origins; the repo copy also lists `https://spacekrafters-os.vercel.app`, so the deployed file is out of date. The browser blocks the request from the Vercel origin, which surfaces as a generic "check your internet connection" error.
+- **Changed:** `src/utils/fileStorage.ts` — a failed request now logs the real error to the console and shows an accurate message ("Could not reach the upload server… blocked (often a CORS setting)…") instead of the internet-connection text. Upload behavior is otherwise unchanged.
+- **Action needed (not done by me — it's a server file):** re-upload `hostinger/upload.php` from this repo to the Hostinger site so the deployed allowlist matches. If the live site is on another origin (a custom domain or a different Vercel URL), that origin must also be added to `$ALLOWED_ORIGINS`.
+- No database, Supabase Storage, or RLS change.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean. Live CORS check: the deployed server returns `access-control-allow-origin: https://spacekrafters.com` for `https://spacekrafters-os.vercel.app`, and allows localhost.
+
+### Lead status sheet — Qualified button added beside Rescheduled to confirm the appointment and move to Site Visit
+**Commit:** Uncommitted
+At the Qualified stage with a scheduled appointment, the sheet showed only Rescheduled. Added a **Qualified** button beside it that confirms the existing appointment and moves the lead to Site Visit Scheduled, without MD approval. You chose this knowingly; it reverses the earlier rule that MD Accept was the only way forward for a scheduled appointment.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the qualified-stage actions are now `[Rescheduled] [Qualified]` side by side, with Cancel still below. Qualified calls the existing `save('site_visit_scheduled', …)` path, which sets the lead's status and its assignee and writes an activity entry. The explanatory text no longer says MD approval is the only way forward.
+- **Not changed:** the Rescheduled → MD Accept flow, the appointment record (status stays `scheduled`), and the database.
+- No database/schema/RLS change.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean. No browser access this session — please test: Qualified lead with a scheduled appointment → Qualified → lead shows Site Visit Scheduled without MD approval; Rescheduled still opens the reason form.
+
+### Lead status sheet — MD can Accept or Reject a pending reschedule in place, Accept moves the lead to Site Visit
+**Commit:** Uncommitted
+When a reschedule request was pending, the owner's sheet only showed a "Go to Task tab" button, sending them to another page. Now the owner sees Accept and Reject inside the same sheet, using the same decision logic as the MD Task page.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — pending-reschedule branch shows the reason and requested new date, plus **Accept** and **Reject** for the owner (non-owners still see "waiting on MD review"). Accept writes the appointment decision via `decideAppointmentReschedule()` (the existing helper), then advances a Qualified lead to Site Visit with the same assignee and notification the MD Task page applies. Reject records the rejection and leaves the lead's status unchanged. Nothing advances before Accept is pressed. The sheet no longer navigates away for this branch.
+- **Not changed:** the reschedule request form, the MD Task page, approval history, and the database. The Accept/advance code is a third copy alongside `MDTasksScreen.tsx` and `TasksScreen.tsx`; consolidating them is a follow-up.
+- Note: Accept only appears after a reschedule request is submitted. The FGD028 'Harish' lead currently has a scheduled appointment with no request, so the sheet still shows the "Rescheduled" button.
+- No database/schema/RLS change.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean. No browser access this session — please test: Qualified lead → Rescheduled → reason → Submit → log in as owner → Accept → lead shows Site Visit Scheduled; a second run with Reject → status stays Qualified.
+
+### FGD leads show in Leads, not Product Sales
+**Commit:** Uncommitted
+You want FGD leads in the normal Leads module only. Previously Leads hid every FGD-division lead and Product Sales listed exactly those, so a new FGD lead (Siemens, FGD026 in production) saved fine but never appeared in Leads.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — removed the filter that excluded `businessDivision === 'fgd'` from the Leads list. FGD and SK leads now appear together, reusing the existing list, search, and status filters. Reverted the interim "listed under Product Sales" hint and success-message suffix I'd added.
+- **Changed:** `src/screens/ProductSales/ProductSalesScreen.tsx` — the list is now intentionally empty (FGD leads are no longer read there). The screen, its New enquiry button, detail page, enquiry form and sidebar item are all still in place; the list-rendering code under it is now unreachable.
+- **Open, your decision:** the Product Sales New enquiry button still creates FGD leads, which now land in Leads only. Also, the Product Sales module code is left in place as dead code. Tell me whether to remove the module entirely (sidebar, route, screen, enquiry form, detail page) — it touches files I haven't deleted yet.
+- No database/schema/RLS change. Existing data untouched; existing FGD records remain in the database and now show in Leads.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean. No browser access this session — please test: Create FGD Lead → select Brand → Save → appears in Leads → refresh → re-login → still there; and SK leads still show in Leads.
+
+### New Lead form — FGD leads now explain they live under Product Sales
+**Commit:** Uncommitted
+An FGD lead created with Company = FGD and Brand = Siemens saves correctly (FGD026 is in production) but never appears in the Leads list, because `LeadsScreen.tsx` deliberately excludes `businessDivision === 'fgd'` so FGD stays separate from Interior leads; FGD leads appear on Product Sales instead. Per your decision: keep that separation, and make it visible.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — when Company is FGD, a hint under the field says FGD leads are listed under Product Sales; the success message after creating one says the same. No change to the filter, data, or insert.
+- No database/schema/RLS change. Existing data untouched.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean. No browser access this session — please confirm the hint appears and the FGD lead shows on /product-sales.
+
+### New Lead form — validation error for FGD (Brand required) was hidden at the top of the sheet
+**Commit:** Uncommitted
+Selecting FGD as the Company made a Brand field appear, and Create Lead without a brand was blocked — but the reason was written to the top of the long form, while Create Lead sits at the bottom, so the tap looked like it did nothing. Confirmed live data: every FGD-division lead saved to production (FGD020–FGD026) has a brand, so the FGD→Brand rule and the `fgd` value mapping are working; only the feedback was broken.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — the form error message now renders directly above the Create Lead / Save Changes button instead of at the top of the sheet, so the reason appears where the user just tapped. Same validation rules, same FGD→Brand flow, same insert path — presentation only.
+- No database/schema/RLS change. Existing data untouched.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean. No browser access this session — please test: New Lead → Company FGD → leave Brand empty → Create Lead (message should appear right above the button) → choose a brand → Create Lead → lead appears in list → refresh → still there.
+
 ### Tasks pipeline — dropped the plain "Lead" backlog, fixed the duplicate Won stages, sorted by real date
 **Commit:** Uncommitted
 Two issues you flagged on the Pipeline Status section: (1) it showed every Lead that exists, including pure backlog (`new`/`contacted`, no appointment yet) that just clutters the view with nothing actionable; (2) "Won — Pending Project" and "Project" read as two separate Won-related stages, which looked like duplicate/incorrect Won tracking. You'd already set the real Lead/Project status to Won yourself — this only touches display logic, no status/data was changed.

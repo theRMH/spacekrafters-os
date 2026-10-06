@@ -329,10 +329,6 @@ export default function LeadsScreen() {
   const liveSelected = selected ? leads.find(l => l.id === selected.id) ?? null : null
 
   const filtered = leads.filter(l => {
-    // FGD (Product Sales) leads have their own dedicated screens at
-    // /product-sales — kept out of the Interior Leads list so the two
-    // workflows never mix.
-    if (l.businessDivision === 'fgd') return false
     if (assignedOnly && l.assignedToId !== user?.id) return false
     const matchSearch = !search
       || l.name.toLowerCase().includes(search.toLowerCase())
@@ -578,7 +574,6 @@ export default function LeadsScreen() {
       >
         {/* spellCheck is inherited — turns off the browser's red "misspelled" underline for every field in this form (names/places aren't in a dictionary). */}
         <div className="space-y-3" spellCheck={false}>
-          {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           {!showEdit && (
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1 block">Type *</label>
@@ -705,6 +700,7 @@ export default function LeadsScreen() {
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Any additional notes…"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
           </div>
+          {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <button
             onClick={showEdit ? handleUpdateLead : handleAddLead}
             className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"

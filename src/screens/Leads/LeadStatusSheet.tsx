@@ -13,6 +13,7 @@ import { getAllRequirements } from '../../services/requirementService'
 import { getAllDesignPackages } from '../../services/designService'
 import { getAllAppointments, upsertAppointment } from '../../services/appointmentService'
 import { toProperIso } from '../Appointments/appointmentDate'
+import { decideAppointmentReschedule } from '../Appointments/appointmentActions'
 import { sendNotification } from '../../utils/notifications'
 import type { Appointment, Lead, LeadStatus, ManagedUser, UserRole } from '../../types'
 
@@ -141,6 +142,55 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
 
   async function submitQualified() {
     await save('qualified', 'Lead qualified')
+  }
+
+  async function submitConfirmAppointment() {
+    await save('site_visit_scheduled', 'Appointment confirmed — site visit scheduled')
+  }
+
+  // Same field writes and lead advance as MDTasksScreen.handleDecision() and
+  // TasksScreen's in-page decision: Accept moves a qualified lead to Site Visit,
+  // Reject leaves the lead where it is. Nothing advances before this runs.
+  async function decideReschedule(approved: boolean) {
+    if (!latestAppointment || user?.role !== 'owner') return
+    setSaving(true)
+    const result = await decideAppointmentReschedule(latestAppointment, approved, '', user.name ?? 'Unknown', user.role)
+    if (!result.ok || !result.updated) {
+      setSaving(false)
+      onDone(result.error ?? 'Could not record decision.')
+      return
+    }
+    const advance = approved && lead.status === 'qualified'
+    const note = approved
+      ? 'MD accepted the appointment reschedule' + (advance ? ' — site visit scheduled' : '')
+      : 'MD rejected the appointment reschedule'
+    let leadResult
+    if (advance) {
+      const role = ROLE_FOR_LEAD_STATUS['site_visit_scheduled']
+      const person = role ? users.find(u => u.role === role) : undefined
+      leadResult = await updateLead(lead.id, {
+        status: 'site_visit_scheduled', assignedRole: role,
+        assignedToId: person?.id, assignedToName: person?.fullName,
+      }, note)
+    } else {
+      leadResult = await updateLead(lead.id, {}, note)
+    }
+    if (!leadResult.ok) {
+      setSaving(false)
+      onDone(leadResult.error ?? 'Could not update lead.')
+      return
+    }
+    if (lead.ownerId) {
+      await sendNotification(
+        [lead.ownerId],
+        approved ? 'Reschedule Accepted' : 'Reschedule Rejected',
+        `${lead.name} (${lead.leadNumber ?? lead.id}) — ${approved ? 'MD accepted the reschedule.' : 'MD rejected the reschedule.'}`,
+      )
+    }
+    setLatestAppointment(result.updated)
+    setSaving(false)
+    onDone(approved ? 'Reschedule accepted — lead moved to Site Visit.' : 'Reschedule rejected.')
+    onClose()
   }
 
   async function submitReschedule() {
@@ -293,15 +343,23 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
 
         if (pendingReschedule && latestAppointment) {
           return (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <p className="text-sm text-slate-600">
-                Reschedule requested — {user?.role === 'owner' ? 'review it in the Task tab.' : 'waiting on MD review.'}
+                Reschedule requested — {user?.role === 'owner' ? 'accept it to move this lead to Site Visit, or reject it.' : 'waiting on MD review.'}
               </p>
               <p className="text-xs text-slate-500">Reason: {latestAppointment.rescheduleReason}</p>
+              {latestAppointment.rescheduledDate && (
+                <p className="text-xs text-slate-500">Requested new date: {new Date(latestAppointment.rescheduledDate).toLocaleString('en-IN')}</p>
+              )}
               {user?.role === 'owner' && (
-                <button onClick={() => { onClose(); navigate('/md-tasks') }} className={secondaryBtn}>
-                  Go to Task tab →
-                </button>
+                <>
+                  <button disabled={saving} onClick={() => decideReschedule(true)} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                    Accept
+                  </button>
+                  <button disabled={saving} onClick={() => decideReschedule(false)} className={`${btn} border border-red-200 bg-red-50 text-red-700`}>
+                    Reject
+                  </button>
+                </>
               )}
             </div>
           )
@@ -337,10 +395,15 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
 
         return (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">A site visit appointment is scheduled. Submitting for MD approval is the only way to move this lead forward — the MD's Accept confirms the appointment and advances it to Site Visit.</p>
-            <button disabled={saving} onClick={() => setShowRescheduleForm(true)} className={`${btn} border border-amber-200 bg-amber-50 text-amber-700`}>
-              Rescheduled
-            </button>
+            <p className="text-sm text-slate-600">A site visit appointment is scheduled. Reschedule it for MD approval, or confirm it now to move the lead to Site Visit.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button disabled={saving} onClick={() => setShowRescheduleForm(true)} className={`${btn} border border-amber-200 bg-amber-50 text-amber-700`}>
+                Rescheduled
+              </button>
+              <button disabled={saving} onClick={submitConfirmAppointment} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                Qualified
+              </button>
+            </div>
           </div>
         )
       }

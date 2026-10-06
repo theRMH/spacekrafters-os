@@ -29,7 +29,8 @@ export default function ProductSalesScreen() {
     getAllProjects().then(ps => setProjects(ps.filter(p => p.type === 'product_sale')))
   }, [])
 
-  const fgdLeads = leads.filter(l => l.businessDivision === 'fgd')
+  // FGD leads are shown only in Leads now, so this list is intentionally empty.
+  const fgdLeads: typeof leads = []
 
   const rows = fgdLeads
     .map(lead => {
