@@ -176,6 +176,11 @@ export interface Lead {
   // that haven't moved past 'new' yet.
   slaDueAt: string
   lostReason?: string
+  // Snapshot of `status` at the moment a lead is marked Lost — lets Restore
+  // put it back exactly where it was instead of resetting to 'new'. Absent
+  // on leads marked Lost before this field existed, or on leads that were
+  // never Lost at all.
+  lostFromStatus?: LeadStatus
   advancePaymentAmount?: number
   advancePaymentRef?: string
   activity: LeadActivityItem[]

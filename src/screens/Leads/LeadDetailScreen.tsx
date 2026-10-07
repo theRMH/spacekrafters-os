@@ -152,7 +152,7 @@ export default function LeadDetailScreen() {
               </button>
             )}
 
-            {(can('edit_lead') || lead.assignedToId === user?.id) && lead.status !== 'won' && lead.status !== 'lost' && (
+            {(can('edit_lead') || lead.assignedToId === user?.id || lead.ownerId === user?.id) && lead.status !== 'won' && lead.status !== 'lost' && (
               <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                 <div>
                   <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>

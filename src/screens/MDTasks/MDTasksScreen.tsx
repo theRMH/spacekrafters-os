@@ -204,9 +204,11 @@ export default function MDTasksScreen() {
       const note = approved
         ? 'MD accepted the appointment reschedule' + (advance ? ' — site visit scheduled' : '') + (mdNotes.trim() ? `: ${mdNotes.trim()}` : '')
         : `MD rejected the appointment reschedule${mdNotes.trim() ? `: ${mdNotes.trim()}` : ''}`
+      let newAssigneeId: string | undefined
       if (advance) {
         const role = ROLE_FOR_LEAD_STATUS['site_visit_scheduled']
         const person = role ? users.find(u => u.role === role) : undefined
+        newAssigneeId = person?.id
         await updateLead(lead.id, {
           status: 'site_visit_scheduled',
           assignedRole: role,
@@ -221,6 +223,14 @@ export default function MDTasksScreen() {
           [lead.ownerId],
           approved ? 'Reschedule Accepted' : 'Reschedule Rejected',
           `${lead.name} (${lead.leadNumber ?? lead.id}) — ${approved ? 'MD accepted the reschedule.' : 'MD rejected the reschedule.'}${mdNotes.trim() ? ` Notes: ${mdNotes.trim()}` : ''}`,
+        )
+      }
+      if (newAssigneeId && newAssigneeId !== lead.assignedToId) {
+        await sendNotification(
+          [newAssigneeId],
+          'New Lead Task',
+          `${lead.name} (${lead.leadNumber ?? lead.id}) — Site Visit Scheduled. Assigned by ${user?.name ?? 'MD'}.`,
+          `/tasks?leadId=${lead.id}`,
         )
       }
     }

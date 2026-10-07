@@ -1,18 +1,20 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import type { Lead, LeadActivityItem } from '../types'
-import { getAllLeads, upsertLead, insertLead, getNextLeadNumber, deleteLeads as deleteLeadRows } from '../services/leadService'
+import { getAllLeads, upsertLead, insertLead, getNextLeadNumber, hardDeleteLead } from '../services/leadService'
 import { getAllQuotations, deleteQuotations } from '../services/quotationService'
 import { getAllDesignPackages, upsertDesignPackage } from '../services/designService'
 import { useAuth } from './AuthContext'
 
 interface CRMContextValue {
-  leads:           Lead[]
-  isLoading:       boolean
-  refreshLeads:    () => Promise<void>
-  addLead:         (lead: Omit<Lead, 'id' | 'activity' | 'createdAt' | 'updatedAt' | 'leadNumber'>) => Promise<{ ok: boolean; error?: string; leadNumber?: string }>
-  updateLead:      (id: string, updates: Partial<Lead>, activityNote?: string) => Promise<{ ok: boolean; error?: string }>
-  deleteLead:      (id: string) => Promise<{ ok: boolean; error?: string }>
-  bulkDeleteLeads: (ids: string[]) => Promise<{ ok: boolean; error?: string }>
+  leads:                  Lead[]
+  isLoading:              boolean
+  refreshLeads:           () => Promise<void>
+  addLead:                (lead: Omit<Lead, 'id' | 'activity' | 'createdAt' | 'updatedAt' | 'leadNumber'>) => Promise<{ ok: boolean; error?: string; leadNumber?: string }>
+  updateLead:             (id: string, updates: Partial<Lead>, activityNote?: string) => Promise<{ ok: boolean; error?: string }>
+  deleteLead:             (id: string) => Promise<{ ok: boolean; error?: string }>
+  bulkDeleteLeads:        (ids: string[]) => Promise<{ ok: boolean; error?: string }>
+  restoreLead:            (id: string) => Promise<{ ok: boolean; error?: string }>
+  permanentlyDeleteLead:  (id: string) => Promise<{ ok: boolean; error?: string }>
 }
 
 const CRMContext = createContext<CRMContextValue | null>(null)
@@ -91,26 +93,55 @@ export function CRMProvider({ children }: { children: ReactNode }) {
     return result
   }
 
-  // Appointments, Follow-ups, Site Visits, Requirements, and the lead's own
-  // activity log all cascade-delete automatically at the DB level (FKs with
-  // ON DELETE CASCADE — see supabase/schema.sql). Quotations don't (deleting
-  // a lead with a linked quotation would otherwise fail outright with a
-  // foreign-key violation), so those are deleted explicitly first, same as
-  // the client wants a lead deletable regardless of stage. Design Packages
-  // survive — their leadId is optional, so they're detached (not deleted)
-  // since there's no delete permission for that table at all.
+  // "Delete" in the Leads UI no longer removes the record. It marks the lead
+  // Lost — the exact same status/field LeadStatusSheet's own Lost transition
+  // already uses — so the lead keeps its full history (activity log,
+  // appointments, quotations, etc.) and still shows up under the Lost filter,
+  // instead of a real DB delete. Stashes the status it was at so Restore can
+  // put it back exactly where it was rather than resetting to 'new'.
   async function bulkDeleteLeads(ids: string[]) {
-    if (ids.length === 0) return { ok: true }
-    const idSet = new Set(ids)
+    for (const id of ids) {
+      const existing = leads.find(l => l.id === id)
+      const lostFromStatus = existing && existing.status !== 'lost' ? existing.status : existing?.lostFromStatus
+      const result = await updateLead(id, { status: 'lost', lostFromStatus }, 'Marked Lost (removed from active Leads list)')
+      if (!result.ok) return result
+    }
+    return { ok: true }
+  }
+
+  async function deleteLead(id: string) {
+    return bulkDeleteLeads([id])
+  }
+
+  // Only meaningful for a lead currently sitting in Lost — puts it back at
+  // the exact stage it was at before (lostFromStatus), or 'new' for a lead
+  // marked Lost before that field existed. Clears lostReason/lostFromStatus
+  // since they only describe the Lost episode that just ended; the full
+  // activity log (including the original "Marked Lost" entries) is untouched.
+  async function restoreLead(id: string) {
+    const existing = leads.find(l => l.id === id)
+    if (!existing) return { ok: false, error: 'Lead not found.' }
+    const restoredStatus = existing.lostFromStatus ?? 'new'
+    return updateLead(id, {
+      status: restoredStatus, lostFromStatus: undefined, lostReason: undefined,
+    }, `Restored to ${restoredStatus.replace(/_/g, ' ')}`)
+  }
+
+  // Real, permanent delete — only ever invoked (after explicit confirmation)
+  // on a lead already in Lost. Mirrors the cascade the old hard-delete path
+  // used: quotations don't cascade at the DB level (FK violation otherwise),
+  // so they're deleted explicitly first; Design Packages are detached, not
+  // deleted, since there's no delete permission on that table at all.
+  async function permanentlyDeleteLead(id: string) {
     const [quotations, designPackages] = await Promise.all([getAllQuotations(), getAllDesignPackages()])
 
-    const quotationIds = quotations.filter(q => q.leadId && idSet.has(q.leadId)).map(q => q.id)
+    const quotationIds = quotations.filter(q => q.leadId === id).map(q => q.id)
     if (quotationIds.length > 0) {
       const result = await deleteQuotations(quotationIds)
       if (!result.ok) return result
     }
 
-    const affectedPackages = designPackages.filter(p => p.leadId && idSet.has(p.leadId))
+    const affectedPackages = designPackages.filter(p => p.leadId === id)
     if (affectedPackages.length > 0) {
       const results = await Promise.all(affectedPackages.map(pkg =>
         upsertDesignPackage({ ...pkg, leadId: undefined, updatedAt: new Date().toISOString() })
@@ -119,17 +150,13 @@ export function CRMProvider({ children }: { children: ReactNode }) {
       if (failed) return failed
     }
 
-    const result = await deleteLeadRows(ids)
-    if (result.ok) setLeads(prev => prev.filter(l => !idSet.has(l.id)))
+    const result = await hardDeleteLead(id)
+    if (result.ok) setLeads(prev => prev.filter(l => l.id !== id))
     return result
   }
 
-  async function deleteLead(id: string) {
-    return bulkDeleteLeads([id])
-  }
-
   return (
-    <CRMContext.Provider value={{ leads, isLoading, refreshLeads, addLead, updateLead, deleteLead, bulkDeleteLeads }}>
+    <CRMContext.Provider value={{ leads, isLoading, refreshLeads, addLead, updateLead, deleteLead, bulkDeleteLeads, restoreLead, permanentlyDeleteLead }}>
       {children}
     </CRMContext.Provider>
   )

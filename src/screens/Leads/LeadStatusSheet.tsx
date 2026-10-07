@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Phone, MessageCircle } from 'lucide-react'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { DateField } from '../../components/forms/DateField'
 import { TimeField } from '../../components/forms/TimeField'
+import { StatusBadge } from '../../components/badges/StatusBadge'
+import { BUSINESS_DIVISION_LABEL, BUSINESS_BRAND_LABEL } from '../../data/businessDivisions'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { getManagedUsersDirectory } from '../../services/userService'
@@ -21,6 +24,16 @@ function todayStr(): string {
   const d = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+// Same wa.me pattern already established in ProductSaleDetailScreen.tsx /
+// OutstandingProjectDetailScreen.tsx / MyProjectDetailScreen.tsx — reused
+// here rather than inventing a new one.
+function waLink(lead: Lead): string | null {
+  const digits = lead.phone.replace(/\D/g, '')
+  if (!digits) return null
+  const intl = digits.length === 10 ? `91${digits}` : digits
+  return `https://wa.me/${intl}?text=${encodeURIComponent(`Hi ${lead.name}, this is regarding your enquiry with SpaceKrafters.`)}`
 }
 
 export const ROLE_FOR_LEAD_STATUS: Partial<Record<LeadStatus, UserRole>> = {
@@ -120,6 +133,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   async function save(status: LeadStatus, note: string, extra?: Partial<Lead>) {
     setSaving(true)
     const { role, id, name } = nextResponsible(status)
+    const newAssigneeId = extra?.assignedToId ?? id
     const result = await updateLead(lead.id, {
       status,
       assignedRole: role,
@@ -129,6 +143,17 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     }, note)
     setSaving(false)
     if (result.ok) {
+      // Only the newly-assigned person, and only when the assignment
+      // actually changed — not on every save (e.g. Won/Lost, which don't
+      // reassign anyone).
+      if (newAssigneeId && newAssigneeId !== lead.assignedToId) {
+        await sendNotification(
+          [newAssigneeId],
+          'New Lead Task',
+          `${lead.name} (${lead.leadNumber ?? lead.id}) — ${LEAD_STATUS_LABEL[status]}. ${note}. Assigned by ${user?.name ?? 'System'}.`,
+          `/tasks?leadId=${lead.id}`,
+        )
+      }
       onDone(note)
       onClose()
     } else {
@@ -165,9 +190,11 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
       ? 'MD accepted the appointment reschedule' + (advance ? ' — site visit scheduled' : '')
       : 'MD rejected the appointment reschedule'
     let leadResult
+    let newAssignee: { id?: string; name?: string } = {}
     if (advance) {
       const role = ROLE_FOR_LEAD_STATUS['site_visit_scheduled']
       const person = role ? users.find(u => u.role === role) : undefined
+      newAssignee = { id: person?.id, name: person?.fullName }
       leadResult = await updateLead(lead.id, {
         status: 'site_visit_scheduled', assignedRole: role,
         assignedToId: person?.id, assignedToName: person?.fullName,
@@ -185,6 +212,14 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
         [lead.ownerId],
         approved ? 'Reschedule Accepted' : 'Reschedule Rejected',
         `${lead.name} (${lead.leadNumber ?? lead.id}) — ${approved ? 'MD accepted the reschedule.' : 'MD rejected the reschedule.'}`,
+      )
+    }
+    if (newAssignee.id && newAssignee.id !== lead.assignedToId) {
+      await sendNotification(
+        [newAssignee.id],
+        'New Lead Task',
+        `${lead.name} (${lead.leadNumber ?? lead.id}) — Site Visit Scheduled. Assigned by ${user?.name ?? 'MD'}.`,
+        `/tasks?leadId=${lead.id}`,
       )
     }
     setLatestAppointment(result.updated)
@@ -562,9 +597,48 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     }
   }
 
+  const wa = waLink(lead)
+
   return (
-    <BottomSheet isOpen={isOpen} onClose={onClose} title={`Update Status — ${LEAD_STATUS_LABEL[lead.status]}`}>
+    <BottomSheet isOpen={isOpen} onClose={onClose} title={`Update Status — ${LEAD_STATUS_LABEL[lead.status]}`} height="full">
       <div className="space-y-4">
+        {/* Lead details card — compact, light card (not a full-bleed dark
+            header) matching the reference app's own "Customer Details" card:
+            label, name + status badge, then phone/location/owner/company in
+            plain text, Call/WhatsApp below. Every stage's action screen
+            shares this, so whoever's acting on it always sees who they're
+            calling and where, without leaving this sheet. */}
+        <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-2">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Lead Details</p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-base font-extrabold text-slate-800 leading-tight truncate">{lead.name}</h3>
+              {lead.leadNumber && <p className="text-xs text-slate-400 mt-0.5">{lead.leadNumber}</p>}
+            </div>
+            <StatusBadge status={lead.status} label={LEAD_STATUS_LABEL[lead.status]} />
+          </div>
+          <div className="space-y-0.5 text-sm text-slate-600 pt-1">
+            <p>{lead.phone}</p>
+            <p>{lead.city}</p>
+            <p>Owner: {lead.ownerName}</p>
+            {lead.businessDivision && (
+              <p>{BUSINESS_DIVISION_LABEL[lead.businessDivision]}{lead.businessBrand ? ` (${BUSINESS_BRAND_LABEL[lead.businessBrand]})` : ''}</p>
+            )}
+            {lead.assignedToName && lead.assignedToName !== lead.ownerName && <p>Assigned to: {lead.assignedToName}</p>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          <a href={`tel:${lead.phone}`}
+            className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-700 active:bg-emerald-100">
+            <Phone size={15} /> Call
+          </a>
+          <a href={wa ?? undefined} target="_blank" rel="noopener noreferrer"
+            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold ${wa ? 'bg-emerald-50 text-emerald-700 active:bg-emerald-100' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}>
+            <MessageCircle size={15} /> WhatsApp
+          </a>
+        </div>
+
         {renderBody()}
         <button onClick={onClose} className={secondaryBtn}>Cancel</button>
       </div>

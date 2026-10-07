@@ -1,3 +1,167 @@
+### ⚠ Production data cleared: all 34 leads deleted (your explicit request)
+**Not a code change — a one-time production database operation, logged here for team visibility.**
+At your explicit, confirmed request (all 34 leads were test/demo records — Tester, Testing RMH, Mohamed, Raj, Harish, etc.), permanently deleted every row in `sks_leads` so you could create a fresh lead and test the current flow cleanly.
+- Deleted: all 34 leads (25 Lost, 8 Won, 1 New).
+- Deleted: their 12 linked `sks_quotations` rows (your choice — asked first).
+- Detached, not deleted: 10 `sks_design_packages` rows that referenced one of these leads (`lead_id` set to NULL) — same as the app's own single-lead permanent-delete already does; that table has no delete permission at all.
+- Cascaded automatically (existing `ON DELETE CASCADE`, no manual step needed): lead activity log, appointments, follow-ups, site visits, and site visits' own requirements.
+- **Not touched:** `sks_projects` — any Projects converted from the 8 Won leads were explicitly left alone, per your choice.
+- Verified after: `sks_leads` count = 0, zero quotations still reference a lead_id.
+- SK/FGD lead numbering will restart at 001 for the next lead of each type (the generator is `MAX existing number + 1`, and there are now none).
+
+### ⚠ Production data cleared: all 17 project tasks deleted (your explicit request)
+**Not a code change — a one-time production database operation, logged here for team visibility.**
+Checked first for dependent records: `sks_task_dependencies` references `sks_tasks(id)` with `ON DELETE CASCADE` on both sides, and `parent_task_id` self-references the same way — no non-cascading FK to handle, unlike the lead cleanup.
+- Deleted: all 17 rows in `sks_tasks` (12 open, 5 completed). Cascaded automatically, verified after: `sks_tasks` count = 0, `sks_task_dependencies` count = 0.
+- **Not touched:** `sks_mrfs` (15 rows), `sks_projects` (25 rows) — you confirmed scope as project tasks only.
+
+### Lead Update Status sheet — replaced the oversized dark header with a compact light "Lead Details" card
+**Commit:** Uncommitted
+The dynamic per-stage logic (current status shown, only the valid next action(s), everything happening in-page with no navigation) was already correct — the complaint was purely visual: the dark-navy gradient header I'd added was too heavy. Re-examined the FENSTER reference screenshot's actual structure more closely: it uses a compact light "Customer Details" card (label, name, phone, location), not a full-bleed dark block.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — replaced the full-bleed dark-navy gradient header with a plain, bordered `bg-slate-50` card: "LEAD DETAILS" label, name + current-status badge, then Lead ID, phone, city, owner, and now also Company/Brand (new field, matching your requested list) in plain text. Call/WhatsApp are now their own row below the card in the light `emerald-50`/`emerald-700` style already used for this exact purpose elsewhere in the app (`ProductSaleDetailScreen.tsx`, `OutstandingProjectDetailScreen.tsx`) — picked that over FENSTER's solid green to stay consistent with the rest of this app, since you also asked for consistency with existing SpaceKrafters UI. Everything else — the dynamic status-specific action below it, the actual update logic, the database writes — is completely unchanged.
+- No database/schema change — same lead fields, just displayed more compactly.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean. No browser access this session — please check this reads as "clean and compact" rather than oversized, and that Company/Brand shows correctly for an FGD lead.
+
+### Task page — content column narrowed further
+**Commit:** Uncommitted
+- **Changed:** `src/screens/MyTasks/MyTaskScreen.tsx` — content width `max-w-4xl` → `max-w-2xl` (672px).
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean.
+
+### Task page — type badge (e.g. "Lead") swapped to the right of each card, date to the left
+**Commit:** Uncommitted
+- **Changed:** `src/screens/MyTasks/MyTaskScreen.tsx` — each task card's header had the type badge on the left and the date on the right; swapped, matching FENSTER's convention (badge on the right).
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean.
+
+### Task page — narrower centered column, Daily Tasks/Daily Reports shortcuts removed
+**Commit:** Uncommitted
+- **Changed:** `src/screens/MyTasks/MyTaskScreen.tsx` — content column narrowed from `max-w-6xl` to `max-w-4xl`; your screenshot showed noticeably more margin on both sides than that first estimate.
+- **Removed:** the "Daily Tasks" / "Daily Reports" shortcut row at the bottom of the page (not part of the FENSTER reference). Cleaned up what that removal made unused: the `dailyTasks` state and its fetch (`getAllDailyTasks`), the `myDailyTasks` computed value, the `DailyTask` type import, and the `ChevronRight`/`FileEdit` icon imports. `dailyReports` (a different, still-used source — MRF/report items in the feed) was untouched.
+- No database/schema change for this part — layout and an unused-link removal only.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean.
+
+### Task page — fixed the actual misalignment: the title bar wasn't inside the centered wrapper
+**Commit:** Uncommitted
+The real bug behind the layout looking "different every time": the previous change centered and capped the content (`max-w-6xl mx-auto`), but the "Task" title bar above it was a separate element outside that wrapper, with different side padding (`px-5` vs the content's `px-4`). On a wide screen the content below centers and shifts right while the title stays flush-left — nothing lined up, which matches exactly what you were seeing.
+- **Changed:** `src/screens/MyTasks/MyTaskScreen.tsx` — the title bar now wraps its `<h1>` in the same `max-w-6xl mx-auto` container as the rest of the page, with matching `px-4` padding. Banner, 4 summary cards, "Ready for Next Step", and every task card are all direct children of that one shared wrapper, so their left/right edges come from the exact same source — they can't drift apart. The 4 summary cards use CSS grid's `grid-cols-4`, which gives equal widths and equal gaps by construction. Each task card's footer already had the status badge on the left and Update Status on the right (`justify-between`) — unchanged, already correct.
+- No database/schema change — layout only, same data/functionality.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean. I don't have a way to render the page or pixel-measure FENSTER's screenshot exactly, so I can't do a literal side-by-side comparison myself — this fix is a real structural bug (confirmed by reading the two elements' actual classes), not a guess. Please check it live and tell me specifically what's still off, ideally with a fresh screenshot of the current state next to FENSTER's.
+
+## 2026-10-07
+
+### Task page — single-column task cards instead of a 2-up grid on wide screens
+**Commit:** Uncommitted
+The "Ready for Next Step" cards had an `xl:grid-cols-2` class that only kicked in on wide desktop windows (≥1280px) — narrow/mobile already showed one column, so this wasn't visible until a wide-screen screenshot showed it. Also capped the page's overall content width, which it had none of before (every card stretched to the full browser width minus the sidebar).
+- **Changed:** `src/screens/MyTasks/MyTaskScreen.tsx` — task cards are now always a single vertical column (`xl:grid-cols-2` removed). Added `max-w-6xl` to the page's content wrapper so cards don't stretch edge-to-edge on a wide monitor, approximating FENSTER's own capped content width from your screenshot (I can't measure it exactly without seeing both pages side by side — flag it if it still reads too wide or too narrow).
+- **Not changed:** the "Active Projects" grid further down the page still shows 2-up on wide screens — it wasn't part of the FENSTER reference and you didn't ask for it, so left as-is.
+- No database/schema change — layout only. Confirmed separately that the lead-visibility fix from the previous change is working live (Mohammed Fazil's screenshot shows his assigned leads now appearing).
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean.
+
+### Task page ("My Tasks") made more compact to match FENSTER's density
+**Commit:** Uncommitted
+The page's structure/order already matched the FENSTER reference exactly (title → summary banner → 4 count cards → "Ready for Next Step" → task cards) — this was purely a sizing pass on that same structure.
+- **Changed:** `src/screens/MyTasks/MyTaskScreen.tsx` — reduced padding, font sizes, icon sizes and spacing throughout the summary banner, the 4 count cards, the "Ready for Next Step" heading, and the task cards (e.g. banner number `text-4xl`→`text-3xl`, count-card numbers `text-2xl`→`text-xl`, task card padding `p-5`→`p-4`, title `text-base`→`text-sm`, Update Status button `px-5 py-2.5 text-sm`→`px-4 py-2 text-xs`). Scoped to exactly the sections shown in the reference — the "Active Projects" and "Daily Tasks/Daily Reports" sections further down the same page weren't in the reference, so left untouched.
+- **Not changed:** sidebar width, nav sizing, or any other page — those are a separate, app-wide question (the font-size increase from an earlier session) that's still waiting on your decision, not something to fold into this page-level pass.
+- No database/schema change — visual sizing only, same data and same functionality (task feed, Update Status, Installation/MRF/approval items) as before.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean. No browser access this session — I can't pixel-match FENSTER exactly without seeing both side by side; please compare and tell me if specific elements still read too large.
+
+### Root cause found and fixed: assigned leads were invisible to the person they were assigned to
+**Commit:** Uncommitted
+Confirmed against live data: lead `FGD031` ("Mohamed") has `ownerId: usr_test_designer` (Mohammed Fazil — set by the "Assign To" picker on the lead form) but `assignedToId: null`. Every non-manager visibility check in the app — the Leads list, the Tasks pipeline, the personalized Task feed, and both "Update Status" button gates — filtered on `assignedToId` only. That field isn't "who this lead is assigned to" — it's a separate, auto-computed field (`LeadStatusSheet`'s `nextResponsible()`) naming whoever currently holds the role responsible for the lead's *current workflow stage*, and it stays `null` until the lead's first status change. So a lead was invisible to its own assignee from the moment it was created until someone else first advanced its status — exactly what you reported.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx`, `src/screens/Tasks/TasksScreen.tsx`, `src/screens/MyTasks/myTaskFeed.ts`, `src/screens/Leads/LeadDetailScreen.tsx` — every one of these now treats a lead as "mine" if the user is either `ownerId` (what Assign To actually writes) or `assignedToId` (the current stage's auto-resolved owner), not `assignedToId` alone. Same one-line fix in five places, no shared helper introduced — kept consistent with how each file already reads this field inline.
+- **Added:** `src/screens/MyTasks/myTaskFeed.test.ts` (3 tests) — locks in the fix: a lead owned-but-unassigned, a lead assigned-but-owned-by-someone-else, and a lead that's neither.
+- **Changed:** `src/screens/MyTasks/MyTaskScreen.tsx` — the Task feed card's "Open" button now reads "Update Status", matching the FENSTER reference. The rest of that page (summary banner, 4 live-count cards, "Ready for Next Step" section, compact cards with badge/title/meta/person) already matched the reference layout from an earlier session — no other changes needed there.
+- **Not changed (already correct):** once a lead is actually visible, "Update Status" already opens the real, dynamic `LeadStatusSheet` in-page for its exact current stage — including the colored header/Call/WhatsApp/notification work from the previous change. The bug was purely that the lead never reached that screen in the first place.
+- No database/schema/RLS change — both `ownerId` and `assignedToId` already exist on every lead; this only changes which existing fields the UI checks.
+- **Verified:** `tsc --noEmit`, unit tests (62, up from 59) and `npm run build` all clean. Confirmed root cause against live data (above). No browser access this session — please log in as Mohammed Fazil (or re-check FGD031 as whoever MD assigns next) and confirm the lead now appears in both Leads and Task, and that Update Status opens correctly.
+
+### Lead task assignment now notifies the new assignee + FENSTER-style summary header on the status sheet
+**Commit:** Uncommitted
+Large request covering the whole assign → notify → update-status flow. Much of it (items 2–4, 6 below) was already built earlier today via the Tasks pipeline and the reused `LeadStatusSheet` — this adds the real gaps: the missing notification, and the FENSTER-style client summary/header.
+- **Gap found and fixed (item 1):** advancing a lead's status reassigns it (`assignedRole`/`assignedToId`/`assignedToName`) in four places — `LeadStatusSheet.save()` (every ordinary stage transition), `LeadStatusSheet.decideReschedule()`, `TasksScreen.handleDecideInline()`, and `MDTasksScreen.handleDecision()` (the three reschedule-accept paths) — and none of them notified the newly-assigned person, only the lead owner on a reschedule decision. All four now call the existing `sendNotification()` (same function every other alert in this app uses — push + the in-app bell + SMS/WhatsApp-when-configured, nothing new) whenever the assignee actually changes, with the Lead/Client name, Lead ID, new stage, the action taken, and who assigned it in the body.
+- **Added:** the notification's `url` is `/tasks?leadId=<id>` — `src/screens/Tasks/TasksScreen.tsx` now reads that query param on load and opens that lead's action sheet directly (same sheet "Update Status" already opens), so clicking the notification lands exactly on the relevant task, not just the Tasks page. Consumed once, then cleared from the URL.
+- **Added (item 5):** `LeadStatusSheet.tsx` now opens with a colored FENSTER-style summary header — client name, Lead ID, current-status badge, phone, city, Lead Owner, assigned person if different, plus **Call** and **WhatsApp** buttons. This isn't a new pattern — it's the exact header/Call/WhatsApp layout already used on `ProductSaleDetailScreen.tsx`/`OutstandingProjectDetailScreen.tsx`, reused here rather than inventing a new style. Sheet height is now `full` to fit it.
+- **Changed (item 2):** Tasks pipeline cards (`TasksScreen.tsx`) now also show the Lead ID and city/location, and split "Owner" from "Assigned to" (previously only showed one or the other) — matching the full field list you asked for.
+- **Already in place, unchanged (items 3, 4, 6):** "Update Status" on a Tasks pipeline card already opens the real `LeadStatusSheet` in-page (no navigation to `/leads`), already shows only the next valid action(s) for the lead's actual current stage, and already writes through the one real Lead/Appointment workflow — this was built earlier today specifically to satisfy "no second workflow, no navigating away." Activity history, MD visibility, and refresh/re-login persistence all already come from the existing `updateLead`/activity-log mechanism, untouched.
+- No database/schema/RLS change — notifications use the existing `sendNotification()`/`sks_notifications` path; no new table or field.
+- **Verified:** `tsc --noEmit`, unit tests (59) and `npm run build` all clean. No browser access this session — please test: as MD, advance a lead to a stage that reassigns someone (e.g. accept a reschedule) → confirm that person gets a bell notification → click it → confirm it opens straight to that lead's status sheet with the new colored header, Call/WhatsApp, and only the valid next actions for its current stage.
+
+### Desktop sidebar nav labels made smaller
+**Commit:** Uncommitted
+- **Changed:** `src/components/navigation/SidebarNavigation.tsx` — nav item labels (Dashboard, Leads, Appointments, etc.) go from `text-sm` to `text-xs`. Icon size, padding, and section headers ("MAIN"/"CRM"/…) are unchanged.
+- **Not changed:** `MobileMenuDrawer.tsx` has the same nav list at the same `text-sm` size — your screenshot was the desktop sidebar specifically, so I left the mobile drawer alone. Say the word if you want it to match.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (59) and `npm run build` all clean.
+
+### New Lead form — Site No. auto-fills from the generated Lead ID, Phone Number is digits-only
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — the effect that fetches the Lead ID preview when Type (SK/FGD) is picked now also sets Site No. to that same value (e.g. Type FGD → Lead ID FGD007 → Site No. "FGD007"), and re-syncs automatically if Type is changed again before saving. Only wired to the New Lead form's Type selector — `openEdit()` never touches `leadCodePrefix`, so an existing lead's own Site No. is untouched. Site No. stays a normal editable field afterward, not locked — picking Type again will re-sync it.
+- **Changed:** Phone Number now strips anything that isn't a digit on every change (typing or pasting), capped at 10 digits, with `inputMode="numeric"` for a numeric mobile keyboard. Added a 10-digit length check (the same rule the Login screen already enforces) to both Create and Edit, with a clear message: "Enter a valid 10-digit phone number."
+- No database schema change — both are existing fields (`siteNo`, `phone`), client-side behavior only.
+- **Verified:** `tsc --noEmit`, unit tests (59) and `npm run build` all clean. No browser access this session — please confirm picking FGD/SK fills Site No. with the previewed Lead ID, and that typing letters or pasting "abc123" into Phone Number leaves only "123".
+
+### Leads — a Lost lead now shows Restore / Delete instead of Mark as Lost
+**Commit:** Uncommitted
+Opening a lead already in Lost still showed "Mark as Lost", which didn't make sense for a lead already there.
+- **Added:** `Lead.lostFromStatus` (optional, `src/types/index.ts`) — a snapshot of the lead's real status at the moment it's marked Lost, so Restore can put it back exactly where it was instead of resetting to 'new'. Purely additive to the existing JSONB `data` column — no migration, no schema/RLS change.
+- **Changed:** `src/context/CRMContext.tsx` — `bulkDeleteLeads` (the "Mark Lost" path) now also stashes `lostFromStatus`. Added `restoreLead(id)` — sets `status` back to `lostFromStatus` (or `'new'` for a lead marked Lost before this field existed), clears `lostFromStatus`/`lostReason`, logs a "Restored to …" activity entry, and reuses the existing `updateLead` write path, so the full activity history is kept and nothing is duplicated. Added `permanentlyDeleteLead(id)` — a real, permanent row delete (with the same quotation/design-package cleanup the old hard-delete path used), only ever called from the explicit confirm dialog below.
+- **Changed:** `src/services/leadService.ts` — re-added a hard-delete function, named `hardDeleteLead` (distinct from the "mark Lost" meaning `deleteLead` has everywhere else in this app now) so it's unambiguous which one actually removes the row.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — the lead detail sheet now branches on `status === 'lost'`: a Lost lead shows **Restore** (immediate, no confirmation needed — it's reversible) and **Delete** (opens a confirm dialog that explicitly warns this cannot be undone); every other lead still shows "Mark as Lost" exactly as before.
+- No database schema/RLS change — `lostFromStatus` lives in the same JSONB column every other Lead field already does; permanent delete reuses the existing DELETE policy (owner-only, same as it always allowed).
+- **Verified:** `tsc --noEmit`, unit tests (59) and `npm run build` all clean. No browser access this session — please test: mark a Qualified lead Lost, open it, confirm you see Restore + Delete (not Mark as Lost); Restore it and confirm it's back at Qualified (not reset to New) with its activity history intact; mark it Lost again, then Delete with confirmation, and confirm it's gone from Lost for good.
+
+### Leads — "All" renamed to "Active" (excludes Won/Lost) + compact horizontal Custom date range
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — the first stage pill is now "Active" instead of "All", and its meaning changed to match: every open stage (Contacted through Negotiation), excluding Won and Lost, which stay as their own separate pills — not literally every lead. Count and filtering both updated together.
+- **Changed:** the Custom date range fields are no longer full-width stacked blocks. Each is now a fixed, compact width (`w-36`) with a small "From"/"To" label, laid out horizontally with a → separator; they wrap to stack only if the screen is too narrow to fit both. `DateField` itself wasn't touched, so Dashboard's own (intentionally full-width) use of it is unaffected.
+- No database/schema change — purely display/filter logic.
+- **Verified:** `tsc --noEmit`, unit tests (59) and `npm run build` all clean. No browser access this session — please confirm the Active count excludes Won/Lost and the date fields now sit side by side at a compact width.
+
+### Leads — Delete now marks Lost (no hard delete), plus CSV export and CSV import
+**Commit:** Uncommitted
+Continuation of the FENSTER-style Leads rework. Stage filters and the date-filter row from the previous change already matched the spec (confirmed against your screenshots) — this adds the remaining pieces: soft-delete, CSV export, and CSV import. The "entire website UI sizing" item is NOT done — it reverses the font-size increase made earlier in this project and is app-wide, well beyond a Leads-page change, so I'm holding it for your explicit confirmation rather than doing it silently.
+- **Changed:** `src/context/CRMContext.tsx` — `bulkDeleteLeads`/`deleteLead` no longer delete the database row. They now call the existing `updateLead(id, { status: 'lost' }, note)` path — the exact same status/field `LeadStatusSheet`'s own "Mark Lost" flow already uses — so a "deleted" lead keeps its full history (activity log, quotations, appointments) and shows up under the Lost filter instead of disappearing. Removed the now-unused quotation/design-package cascade-delete logic that only existed to support the real delete.
+- **Changed:** `src/services/leadService.ts` — removed `deleteLead`/`deleteLeads` (the real DB-delete functions), since nothing calls them anymore after the above change.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — delete confirmations, buttons, and success messages now say "Mark Lost" / "moved to Lost" instead of "Delete" / "cannot be undone", matching what actually happens now.
+- **Added:** `src/utils/leadCsv.ts` — CSV parsing/serialization used by both export and import: a small quoted-field-aware parser (plain `split(',')` breaks on commas inside addresses/notes), column validation (Type SK/FGD, Business Division/Category/Brand against the real option lists, FGD-requires-Brand), and a sample-file generator. 9 unit tests.
+- **Added:** CSV Export (green button, header row) — exports exactly the leads currently on screen (search + stage + date filters all respected), filename `SpaceKrafters_Leads_YYYY-MM-DD.csv`, using the real column values (not a static/dummy export).
+- **Added:** `src/screens/Leads/ImportLeadsSheet.tsx` (blue "Import Leads" button) — upload a CSV, see a preview with each row marked Ready / Duplicate / Error (duplicate = a phone number that already exists in Leads or appears twice in the file), fix-and-reupload if needed, then import. Every imported row goes through the exact same `useCRM().addLead()` every manually-created lead uses, so SK/FGD numbering and the Company/Brand logic are untouched — nothing bypasses that path. A "Download Sample File" link gives the exact columns the form needs.
+- No database/schema/RLS change — the delete-to-Lost change reuses the existing `status`/`lostReason` fields and the existing UPDATE policy (same roles that could already edit a lead's status can now also do this); import only ever inserts through the existing `addLead` path.
+- **Verified:** `tsc --noEmit`, unit tests (59, up from 50) and `npm run build` all clean. No browser access this session — please test: Mark Lost on one lead and confirm it's gone from Active filters but shows under Lost after refresh; Export CSV with a stage filter active and confirm the file only has those leads; Import a CSV with one duplicate phone and one bad row and confirm the preview correctly flags both before you import.
+
+### Leads screen — consolidated stage filter pills (FENSTER-style) + a date filter row
+**Commit:** Uncommitted
+Replaced the 16-chip filter row (every real `LeadStatus` value) with 10 consolidated pills, plus a second row of date pills below it, matching the FENSTER reference layout you shared.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — stage pills are now `All | Contacted | Qualified | Appointment | Site Visit | Requirements | Quotation | Negotiation | Won | Lost`, each showing a live count. A new `leadBucket()` function (local to this file) maps every real `LeadStatus` onto one of these — nothing new is stored, `Lead.status` is untouched, and the Edit Lead form's Status field still offers the full real status list exactly as before. Added a second pill row — `All | Today | Yesterday | This Week | This Month | Custom` — reusing the exact same date-range logic (`dashboardDateUtils.ts`) the Dashboard already uses, so "Today"/"This Week" etc. mean the same thing everywhere in the app. Both filters combine with each other and with search; chip counts reflect the current search + date filter, so they always match what tapping that chip would show.
+- **Mapping used** (ask me to adjust any of these):
+  - Contacted ← `new`, `contacted`
+  - Qualified ← `qualified` **with no appointment yet**
+  - Appointment ← `qualified` **with a non-cancelled appointment** (same split Tasks' pipeline view already uses)
+  - Site Visit ← `site_visit_scheduled`, `site_visit_done`
+  - Requirements ← `requirements_captured`
+  - Quotation ← `quotation_drafted`, `internally_approved`, `design_in_progress`, `design_approved`, `sent_to_client`
+  - Negotiation ← `negotiating`, `client_approved`
+  - Won ← `won`; Lost ← `lost`
+- **Date field used:** `Lead.createdAt` (one of the three options you listed). Flag if you want a different date for date-only or for specific buckets.
+- **Not added:** a "Lead Owner" filter pill — the reference screenshot has one, but no such filter exists anywhere in this app today, so I didn't invent one. Tell me if you want it added.
+- No database/schema change — pure filter/display logic. All existing Lead records and the real status field are untouched.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean. No browser access this session — please check the pill layout/spacing against the reference, and that every lead lands in the stage you'd expect.
+
+### "Won" renamed back to "Projects"
+**Commit:** Uncommitted
+Reverts yesterday's rename — sidebar label and page title.
+- **Changed:** `src/components/navigation/navItems.ts`, `src/screens/Projects/ProjectsScreen.tsx` — both back to "Projects".
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean.
+
+### Removed the default browser-tab icon
+**Commit:** Uncommitted
+No favicon was ever configured, so the browser tab showed its own generic placeholder icon next to "SpaceKrafters". Asked what "remove this logo" meant — just the tab icon, not the title text or an in-app element.
+- **Changed:** `index.html` — added `<link rel="icon" href="data:,">`, the standard way to tell the browser there is no icon rather than letting it fall back to a default. The page title and PWA app icons (used for install/home-screen, unrelated to the browser tab) are unchanged.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (50) and `npm run build` all clean.
+
 ## 2026-10-06
 
 ### File uploads on the live site — root cause is the Hostinger upload server's CORS allowlist; error message corrected

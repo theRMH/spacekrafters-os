@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Phone, Trash2, CheckSquare, Square, X, ListChecks, ChevronDown, MapPin } from 'lucide-react'
+import { Plus, Phone, Trash2, CheckSquare, Square, X, ListChecks, ChevronDown, MapPin, FileDown, FileUp } from 'lucide-react'
 import { useCRM } from '../../context/CRMContext'
 import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
 import { FilterChips } from '../../components/forms/FilterChips'
+import { DateField } from '../../components/forms/DateField'
 import { LocationPicker } from '../../components/forms/LocationPicker'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
@@ -21,11 +22,51 @@ import {
 } from '../../data/businessDivisions'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getNextLeadNumber } from '../../services/leadService'
+import { getAllAppointments } from '../../services/appointmentService'
 import { hasRole } from '../../utils/permissions'
 import { LeadStatusSheet, LEAD_STATUS_LABEL, ROLE_FOR_LEAD_STATUS } from './LeadStatusSheet'
-import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser, BusinessDivision, BusinessCategory, BusinessBrand, UserRole, LeadCodePrefix } from '../../types'
+import { ImportLeadsSheet } from './ImportLeadsSheet'
+import { FILTERS, type FilterKey, resolveRange, inRange as inRangeOf } from '../Dashboard/dashboardDateUtils'
+import { leadsToCsvText, downloadCsv } from '../../utils/leadCsv'
+import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser, BusinessDivision, BusinessCategory, BusinessBrand, UserRole, LeadCodePrefix, Appointment } from '../../types'
 
 type Filter = 'all' | LeadStatus
+
+// Consolidated top-level stages the Leads list filters by — a display/filter
+// grouping only, never written anywhere. Lead.status itself still holds the
+// full, real status (see LeadStatus/CHIPS below, still used by the Edit Lead
+// form's Status field). 'qualified' splits into Qualified/Appointment based
+// on whether the lead actually has a non-cancelled appointment yet, mirroring
+// the same split Tasks' pipeline view already uses for the same reason.
+type LeadBucket = 'contacted' | 'qualified' | 'appointment' | 'site_visit' | 'requirements' | 'quotation' | 'negotiation' | 'won' | 'lost'
+type BucketFilter = 'active' | LeadBucket
+
+const BUCKET_ORDER: LeadBucket[] = ['contacted', 'qualified', 'appointment', 'site_visit', 'requirements', 'quotation', 'negotiation', 'won', 'lost']
+const BUCKET_LABEL: Record<LeadBucket, string> = {
+  contacted:    'Contacted',
+  qualified:    'Qualified',
+  appointment:  'Appointment',
+  site_visit:   'Site Visit',
+  requirements: 'Requirements',
+  quotation:    'Quotation',
+  negotiation:  'Negotiation',
+  won:          'Won',
+  lost:         'Lost',
+}
+
+function leadBucket(lead: Lead, appointments: Appointment[]): LeadBucket {
+  switch (lead.status) {
+    case 'new': case 'contacted': return 'contacted'
+    case 'qualified':
+      return appointments.some(a => a.leadId === lead.id && a.status !== 'cancelled') ? 'appointment' : 'qualified'
+    case 'site_visit_scheduled': case 'site_visit_done': return 'site_visit'
+    case 'requirements_captured': return 'requirements'
+    case 'quotation_drafted': case 'internally_approved': case 'design_in_progress': case 'design_approved': case 'sent_to_client': return 'quotation'
+    case 'negotiating': case 'client_approved': return 'negotiation'
+    case 'won': return 'won'
+    case 'lost': return 'lost'
+  }
+}
 
 const ASSIGNABLE_LEAD_OWNER_ROLES: UserRole[] = ['project_coordinator', 'qs', 'designer']
 // Sentinel <select> value for "type a name that isn't any existing account" —
@@ -99,18 +140,26 @@ function fmtDateTime(val: string): string {
 
 export default function LeadsScreen() {
   const navigate = useNavigate()
-  const { leads, addLead, updateLead, deleteLead, bulkDeleteLeads } = useCRM()
+  const { leads, addLead, updateLead, deleteLead, bulkDeleteLeads, restoreLead, permanentlyDeleteLead } = useCRM()
   const { can, user } = useAuth()
   // Roles without full CRM access (edit_lead) only ever act on leads currently
   // assigned to them — scope their list down instead of showing the whole pipeline.
   const assignedOnly = !can('edit_lead')
+  const canSeeAppointments = can('view_appointments')
 
-  const [filter, setFilter] = useState<Filter>('all')
+  const [bucketFilter, setBucketFilter] = useState<BucketFilter>('active')
+  const [dateFilter, setDateFilter] = useState<FilterKey>('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [appointments, setAppointments] = useState<Appointment[]>([])
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Lead | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
+  const [permaDeleteTarget, setPermaDeleteTarget] = useState<Lead | null>(null)
+  const [restoring, setRestoring] = useState(false)
   const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
   const [selectMode, setSelectMode] = useState(false)
@@ -150,6 +199,13 @@ export default function LeadsScreen() {
     ))
   }, [])
 
+  // Only for the Qualified/Appointment filter split — gated the same way
+  // Tasks' pipeline view gates appointment visibility, so a role without
+  // view_appointments just sees every qualified lead under "Qualified".
+  useEffect(() => {
+    if (canSeeAppointments) getAllAppointments().then(setAppointments)
+  }, [canSeeAppointments])
+
   useEffect(() => {
     if (!sourceMenuOpen) return
     const close = () => setSourceMenuOpen(false)
@@ -157,11 +213,20 @@ export default function LeadsScreen() {
     return () => document.removeEventListener('click', close)
   }, [sourceMenuOpen])
 
+  // Site No. mirrors the generated Lead ID for a new lead — the user never
+  // types it, and it re-syncs automatically if Type changes before saving
+  // (switching SK/FGD re-runs this same effect with a fresh preview number).
+  // Only ever fires from the New Lead form's Type selector — openEdit() never
+  // touches leadCodePrefix, so an existing lead's own Site No. is untouched.
   useEffect(() => {
     setPreviewLeadNumber(null)
     if (!leadCodePrefix) return
     let cancelled = false
-    getNextLeadNumber(leadCodePrefix).then(n => { if (!cancelled) setPreviewLeadNumber(n) })
+    getNextLeadNumber(leadCodePrefix).then(n => {
+      if (cancelled) return
+      setPreviewLeadNumber(n)
+      if (n) setSiteNo(n)
+    })
     return () => { cancelled = true }
   }, [leadCodePrefix])
 
@@ -239,6 +304,10 @@ export default function LeadsScreen() {
       setFormError('Name, phone, city, lead owner, and type (SK/FGD) are required.')
       return
     }
+    if (phone.trim().length !== 10) {
+      setFormError('Enter a valid 10-digit phone number.')
+      return
+    }
     if (businessDivision === 'fgd' && !businessBrand) {
       setFormError('Brand is required for FGD leads.')
       return
@@ -266,6 +335,10 @@ export default function LeadsScreen() {
       setFormError('Name, phone, city, and lead owner are required.')
       return
     }
+    if (phone.trim().length !== 10) {
+      setFormError('Enter a valid 10-digit phone number.')
+      return
+    }
     if (businessDivision === 'fgd' && !businessBrand) {
       setFormError('Brand is required for FGD leads.')
       return
@@ -291,9 +364,28 @@ export default function LeadsScreen() {
     const result = await deleteLead(deleteTarget.id)
     const deletedId = deleteTarget.id
     setDeleteTarget(null)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update lead.', type: 'error' }); return }
+    if (selected?.id === deletedId) setSelected(null)
+    setSnack({ open: true, msg: 'Lead moved to Lost.', type: 'success' })
+  }
+
+  async function handleRestore(lead: Lead) {
+    setRestoring(true)
+    const result = await restoreLead(lead.id)
+    setRestoring(false)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not restore lead.', type: 'error' }); return }
+    setSelected(null)
+    setSnack({ open: true, msg: 'Lead restored.', type: 'success' })
+  }
+
+  async function confirmPermaDelete() {
+    if (!permaDeleteTarget) return
+    const result = await permanentlyDeleteLead(permaDeleteTarget.id)
+    const deletedId = permaDeleteTarget.id
+    setPermaDeleteTarget(null)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete lead.', type: 'error' }); return }
     if (selected?.id === deletedId) setSelected(null)
-    setSnack({ open: true, msg: 'Lead deleted.', type: 'success' })
+    setSnack({ open: true, msg: 'Lead permanently deleted.', type: 'success' })
   }
 
   function toggleSelectMode() {
@@ -319,52 +411,121 @@ export default function LeadsScreen() {
     const ids = [...selectedIds]
     const result = await bulkDeleteLeads(ids)
     setShowBulkDeleteConfirm(false)
-    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete selected leads.', type: 'error' }); return }
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update selected leads.', type: 'error' }); return }
     if (selected && ids.includes(selected.id)) setSelected(null)
     setSelectMode(false)
     setSelectedIds(new Set())
-    setSnack({ open: true, msg: `${ids.length} lead${ids.length === 1 ? '' : 's'} deleted.`, type: 'success' })
+    setSnack({ open: true, msg: `${ids.length} lead${ids.length === 1 ? '' : 's'} moved to Lost.`, type: 'success' })
   }
 
   const liveSelected = selected ? leads.find(l => l.id === selected.id) ?? null : null
 
-  const filtered = leads.filter(l => {
-    if (assignedOnly && l.assignedToId !== user?.id) return false
+  const now = useMemo(() => new Date(), [])
+  const range = useMemo(() => resolveRange(dateFilter, now, customFrom, customTo), [dateFilter, now, customFrom, customTo])
+
+  // Search + date-scoped, before the stage split — reused both for the final
+  // list and for each chip's live count, so counts always match what picking
+  // that chip would actually show.
+  const dateScoped = leads.filter(l => {
+    // A lead is "mine" either as its owner (ownerId — what the Assign To
+    // picker actually writes) or as whoever the current workflow stage is
+    // waiting on (assignedToId, auto-resolved by role per LeadStatusSheet's
+    // nextResponsible()). Checking assignedToId alone meant a freshly
+    // assigned lead — which has no assignedToId until its first status
+    // transition — was invisible to the very person it was assigned to.
+    if (assignedOnly && l.ownerId !== user?.id && l.assignedToId !== user?.id) return false
     const matchSearch = !search
       || l.name.toLowerCase().includes(search.toLowerCase())
       || l.phone.includes(search)
       || l.city.toLowerCase().includes(search.toLowerCase())
-    const matchFilter = filter === 'all' || l.status === filter
-    return matchSearch && matchFilter
+    return matchSearch && inRangeOf(l.createdAt, range)
   })
+
+  // "Active" isn't literally every lead — it mirrors FENSTER's Active filter:
+  // every open stage, with Won and Lost broken out as their own separate pills.
+  const activeCount = dateScoped.filter(l => {
+    const b = leadBucket(l, appointments)
+    return b !== 'won' && b !== 'lost'
+  }).length
+
+  const bucketChips: { value: BucketFilter; label: string; count: number }[] = [
+    { value: 'active', label: 'Active', count: activeCount },
+    ...BUCKET_ORDER.map(b => ({ value: b, label: BUCKET_LABEL[b], count: dateScoped.filter(l => leadBucket(l, appointments) === b).length })),
+  ]
+
+  const filtered = dateScoped.filter(l => {
+    if (bucketFilter === 'active') {
+      const b = leadBucket(l, appointments)
+      return b !== 'won' && b !== 'lost'
+    }
+    return leadBucket(l, appointments) === bucketFilter
+  })
+
+  // Exports exactly what's currently on screen — the same search + stage +
+  // date filters already applied to `filtered` — not the full Leads table.
+  function handleExportCsv() {
+    const today = new Date()
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    downloadCsv(`SpaceKrafters_Leads_${dateStr}.csv`, leadsToCsvText(filtered))
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
       <AppHeader />
       <div className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-14 z-20">
-        <div className="flex items-center justify-between mb-3">
-          <h1 className="text-lg font-extrabold text-slate-800">Leads</h1>
-          <div className="flex items-center gap-2">
-            <PermissionGate permission="delete_lead">
-              <button onClick={toggleSelectMode} aria-label={selectMode ? 'Cancel selection' : 'Select leads'}
-                className={`h-10 px-3 rounded-xl flex items-center gap-1.5 text-xs font-semibold active:opacity-90 ${
-                  selectMode ? 'bg-slate-100 text-slate-600' : 'border border-slate-200 bg-white text-slate-600'
-                }`}>
-                {selectMode ? <X size={15} /> : <ListChecks size={15} />}
-                {selectMode ? 'Cancel' : 'Select'}
-              </button>
-            </PermissionGate>
-            <PermissionGate permission="add_lead">
-              <button onClick={openNew} aria-label="Add new lead"
-                className="w-10 h-10 rounded-xl flex items-center justify-center shadow-fab active:opacity-90"
-                style={{ background: '#0F2A4A' }}>
-                <Plus size={19} className="text-white" strokeWidth={2.5} />
-              </button>
-            </PermissionGate>
-          </div>
+        <h1 className="text-lg font-extrabold text-slate-800 mb-3">Leads</h1>
+        <div className="flex items-center gap-2 mb-3">
+          <SearchBar value={search} onChange={setSearch} placeholder="Search leads…" className="flex-1" />
+          <button onClick={handleExportCsv} aria-label="Export CSV"
+            className="w-10 h-10 rounded-xl flex items-center justify-center shadow-fab active:opacity-90 shrink-0"
+            style={{ background: '#16A34A' }}>
+            <FileDown size={18} className="text-white" />
+          </button>
+          <PermissionGate permission="add_lead">
+            <button onClick={() => setShowImport(true)} aria-label="Import Leads"
+              className="w-10 h-10 rounded-xl flex items-center justify-center shadow-fab active:opacity-90 shrink-0"
+              style={{ background: '#2563EB' }}>
+              <FileUp size={18} className="text-white" />
+            </button>
+            <button onClick={openNew} aria-label="Add new lead"
+              className="w-10 h-10 rounded-xl flex items-center justify-center shadow-fab active:opacity-90 shrink-0"
+              style={{ background: '#0F2A4A' }}>
+              <Plus size={19} className="text-white" strokeWidth={2.5} />
+            </button>
+          </PermissionGate>
+          <PermissionGate permission="delete_lead">
+            <button onClick={toggleSelectMode} aria-label={selectMode ? 'Cancel selection' : 'Select leads'}
+              className={`h-10 px-3 rounded-xl flex items-center gap-1.5 text-xs font-semibold active:opacity-90 shrink-0 ${
+                selectMode ? 'bg-slate-100 text-slate-600' : 'border border-slate-200 bg-white text-slate-600'
+              }`}>
+              {selectMode ? <X size={15} /> : <ListChecks size={15} />}
+              {selectMode ? 'Cancel' : 'Select'}
+            </button>
+          </PermissionGate>
         </div>
-        <SearchBar value={search} onChange={setSearch} placeholder="Search leads…" className="mb-3" />
-        <FilterChips chips={CHIPS} active={filter} onChange={setFilter} />
+        <FilterChips chips={bucketChips} active={bucketFilter} onChange={setBucketFilter} className="mb-2" />
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {FILTERS.map(f => (
+            <button key={f.key} onClick={() => setDateFilter(f.key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${dateFilter === f.key ? 'text-white' : 'bg-white border border-slate-200 text-slate-600'}`}
+              style={dateFilter === f.key ? { background: '#2563EB' } : {}}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {dateFilter === 'custom' && (
+          <div className="flex items-end gap-2 flex-wrap mt-2">
+            <div className="w-36">
+              <label className="text-[11px] font-semibold text-slate-400 mb-1 block">From</label>
+              <DateField value={customFrom} onChange={setCustomFrom} />
+            </div>
+            <span className="text-slate-400 text-xs pb-2.5">→</span>
+            <div className="w-36">
+              <label className="text-[11px] font-semibold text-slate-400 mb-1 block">To</label>
+              <DateField value={customTo} onChange={setCustomTo} />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="px-4 pt-4 space-y-2.5">
@@ -443,7 +604,7 @@ export default function LeadsScreen() {
               <span className="text-sm font-bold text-red-600">{selectedIds.size} selected</span>
               <button onClick={() => setShowBulkDeleteConfirm(true)} disabled={selectedIds.size === 0}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-red-500 active:opacity-90 disabled:opacity-40">
-                <Trash2 size={13} /> Delete Selected
+                <Trash2 size={13} /> Mark Lost
               </button>
             </div>
           </div>
@@ -523,7 +684,7 @@ export default function LeadsScreen() {
               <Phone size={16} /> Call {selected.name.split(' ')[0]}
             </a>
 
-            {(can('edit_lead') || selected.assignedToId === user?.id) && selected.status !== 'won' && selected.status !== 'lost' && (
+            {(can('edit_lead') || selected.assignedToId === user?.id || selected.ownerId === user?.id) && selected.status !== 'won' && selected.status !== 'lost' && (
               <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                 <div>
                   <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>
@@ -546,10 +707,23 @@ export default function LeadsScreen() {
             </button>
 
             {can('delete_lead') && (
-              <button onClick={() => setDeleteTarget(selected)}
-                className="w-full text-center text-xs font-semibold text-red-500 py-2">
-                Delete Lead
-              </button>
+              selected.status === 'lost' ? (
+                <div className="space-y-2">
+                  <button disabled={restoring} onClick={() => handleRestore(selected)}
+                    className="w-full text-center text-sm font-bold py-3 rounded-xl text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
+                    {restoring ? 'Restoring…' : 'Restore'}
+                  </button>
+                  <button onClick={() => setPermaDeleteTarget(selected)}
+                    className="w-full text-center text-xs font-semibold text-red-500 py-2">
+                    Delete
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setDeleteTarget(selected)}
+                  className="w-full text-center text-xs font-semibold text-red-500 py-2">
+                  Mark as Lost
+                </button>
+              )
             )}
           </div>
           )
@@ -600,7 +774,8 @@ export default function LeadsScreen() {
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Phone Number *</label>
-            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="9876543210"
+            <input value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              inputMode="numeric" placeholder="9876543210"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
           <div>
@@ -714,9 +889,9 @@ export default function LeadsScreen() {
       <Dialog
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        title="Delete Lead"
-        message={`Delete ${deleteTarget?.name ?? 'this lead'}? This also removes its linked appointments, follow-ups, site visits, requirements, and quotations. This cannot be undone.`}
-        confirmLabel="Delete"
+        title="Mark Lead as Lost"
+        message={`Mark ${deleteTarget?.name ?? 'this lead'} as Lost? It moves out of the active list into the Lost filter — nothing is deleted, and its full history (appointments, quotations, activity log) is kept.`}
+        confirmLabel="Mark Lost"
         onConfirm={confirmDelete}
         variant="danger"
       />
@@ -724,11 +899,30 @@ export default function LeadsScreen() {
       <Dialog
         isOpen={showBulkDeleteConfirm}
         onClose={() => setShowBulkDeleteConfirm(false)}
-        title="Delete Selected Leads"
-        message={`Delete ${selectedIds.size} selected lead${selectedIds.size === 1 ? '' : 's'}? This also removes their linked appointments, follow-ups, site visits, requirements, and quotations. This cannot be undone.`}
-        confirmLabel="Delete"
+        title="Mark Selected Leads as Lost"
+        message={`Mark ${selectedIds.size} selected lead${selectedIds.size === 1 ? '' : 's'} as Lost? They move out of the active list into the Lost filter — nothing is deleted, and their history is kept.`}
+        confirmLabel="Mark Lost"
         onConfirm={confirmBulkDelete}
         variant="danger"
+      />
+
+      <Dialog
+        isOpen={!!permaDeleteTarget}
+        onClose={() => setPermaDeleteTarget(null)}
+        title="Permanently Delete Lead"
+        message={`Permanently delete ${permaDeleteTarget?.name ?? 'this lead'}? This removes the lead and its activity history for good — it cannot be undone and the lead cannot be recovered.`}
+        confirmLabel="Delete Permanently"
+        onConfirm={confirmPermaDelete}
+        variant="danger"
+      />
+
+      <ImportLeadsSheet
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+        existingLeads={leads}
+        assignableMembers={assignableMembers}
+        addLead={addLead}
+        onDone={msg => setSnack({ open: true, msg, type: 'success' })}
       />
 
       <Snackbar

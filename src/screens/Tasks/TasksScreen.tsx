@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Workflow, ChevronDown } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
@@ -52,6 +52,7 @@ function relevantDate(lead: Lead, stage: PipelineStage, appointments: Appointmen
 
 export default function TasksScreen() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, can } = useAuth()
   const { leads, updateLead } = useCRM()
 
@@ -112,7 +113,11 @@ export default function TasksScreen() {
   const pipelineLeads = leads
     .filter(l => l.businessDivision !== 'fgd')
     .filter(l => l.status !== 'new' && l.status !== 'contacted')
-    .filter(l => canManageLeads || l.assignedToId === user?.id)
+    // Same "mine" rule as LeadsScreen.tsx: ownerId (what Assign To actually
+    // writes) or assignedToId (the current stage's auto-resolved owner) —
+    // assignedToId alone missed every freshly-assigned lead, which has none
+    // until its first status transition.
+    .filter(l => canManageLeads || l.ownerId === user?.id || l.assignedToId === user?.id)
   const pipelineItems = pipelineLeads
     .map(lead => ({ lead, stage: pipelineStage(lead, appointments, projects) }))
     .filter(({ lead }) => !pipelineSearch || lead.name.toLowerCase().includes(pipelineSearch.toLowerCase()))
@@ -145,6 +150,20 @@ export default function TasksScreen() {
     setOpenLeadId(lead.id)
   }
 
+  // Deep-link from a "New Lead Task" notification (sendNotification(..., '/tasks?leadId=...')) —
+  // opens that lead's own action panel directly instead of just landing on
+  // the page. Bypasses the pipeline list's own filters (search/bucket/FGD)
+  // since the notification already points at a specific real lead.
+  useEffect(() => {
+    if (isLoading) return
+    const leadId = new URLSearchParams(location.search).get('leadId')
+    if (!leadId) return
+    const lead = leads.find(l => l.id === leadId)
+    if (lead) openPipelineItem(lead, pipelineStage(lead, appointments, projects))
+    navigate('/tasks', { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, location.search])
+
   // Replicates MDTasksScreen.handleDecision()'s field writes exactly — same
   // Appointment update, same lead.status advance to 'site_visit_scheduled'
   // (+ assignee + notification) on approval — so approving from here behaves
@@ -166,9 +185,11 @@ export default function TasksScreen() {
     const note = approved
       ? 'MD accepted the appointment reschedule' + (advance ? ' — site visit scheduled' : '') + (mdNotes.trim() ? `: ${mdNotes.trim()}` : '')
       : `MD rejected the appointment reschedule${mdNotes.trim() ? `: ${mdNotes.trim()}` : ''}`
+    let newAssigneeId: string | undefined
     if (advance) {
       const role = ROLE_FOR_LEAD_STATUS['site_visit_scheduled']
       const person = role ? managedUsers.find(u => u.role === role) : undefined
+      newAssigneeId = person?.id
       await updateLead(liveLead.id, {
         status: 'site_visit_scheduled',
         assignedRole: role,
@@ -183,6 +204,14 @@ export default function TasksScreen() {
         [liveLead.ownerId],
         approved ? 'Reschedule Accepted' : 'Reschedule Rejected',
         `${liveLead.name} (${liveLead.leadNumber ?? liveLead.id}) — ${approved ? 'MD accepted the reschedule.' : 'MD rejected the reschedule.'}${mdNotes.trim() ? ` Notes: ${mdNotes.trim()}` : ''}`,
+      )
+    }
+    if (newAssigneeId && newAssigneeId !== liveLead.assignedToId) {
+      await sendNotification(
+        [newAssigneeId],
+        'New Lead Task',
+        `${liveLead.name} (${liveLead.leadNumber ?? liveLead.id}) — Site Visit Scheduled. Assigned by ${user?.name ?? 'MD'}.`,
+        `/tasks?leadId=${liveLead.id}`,
       )
     }
     setActionSaving(false)
@@ -224,11 +253,18 @@ export default function TasksScreen() {
                   return (
                     <div key={lead.id} className="bg-white rounded-2xl shadow-card border border-slate-100 p-4">
                       <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <span className="font-bold text-sm text-slate-800 truncate">{lead.name}</span>
+                        <div className="min-w-0">
+                          <span className="font-bold text-sm text-slate-800 truncate">{lead.name}</span>
+                          {lead.leadNumber && <span className="text-xs text-slate-400 ml-1.5">{lead.leadNumber}</span>}
+                        </div>
                         <StatusBadge status={pipelineBadgeStatus(stage)} label={pipelineStageLabel(stage)} />
                       </div>
                       {project && <p className="text-xs text-slate-500">Project: {project.name}</p>}
-                      <p className="text-xs text-slate-500">Assigned to: {lead.assignedToName ?? lead.ownerName}</p>
+                      <p className="text-xs text-slate-500">{lead.city}</p>
+                      <p className="text-xs text-slate-500">Owner: {lead.ownerName}</p>
+                      {lead.assignedToName && lead.assignedToName !== lead.ownerName && (
+                        <p className="text-xs text-slate-500">Assigned to: {lead.assignedToName}</p>
+                      )}
                       <p className="text-xs text-slate-400 mb-2.5">{relevantDate(lead, stage, appointments)}</p>
 
                       {action && (

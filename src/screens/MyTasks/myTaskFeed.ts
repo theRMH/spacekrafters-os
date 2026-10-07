@@ -78,9 +78,13 @@ export function buildMyTaskFeed(opts: {
     })
   }
 
-  // 2. Lead — exact person match, mirrors LeadsScreen's own `assignedOnly` filter.
+  // 2. Lead — mirrors LeadsScreen's own `assignedOnly` filter: a lead is
+  // mine either as its owner (ownerId — what the Assign To picker actually
+  // writes) or as whoever the current stage is waiting on (assignedToId).
+  // assignedToId alone missed every freshly-assigned lead, which has none
+  // until its first status transition.
   for (const l of leads) {
-    if (l.assignedToId !== user.id) continue
+    if (l.ownerId !== user.id && l.assignedToId !== user.id) continue
     items.push({
       key: `lead-${l.id}`, at: l.updatedAt,
       title: `Lead: ${LEAD_STATUS_LABEL[l.status]}`, badge: 'Lead', badgeCls: 'bg-sky-50 text-sky-700',

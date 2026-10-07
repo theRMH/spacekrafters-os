@@ -49,7 +49,7 @@ export function SidebarNavigation() {
                     <button
                       key={path}
                       onClick={() => navigate(path)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors active:opacity-80
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors active:opacity-80
                         ${active ? 'text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}
                       style={active ? { background: 'linear-gradient(135deg, #0F2A4A, #0A1D33)' } : {}}
                     >
