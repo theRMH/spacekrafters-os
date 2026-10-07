@@ -1,3 +1,30 @@
+### Assign To — "Titus" and "Sundaram Banu" were the same person
+**Commit:** Uncommitted
+Confirmed with you: these were two mentions of one person, full name "Titus Sundaram Babu", whose real account is stored as "Titus Sundhar" (Purchase Executive).
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — removed "Sundaram Banu" from the FGD custom-name list (it was a duplicate, not a separate person). Added `EXTRA_ASSIGNEE_DISPLAY_NAME`, a small label override so this one real account shows as "Titus Sundaram Babu" in the Assign To dropdown and saves that as the lead's `ownerName`, instead of the account's stored "Titus Sundhar". His real `ownerId`/role are untouched, so notifications and "my assigned leads" visibility still work correctly through his real account.
+- **Not changed:** the actual `sks_managed_users` record's `fullName` still says "Titus Sundhar" elsewhere in the app (Settings/User Management, his own login, etc.) — correcting that is a separate database write to an existing user record, which needs its own explicit confirmation before I'd do it.
+- No database/schema change for this part — display/save label only.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean. No browser access this session — please confirm the dropdown now shows exactly one "Titus Sundaram Babu – Purchase Executive" entry (not two), for both FGD and SK.
+
+### Assign To — added client-requested names, conditional on Lead Type (FGD/SK)
+**Commit:** Uncommitted
+Checked the real managed-users table first (read-only) before touching anything, since getting an identity wrong here would mis-assign leads and silently break the notification/"my assigned leads" visibility work from earlier — that only works for real accounts, not free-text names. Confirmed with you: 6 of the requested names are people already in the system under a role outside the current Assign To allowlist (project_coordinator/qs/designer); 3 have no account anywhere.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx`:
+  - `EXTRA_ASSIGNEE_REAL_NAMES` (FGD: M. Nirmal Kumar, Vicky, Rinoshika, Titus Sundhar, Manju · SK: Santhosh, Titus Sundhar, Manju) — resolved to each person's real account (fetched via a new `allManagedUsers` full-directory state, since their roles — owner/admin/purchase/accounts/site_engineer — sit outside the existing 3-role Assign To list), so selecting them sets the real `ownerId`, and notifications/visibility work exactly like any other assignee.
+  - `EXTRA_ASSIGNEE_CUSTOM_NAMES` (FGD only: Kannan – BSH KAM, David – Support Staff, Sundaram Banu) — no matching account, so shown as plain-name options reusing the existing "Other — type a name…" mechanism (no `ownerId`, just `ownerName`) — per your choice, not a reason to create new accounts.
+  - Both lists are keyed by Lead Type and only show for the matching one; the existing Project Coordinator/QS/Designer list still shows for both types, unchanged, as you asked to preserve.
+  - Added a new `assigneeLeadType` state (separate from `leadCodePrefix`) to drive this filtering for both New (follows the Type selector) and Edit (follows the lead's own existing type) — deliberately not reusing `leadCodePrefix` itself, since that field also drives the Site-No auto-fill effect and reusing it for Edit would have overwritten an existing lead's real Site No. with a freshly generated one.
+- **Not changed:** User Management, any existing account's role, and the base Assign To list for non-FGD/SK-specific people.
+- No database/schema change — no new or modified `sks_managed_users` rows.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean. No browser access this session — please confirm: Type FGD shows all 8 extra names (5 real + 3 custom), Type SK shows only Santhosh/Titus Sundhar/Manju, and selecting a real-account name (e.g. Santhosh) still lets him see the lead under his own My Tasks/Leads.
+
+### Lead status sheet — removed the "No site visit logged yet" dead-end message
+**Commit:** Uncommitted
+At the Site Visit Scheduled stage with no site visit captured yet, the sheet showed a text line sending the user to the Site Visits tab, which reads like a dead end inside a panel meant to keep every action in-page. Removed that text line; the existing "Go to Site Visits →" button stays, since that's still the real next step until this stage grows its own in-page capture form.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx`.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean.
+
 ### ⚠ Production data cleared: all 34 leads deleted (your explicit request)
 **Not a code change — a one-time production database operation, logged here for team visibility.**
 At your explicit, confirmed request (all 34 leads were test/demo records — Tester, Testing RMH, Mohamed, Raj, Harish, etc.), permanently deleted every row in `sks_leads` so you could create a fresh lead and test the current flow cleanly.

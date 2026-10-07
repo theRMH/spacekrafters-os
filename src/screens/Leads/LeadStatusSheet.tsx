@@ -445,7 +445,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
       case 'site_visit_scheduled':
         return (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">{hasSiteVisit ? 'Site visit is on record.' : 'No site visit logged yet — capture it in the Site Visits tab first.'}</p>
+            {hasSiteVisit && <p className="text-sm text-slate-600">Site visit is on record.</p>}
             {hasSiteVisit ? (
               <button disabled={saving} onClick={submitSiteVisitScheduled} className={primaryBtn} style={{ background: '#0F2A4A' }}>
                 Mark Site Visit Done

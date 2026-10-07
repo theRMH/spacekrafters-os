@@ -76,6 +76,38 @@ const ASSIGNABLE_LEAD_OWNER_ROLES: UserRole[] = ['project_coordinator', 'qs', 'd
 // the same "owner_id IS NULL" visibility RLS already grants unassigned leads.
 const CUSTOM_OWNER_VALUE = '__custom__'
 
+// Client-requested additional Assign To names (2026-10-07), shown only for
+// the matching Lead Type. Checked against the real managed-users directory
+// first and confirmed with the client: these fullNames are the SAME people
+// already in the system under a role outside ASSIGNABLE_LEAD_OWNER_ROLES —
+// shown via their real account (not a new one) so notifications and "my
+// assigned leads" visibility work for them, same as any other assignee.
+const EXTRA_ASSIGNEE_REAL_NAMES: Record<LeadCodePrefix, string[]> = {
+  FGD: ['M. Nirmal Kumar', 'Vicky', 'Rinoshika', 'Titus Sundhar', 'Manju'],
+  SK:  ['Santhosh', 'Titus Sundhar', 'Manju'],
+}
+// The client's two separate mentions ("Titus" and "Sundaram Banu") turned
+// out to be the same person's full name, "Titus Sundaram Babu" — his real
+// account is stored as "Titus Sundhar" (see EXTRA_ASSIGNEE_REAL_NAMES above).
+// Overrides the dropdown label and the saved ownerName for that one account
+// without renaming the real sks_managed_users record itself (a separate,
+// explicit-approval change, not done here) — his real id/role are untouched,
+// so notifications and visibility still work via the real account.
+const EXTRA_ASSIGNEE_DISPLAY_NAME: Record<string, string> = {
+  'Titus Sundhar': 'Titus Sundaram Babu',
+}
+// No matching account anywhere in the system (confirmed with the client) —
+// shown as plain name labels, the same mechanism CUSTOM_OWNER_VALUE already
+// uses for an external name with no real account: no notifications, no "my
+// assigned leads" visibility, just the name recorded on the lead.
+const EXTRA_ASSIGNEE_CUSTOM_NAMES: Record<LeadCodePrefix, string[]> = {
+  FGD: ['Kannan – BSH KAM', 'David – Support Staff'],
+  SK:  [],
+}
+// Sentinel prefix distinguishing a fixed custom-name option (value =
+// `name:<the exact label>`) from a real account's id and from CUSTOM_OWNER_VALUE.
+const CUSTOM_NAME_PREFIX = 'name:'
+
 const CHIPS: { value: Filter; label: string }[] = [
   { value: 'all',                    label: 'All'          },
   { value: 'new',                    label: 'New'          },
@@ -189,14 +221,22 @@ export default function LeadsScreen() {
   const [ownerName, setOwnerName] = useState('')
   const [isCustomOwner, setIsCustomOwner] = useState(false)
   const [formError, setFormError] = useState('')
+  // Separate from leadCodePrefix (which the Site-No-sync effect reacts to) —
+  // only drives which EXTRA_ASSIGNEE_* names show, for both New (follows the
+  // Type selector) and Edit (follows the lead's own existing type).
+  const [assigneeLeadType, setAssigneeLeadType] = useState<LeadCodePrefix | ''>('')
   const [assignableMembers, setAssignableMembers] = useState<ManagedUser[]>([])
+  // Full directory (every role, not just ASSIGNABLE_LEAD_OWNER_ROLES) — only
+  // used to resolve EXTRA_ASSIGNEE_REAL_NAMES to their real account.
+  const [allManagedUsers, setAllManagedUsers] = useState<ManagedUser[]>([])
 
   // Lead ownership is limited to the roles that actually work leads —
   // Project Coordinator, QS, Designer — not every active team member.
   useEffect(() => {
-    getManagedUsersDirectory().then(users => setAssignableMembers(
-      users.filter(u => u.status === 'active' && ASSIGNABLE_LEAD_OWNER_ROLES.some(r => hasRole(u, r)))
-    ))
+    getManagedUsersDirectory().then(users => {
+      setAssignableMembers(users.filter(u => u.status === 'active' && ASSIGNABLE_LEAD_OWNER_ROLES.some(r => hasRole(u, r))))
+      setAllManagedUsers(users)
+    })
   }, [])
 
   // Only for the Qualified/Appointment filter split — gated the same way
@@ -237,10 +277,16 @@ export default function LeadsScreen() {
       setOwnerName('')
       return
     }
+    if (id.startsWith(CUSTOM_NAME_PREFIX)) {
+      setIsCustomOwner(false)
+      setOwnerId('')
+      setOwnerName(id.slice(CUSTOM_NAME_PREFIX.length))
+      return
+    }
     setIsCustomOwner(false)
-    const member = assignableMembers.find(m => m.id === id)
+    const member = assignableMembers.find(m => m.id === id) ?? allManagedUsers.find(m => m.id === id)
     setOwnerId(id)
-    setOwnerName(member?.fullName ?? '')
+    setOwnerName((member && EXTRA_ASSIGNEE_DISPLAY_NAME[member.fullName]) || member?.fullName || '')
   }
 
   function onBusinessDivisionChange(value: string) {
@@ -258,6 +304,7 @@ export default function LeadsScreen() {
   // 'fgd' back out since it's not a valid SK-type division.
   function onLeadCodePrefixChange(value: LeadCodePrefix | '') {
     setLeadCodePrefix(value)
+    setAssigneeLeadType(value)
     if (value === 'FGD') {
       setBusinessDivision('fgd')
       setBusinessCategory('')
@@ -273,7 +320,7 @@ export default function LeadsScreen() {
   }
 
   function resetForm() {
-    setName(''); setLeadCodePrefix(''); setSiteNo(''); setPhone(''); setEmail(''); setCity('')
+    setName(''); setLeadCodePrefix(''); setAssigneeLeadType(''); setSiteNo(''); setPhone(''); setEmail(''); setCity('')
     setLatitude(undefined); setLongitude(undefined)
     setBusinessDivision(''); setBusinessCategory(''); setBusinessBrand('')
     setRequirement(''); setNotes(''); setSource('walk_in'); setSubSource(''); setInterest('medium'); setStatus('new')
@@ -295,6 +342,7 @@ export default function LeadsScreen() {
     setSource(lead.source); setSubSource(lead.subSource ?? ''); setInterest(lead.interest); setStatus(lead.status)
     setOwnerId(lead.ownerId ?? ''); setOwnerName(lead.ownerName)
     setIsCustomOwner(!lead.ownerId)
+    setAssigneeLeadType(lead.leadCodePrefix ?? '')
     setFormError('')
     setShowEdit(true)
   }
@@ -468,6 +516,26 @@ export default function LeadsScreen() {
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
     downloadCsv(`SpaceKrafters_Leads_${dateStr}.csv`, leadsToCsvText(filtered))
   }
+
+  // Assign To options = the base role list (unchanged) + the client's extra
+  // named people for the current Lead Type — real accounts shown via their
+  // real id (excluded from the base list already, so no dupes), plain-label
+  // names via the CUSTOM_NAME_PREFIX sentinel.
+  const extraRealAssignees = (assigneeLeadType ? EXTRA_ASSIGNEE_REAL_NAMES[assigneeLeadType] : [])
+    .map(name => allManagedUsers.find(u => u.fullName === name))
+    .filter((u): u is ManagedUser => !!u && !assignableMembers.some(m => m.id === u.id))
+  const extraCustomAssignees = assigneeLeadType ? EXTRA_ASSIGNEE_CUSTOM_NAMES[assigneeLeadType] : []
+  const assignToOptions = [
+    ...assignableMembers.map(m => ({ value: m.id, label: `${m.fullName} – ${getRoleDisplayLabel(m.role, m.displayRole)}` })),
+    ...extraRealAssignees.map(m => ({
+      value: m.id,
+      label: `${EXTRA_ASSIGNEE_DISPLAY_NAME[m.fullName] || m.fullName} – ${getRoleDisplayLabel(m.role, m.displayRole)}`,
+    })),
+    ...extraCustomAssignees.map(name => ({ value: `${CUSTOM_NAME_PREFIX}${name}`, label: name })),
+  ]
+  const assignToValue = isCustomOwner
+    ? CUSTOM_OWNER_VALUE
+    : (!ownerId && extraCustomAssignees.includes(ownerName) ? `${CUSTOM_NAME_PREFIX}${ownerName}` : ownerId)
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
@@ -807,8 +875,8 @@ export default function LeadsScreen() {
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Assign To *</label>
             <SearchableSelect
-              value={isCustomOwner ? CUSTOM_OWNER_VALUE : ownerId} onChange={onOwnerChange}
-              options={assignableMembers.map(m => ({ value: m.id, label: `${m.fullName} – ${getRoleDisplayLabel(m.role, m.displayRole)}` }))}
+              value={assignToValue} onChange={onOwnerChange}
+              options={assignToOptions}
               extraOption={{ value: CUSTOM_OWNER_VALUE, label: 'Other — type a name…' }}
             />
             {isCustomOwner && (
