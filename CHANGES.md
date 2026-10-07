@@ -1,3 +1,46 @@
+### Site Visit rooms — added Height, renamed room Notes to "Scope of Works", Vicky's role label corrected
+**Commit:** Uncommitted
+1. **Changed:** `src/types/index.ts` — added `SiteVisitRoom.heightFt?: string`.
+2. **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — added a Height (ft) input next to Length/Width in the room form (now Length × Width × Height); `formatMeasurements()` now joins all three present values (`12ft x 14ft x 9ft`), falling back gracefully for older rooms that only have length/width. This combined `measurements` string is what `RequirementsScreen.tsx` and `SiteVisitReportScreen.tsx` already display, so height shows up there too with no change needed in either file. Renamed the room-level "Notes (optional)" field's placeholder to "Scope of Works (optional)" — the underlying field is still `room.notes`, so existing saved data displays unchanged.
+3. **Database (existing data, approved before running):** `sks_managed_users` — Vicky's (`usr_test_admin`) `displayRole` changed from "Support Staff" to "Operational Executive". Read-only check first confirmed exactly one Vicky record; ran as a real transaction, then re-verified with a fresh read-only query. Every screen (Assign To, Site Visits, Tasks, notifications) reads this same field via `getRoleDisplayLabel()`/the shared managed-users directory, so no code change was needed for it to show consistently everywhere — and no other user record was touched.
+- No schema change (no new tables/columns in the database — `heightFt` is a new key inside the existing JSONB `data` column, same as every other optional room field).
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean. No browser access this session — please confirm: the room form shows Length × Width × Height, saved rooms show the new combined measurement string, the room notes field now reads "Scope of Works (optional)", and Vicky now shows as "Operational Executive" everywhere her role is displayed.
+
+### Lead workflow — Close/Cancel/Save/Back from an Appointment/Site Visit/Quotation/Requirements/Design flow now actually returns to Leads
+**Commit:** Uncommitted
+Superseded the earlier same-day fix in this file (the "← Lead" link below each screen's title): screenshots showed that dismissing the New Site Visit sheet (X, or finishing it) still landed on the bare Site Visits list, not Leads — a link next to the title doesn't help if closing the sheet itself doesn't navigate anywhere. This fixes the actual dismissal/navigation logic instead.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the 5 "Go to X →" buttons (Appointments, Site Visits, Requirements, Quotations, Design Center) now pass `returnTo: '/leads'` alongside `leadId` in the navigation state.
+- **Changed:** `src/screens/Appointments/AppointmentsScreen.tsx`, `src/screens/SiteVisits/SiteVisitsScreen.tsx`, `src/screens/Quotations/QuotationsScreen.tsx`, `src/screens/Requirements/RequirementsScreen.tsx`, `src/screens/Design/DesignCenterScreen.tsx` — removed the "← Lead" link; added a `dismiss()` helper used by every real exit point of the New/Edit/Detail sheet (the sheet's X/backdrop, and a successful save) — when `returnTo` was received, it navigates there (`/leads`) with the lead's id instead of just closing the sheet locally. **Scoped precisely to the Lead-originated flow**: `returnTo` is only set when actually sent (i.e. from `LeadStatusSheet`'s buttons above) — `ProductSaleDetailScreen.tsx`'s own, separate `leadId` deep-link into Quotations (its "Create Quotation →" button) sends no `returnTo`, so that flow is untouched and still returns to Product Sales as before, not hijacked into Leads.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — filters (stage pills, date filter, custom from/to), search, and scroll position are now persisted to `sessionStorage` and restored on mount, so navigating into one of these flows and back (which unmounts/remounts this screen) no longer resets them to defaults. The lead list itself was already safe — it lives in `CRMContext`, which sits above the router and isn't affected by this screen unmounting.
+- "Negotiation" has no separate routed screen — it's a `Lead.status` handled entirely inside `LeadStatusSheet` (a modal within Leads itself), so there's nothing to navigate away from or back to there. "Task" is reached from a Lead only via a notification link (`/tasks?leadId=...`), not an in-session "Go to Task" button, so there's no Leads page to return to in that case — left unchanged.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean. No browser access this session — please confirm: from a Lead, opening Appointment/Site Visit/Quotation/Requirements/Design and then closing (X), cancelling, or completing it lands back on Leads (not that module's list), with your filters/search/scroll position intact; and that opening Site Visits/Quotations directly from the sidebar (not via a Lead) still behaves exactly as before, with no unexpected redirect.
+
+### Leads list — Update Status button added directly on each card
+**Commit:** Uncommitted
+Matching the FENSTER reference: each lead card now has its own "Update Status" button instead of requiring a tap into the full Lead Detail sheet first.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — added a full-width "Update Status" button at the bottom of every card (hidden during multi-select, and for Won/Lost leads, matching the same gate the Detail sheet's own button already uses). Tapping it opens `LeadStatusSheet` directly for that lead. Implemented as an independent trigger (`quickStatusLeadId`, a second `LeadStatusSheet` instance) rather than reusing the existing `selected`/`showStatusSheet` pair, because that pair is tied to the Detail sheet's own `isOpen` condition — reusing it would have popped the full Detail sheet open underneath. The card's existing tap-to-open-Detail-sheet behavior is unchanged.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean. No browser access this session — please confirm tapping Update Status on a card opens the status sheet directly (not the Detail sheet), and tapping elsewhere on the card still opens Detail as before.
+
+### Lead status sheet — Qualified-stage buttons reordered and relabeled: "Complete" then "Rescheduled"
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the Qualified-stage action pair is now `[Complete] [Rescheduled]` (was `[Rescheduled] [Qualified]`) — "Qualified" renamed to "Complete", and it now comes first. Same underlying actions, unchanged: Complete confirms the appointment and moves the lead to Site Visit; Rescheduled opens the reschedule-request form.
+- No database/schema change — label and order only.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean.
+
+### Lead status sheet — Qualified page's Call button is now solid dark green with white text
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — on the Qualified stage specifically (where Call is the only button, full-width), it's now `bg-emerald-700`/white text instead of the light emerald style. Every other stage's Call/WhatsApp pair is unchanged.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean.
+
+### Lead status sheet — WhatsApp hidden for Qualified, Call goes full-width
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the WhatsApp button no longer shows when a lead's current status is `qualified`; Call takes the full row instead of leaving an empty gap. Every other stage is unchanged (still shows both Call and WhatsApp side by side).
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (62) and `npm run build` all clean.
+
 ### Assign To — "Titus" and "Sundaram Banu" were the same person
 **Commit:** Uncommitted
 Confirmed with you: these were two mentions of one person, full name "Titus Sundaram Babu", whose real account is stored as "Titus Sundhar" (Purchase Executive).

@@ -145,6 +145,15 @@ export default function QuotationsScreen() {
   const [rejectReason, setRejectReason] = useState('')
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
+  // Set (together with returnTo) when this screen was opened via a Lead's
+  // leadId deep link that explicitly asked for a return destination. While
+  // set, every dismissal of the New/Edit/Detail sheet (X, backdrop tap, or a
+  // successful save) returns there instead of leaving the bare Quotations
+  // list showing underneath. NOT set for ProductSaleDetailScreen's own
+  // leadId deep link into this same screen — it sends no returnTo, so that
+  // flow's dismissal behavior is unchanged (plain prefill + local close).
+  const [fromLeadId, setFromLeadId] = useState('')
+  const [returnTo, setReturnTo] = useState('')
   const [leadId, setLeadId] = useState('')
   const [requirementId, setRequirementId] = useState('')
   const [sections, setSections] = useState<BOQSection[]>([newSection()])
@@ -178,12 +187,13 @@ export default function QuotationsScreen() {
   useEffect(() => { refresh() }, [])
 
   useEffect(() => {
-    const state = routerLocation.state as { leadId?: string } | null
+    const state = routerLocation.state as { leadId?: string; returnTo?: string } | null
     if (!state?.leadId || isLoading) return
     setLeadId(state.leadId)
     const req = requirementsForLead(state.leadId)[0]
     if (req) handleRequirementPick(req.id)
     setShowNew(true)
+    if (state.returnTo) { setFromLeadId(state.leadId); setReturnTo(state.returnTo) }
     navigate(routerLocation.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routerLocation.state, isLoading])
@@ -212,6 +222,20 @@ export default function QuotationsScreen() {
   function openNew() {
     resetForm()
     setShowNew(true)
+  }
+
+  // Closes a sheet normally, unless this screen was entered via a Lead deep
+  // link carrying returnTo — then every dismissal (X, backdrop, Cancel, or a
+  // completed save) returns to that origin page instead.
+  function dismiss(closeLocally: () => void) {
+    if (returnTo) {
+      const id = fromLeadId
+      const to = returnTo
+      setFromLeadId(''); setReturnTo('')
+      navigate(to, { state: { leadId: id } })
+    } else {
+      closeLocally()
+    }
   }
 
   function openEdit(q: Quotation) {
@@ -289,7 +313,7 @@ export default function QuotationsScreen() {
     const result = await upsertQuotation(quotation)
     if (!result.ok) { setFormError(result.error ?? 'Could not save quotation.'); return }
     setQuotations(prev => [quotation, ...prev])
-    setShowNew(false)
+    dismiss(() => setShowNew(false))
     setSnack({ open: true, msg: 'Quotation created and sent to MD for approval.', type: 'success' })
     notifyMdPending(quotation, 'New quotation created.')
   }
@@ -322,8 +346,7 @@ export default function QuotationsScreen() {
     const result = await upsertQuotation(updated)
     if (!result.ok) { setFormError(result.error ?? 'Could not update quotation.'); return }
     setQuotations(prev => prev.map(q => (q.id === updated.id ? updated : q)))
-    setShowEdit(false)
-    setSelected(null)
+    dismiss(() => { setShowEdit(false); setSelected(null) })
     setSnack({ open: true, msg: needsReapproval ? 'Quotation updated and sent back to MD for approval.' : 'Quotation updated.', type: 'success' })
     if (needsReapproval) notifyMdPending(updated, 'Quotation was edited and needs approval again.')
   }
@@ -518,7 +541,7 @@ export default function QuotationsScreen() {
       </div>
 
       {/* Quotation Detail Sheet */}
-      <BottomSheet isOpen={!!selected && !showEdit} onClose={() => setSelected(null)} title={selected ? leadName(selected.leadId) : ''} height="full">
+      <BottomSheet isOpen={!!selected && !showEdit} onClose={() => dismiss(() => setSelected(null))} title={selected ? leadName(selected.leadId) : ''} height="full">
         {selected && (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
@@ -825,7 +848,7 @@ export default function QuotationsScreen() {
       {/* New / Edit Quotation Sheet */}
       <BottomSheet
         isOpen={showNew || showEdit}
-        onClose={() => { setShowNew(false); setShowEdit(false) }}
+        onClose={() => dismiss(() => { setShowNew(false); setShowEdit(false) })}
         title={showEdit ? 'Edit Quotation' : 'New Quotation'}
         height="full"
       >

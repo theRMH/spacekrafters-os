@@ -367,7 +367,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
           return (
             <div className="space-y-3">
               <p className="text-sm text-slate-600">No appointment scheduled yet — schedule one in the Appointments tab first.</p>
-              <button onClick={() => { onClose(); navigate('/appointments', { state: { leadId: lead.id } }) }} className={secondaryBtn}>
+              <button onClick={() => { onClose(); navigate('/appointments', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
                 Go to Appointments →
               </button>
             </div>
@@ -432,11 +432,11 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
           <div className="space-y-3">
             <p className="text-sm text-slate-600">A site visit appointment is scheduled. Reschedule it for MD approval, or confirm it now to move the lead to Site Visit.</p>
             <div className="grid grid-cols-2 gap-2">
+              <button disabled={saving} onClick={submitConfirmAppointment} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                Complete
+              </button>
               <button disabled={saving} onClick={() => setShowRescheduleForm(true)} className={`${btn} border border-amber-200 bg-amber-50 text-amber-700`}>
                 Rescheduled
-              </button>
-              <button disabled={saving} onClick={submitConfirmAppointment} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-                Qualified
               </button>
             </div>
           </div>
@@ -451,7 +451,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
                 Mark Site Visit Done
               </button>
             ) : (
-              <button onClick={() => { onClose(); navigate('/site-visits', { state: { leadId: lead.id } }) }} className={secondaryBtn}>
+              <button onClick={() => { onClose(); navigate('/site-visits', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
                 Go to Site Visits →
               </button>
             )}
@@ -466,7 +466,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
                 Mark Requirements Captured
               </button>
             ) : (
-              <button onClick={() => { onClose(); navigate('/requirements', { state: { leadId: lead.id } }) }} className={secondaryBtn}>
+              <button onClick={() => { onClose(); navigate('/requirements', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
                 Go to Requirements →
               </button>
             )}
@@ -481,7 +481,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
                 Confirm Quotation Drafted
               </button>
             ) : (
-              <button onClick={() => { onClose(); navigate('/quotations', { state: { leadId: lead.id } }) }} className={secondaryBtn}>
+              <button onClick={() => { onClose(); navigate('/quotations', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
                 Go to Quotations →
               </button>
             )}
@@ -519,7 +519,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
                 Confirm Design Started
               </button>
             ) : (
-              <button onClick={() => { onClose(); navigate('/design', { state: { leadId: lead.id } }) }} className={secondaryBtn}>
+              <button onClick={() => { onClose(); navigate('/design', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
                 Go to Design Center →
               </button>
             )}
@@ -628,15 +628,19 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className={lead.status === 'qualified' ? '' : 'grid grid-cols-2 gap-2.5'}>
           <a href={`tel:${lead.phone}`}
-            className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-700 active:bg-emerald-100">
+            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold ${
+              lead.status === 'qualified' ? 'bg-emerald-700 text-white active:bg-emerald-800' : 'bg-emerald-50 text-emerald-700 active:bg-emerald-100'
+            }`}>
             <Phone size={15} /> Call
           </a>
-          <a href={wa ?? undefined} target="_blank" rel="noopener noreferrer"
-            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold ${wa ? 'bg-emerald-50 text-emerald-700 active:bg-emerald-100' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}>
-            <MessageCircle size={15} /> WhatsApp
-          </a>
+          {lead.status !== 'qualified' && (
+            <a href={wa ?? undefined} target="_blank" rel="noopener noreferrer"
+              className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold ${wa ? 'bg-emerald-50 text-emerald-700 active:bg-emerald-100' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}>
+              <MessageCircle size={15} /> WhatsApp
+            </a>
+          )}
         </div>
 
         {renderBody()}

@@ -57,6 +57,13 @@ export default function RequirementsScreen() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
+  // Set (together with returnTo) when this screen was opened via a Lead's
+  // leadId deep link that explicitly asked for a return destination. While
+  // set, every dismissal of the New/Edit/Detail sheet (X, backdrop tap, or a
+  // successful save) returns there instead of leaving the bare Requirements
+  // list showing underneath.
+  const [fromLeadId, setFromLeadId] = useState('')
+  const [returnTo, setReturnTo] = useState('')
   const [siteVisitId, setSiteVisitId] = useState('')
   const [lineItems, setLineItems] = useState<RequirementLineItem[]>([newLineItem()])
   const [notes, setNotes] = useState('')
@@ -84,13 +91,14 @@ export default function RequirementsScreen() {
   useEffect(() => { refresh() }, [])
 
   useEffect(() => {
-    const state = routerLocation.state as { leadId?: string } | null
+    const state = routerLocation.state as { leadId?: string; returnTo?: string } | null
     if (!state?.leadId || isLoading) return
     const visit = siteVisits.find(v => v.leadId === state.leadId)
     if (visit) {
       handleSiteVisitPick(visit.id)
       setShowNew(true)
     }
+    if (state.returnTo) { setFromLeadId(state.leadId); setReturnTo(state.returnTo) }
     navigate(routerLocation.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routerLocation.state, isLoading])
@@ -113,6 +121,21 @@ export default function RequirementsScreen() {
   function openNew() {
     resetForm()
     setShowNew(true)
+  }
+
+  // Closes a sheet normally, unless this screen was entered via a Lead deep
+  // link — then every dismissal (X, backdrop, Cancel, or a completed save)
+  // returns to that lead on /leads instead of leaving the bare Requirements
+  // list showing underneath.
+  function dismiss(closeLocally: () => void) {
+    if (returnTo) {
+      const id = fromLeadId
+      const to = returnTo
+      setFromLeadId(''); setReturnTo('')
+      navigate(to, { state: { leadId: id } })
+    } else {
+      closeLocally()
+    }
   }
 
   function openEdit(req: Requirement) {
@@ -155,7 +178,7 @@ export default function RequirementsScreen() {
     const result = await upsertRequirement(req)
     if (!result.ok) { setFormError(result.error ?? 'Could not save requirement.'); return }
     setRequirements(prev => [req, ...prev])
-    setShowNew(false)
+    dismiss(() => setShowNew(false))
     setSnack({ open: true, msg: 'Requirement captured!', type: 'success' })
   }
 
@@ -174,8 +197,7 @@ export default function RequirementsScreen() {
     const result = await upsertRequirement(updated)
     if (!result.ok) { setFormError(result.error ?? 'Could not update requirement.'); return }
     setRequirements(prev => prev.map(r => (r.id === updated.id ? updated : r)))
-    setShowEdit(false)
-    setSelected(null)
+    dismiss(() => { setShowEdit(false); setSelected(null) })
     setSnack({ open: true, msg: 'Requirement updated.', type: 'success' })
   }
 
@@ -242,7 +264,7 @@ export default function RequirementsScreen() {
       </div>
 
       {/* Requirement Detail Sheet */}
-      <BottomSheet isOpen={!!selected && !showEdit} onClose={() => setSelected(null)} title={selected ? requirementLeadName(selected) : ''} height="full">
+      <BottomSheet isOpen={!!selected && !showEdit} onClose={() => dismiss(() => setSelected(null))} title={selected ? requirementLeadName(selected) : ''} height="full">
         {selected && (
           <div className="space-y-4">
             <div className="flex items-center justify-end gap-2">
@@ -296,7 +318,7 @@ export default function RequirementsScreen() {
       {/* New / Edit Requirement Sheet */}
       <BottomSheet
         isOpen={showNew || showEdit}
-        onClose={() => { setShowNew(false); setShowEdit(false) }}
+        onClose={() => dismiss(() => { setShowNew(false); setShowEdit(false) })}
         title={showEdit ? 'Edit Requirement' : 'New Requirement'}
         height="full"
       >

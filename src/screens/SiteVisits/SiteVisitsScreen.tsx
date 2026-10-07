@@ -38,7 +38,7 @@ function todayStr(): string {
 }
 
 function newRoom(): SiteVisitRoom {
-  return { id: `room_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: '', measurements: '', lengthFt: '', widthFt: '', notes: '' }
+  return { id: `room_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: '', measurements: '', lengthFt: '', widthFt: '', heightFt: '', notes: '' }
 }
 
 function parseMeasurements(val?: string): { length: string; width: string } {
@@ -46,10 +46,8 @@ function parseMeasurements(val?: string): { length: string; width: string } {
   return { length: match?.[1] ?? '', width: match?.[2] ?? '' }
 }
 
-function formatMeasurements(length: string, width: string): string {
-  if (!length && !width) return ''
-  if (length && width) return `${length}ft x ${width}ft`
-  return `${length || width}ft`
+function formatMeasurements(length: string, width: string, height: string): string {
+  return [length, width, height].filter(Boolean).map(v => `${v}ft`).join(' x ')
 }
 
 function defaultChecklist(): SiteVisitChecklistItem[] {
@@ -72,6 +70,13 @@ export default function SiteVisitsScreen() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
+  // Set (together with returnTo) when this screen was opened via a Lead's
+  // leadId deep link that explicitly asked for a return destination. While
+  // set, every dismissal of the New/Edit/Detail sheet (X, backdrop tap, or a
+  // successful save) returns there instead of leaving the bare Site Visits
+  // list showing underneath.
+  const [fromLeadId, setFromLeadId] = useState('')
+  const [returnTo, setReturnTo] = useState('')
   const [leadId, setLeadId] = useState('')
   const [visitDate, setVisitDate] = useState('')
   const [teamMemberIds, setTeamMemberIds] = useState<string[]>([])
@@ -105,16 +110,33 @@ export default function SiteVisitsScreen() {
   // the lead forward from a "Log Site Visit" deep link elsewhere in the app
   // (e.g. Leads), it doesn't touch or depend on any appointment record.
   useEffect(() => {
-    const state = routerLocation.state as { leadId?: string } | null
+    const state = routerLocation.state as { leadId?: string; returnTo?: string } | null
     if (!state?.leadId) return
     setLeadId(state.leadId)
     setShowNew(true)
+    // returnTo is only sent when this came from LeadStatusSheet's "Go to Site
+    // Visits →" — not when reached some other way (e.g. direct sidebar nav).
+    if (state.returnTo) { setFromLeadId(state.leadId); setReturnTo(state.returnTo) }
     navigate(routerLocation.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routerLocation.state])
 
   function leadName(id: string): string {
     return leads.find(l => l.id === id)?.name ?? id
+  }
+
+  // Closes a sheet normally, unless this screen was entered via a Lead deep
+  // link carrying returnTo — then every dismissal (X, backdrop, Cancel, or a
+  // completed save) returns to that origin page instead.
+  function dismiss(closeLocally: () => void) {
+    if (returnTo) {
+      const id = fromLeadId
+      const to = returnTo
+      setFromLeadId(''); setReturnTo('')
+      navigate(to, { state: { leadId: id } })
+    } else {
+      closeLocally()
+    }
   }
 
   function resetForm() {
@@ -177,7 +199,7 @@ export default function SiteVisitsScreen() {
     const result = await upsertSiteVisit(visit)
     if (!result.ok) { setFormError(result.error ?? 'Could not save site visit.'); return }
     setVisits(prev => [visit, ...prev])
-    setShowNew(false)
+    dismiss(() => setShowNew(false))
     setSnack({ open: true, msg: 'Site visit recorded!', type: 'success' })
   }
 
@@ -197,8 +219,7 @@ export default function SiteVisitsScreen() {
     const result = await upsertSiteVisit(updated)
     if (!result.ok) { setFormError(result.error ?? 'Could not update site visit.'); return }
     setVisits(prev => prev.map(v => (v.id === updated.id ? updated : v)))
-    setShowEdit(false)
-    setSelected(null)
+    dismiss(() => { setShowEdit(false); setSelected(null) })
     setSnack({ open: true, msg: 'Site visit updated.', type: 'success' })
   }
 
@@ -272,7 +293,7 @@ export default function SiteVisitsScreen() {
       </div>
 
       {/* Site Visit Detail Sheet */}
-      <BottomSheet isOpen={!!selected && !showEdit} onClose={() => setSelected(null)} title={selected ? leadName(selected.leadId) : ''} height="full">
+      <BottomSheet isOpen={!!selected && !showEdit} onClose={() => dismiss(() => setSelected(null))} title={selected ? leadName(selected.leadId) : ''} height="full">
         {selected && (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
@@ -337,7 +358,7 @@ export default function SiteVisitsScreen() {
       {/* New / Edit Site Visit Sheet */}
       <BottomSheet
         isOpen={showNew || showEdit}
-        onClose={() => { setShowNew(false); setShowEdit(false) }}
+        onClose={() => dismiss(() => { setShowNew(false); setShowEdit(false) })}
         title={showEdit ? 'Edit Site Visit' : 'New Site Visit'}
         height="full"
       >
@@ -404,17 +425,22 @@ export default function SiteVisitsScreen() {
                   </div>
                   <div className="flex items-center gap-2">
                     <input type="number" min="0" step="0.01" value={room.lengthFt ?? ''}
-                      onChange={e => updateRoom(room.id, { lengthFt: e.target.value, measurements: formatMeasurements(e.target.value, room.widthFt ?? '') })}
+                      onChange={e => updateRoom(room.id, { lengthFt: e.target.value, measurements: formatMeasurements(e.target.value, room.widthFt ?? '', room.heightFt ?? '') })}
                       placeholder="Length (ft)"
-                      className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                      className="w-1/3 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
                     <span className="text-slate-400 text-sm">×</span>
                     <input type="number" min="0" step="0.01" value={room.widthFt ?? ''}
-                      onChange={e => updateRoom(room.id, { widthFt: e.target.value, measurements: formatMeasurements(room.lengthFt ?? '', e.target.value) })}
+                      onChange={e => updateRoom(room.id, { widthFt: e.target.value, measurements: formatMeasurements(room.lengthFt ?? '', e.target.value, room.heightFt ?? '') })}
                       placeholder="Width (ft)"
-                      className="w-1/2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                      className="w-1/3 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                    <span className="text-slate-400 text-sm">×</span>
+                    <input type="number" min="0" step="0.01" value={room.heightFt ?? ''}
+                      onChange={e => updateRoom(room.id, { heightFt: e.target.value, measurements: formatMeasurements(room.lengthFt ?? '', room.widthFt ?? '', e.target.value) })}
+                      placeholder="Height (ft)"
+                      className="w-1/3 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
                   </div>
                   <input value={room.notes ?? ''} onChange={e => updateRoom(room.id, { notes: e.target.value })}
-                    placeholder="Notes (optional)"
+                    placeholder="Scope of Works (optional)"
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
                   <MultiFileUploadField label="Room Photos" files={room.photos ?? []} onChange={files => updateRoom(room.id, { photos: files })} accept="image/*" uploadButtonLabel="Upload Photo" />
                 </div>

@@ -70,6 +70,13 @@ export default function DesignCenterScreen() {
   const [showVersion, setShowVersion] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
+  // Set (together with returnTo) when this screen was opened via a Lead's
+  // leadId deep link that explicitly asked for a return destination — every
+  // dismissal of the New Package sheet (X, backdrop, or a completed save)
+  // then returns there instead of leaving the bare Design Center list
+  // showing underneath.
+  const [fromLeadId, setFromLeadId] = useState('')
+  const [returnTo, setReturnTo] = useState('')
   const [projectId, setProjectId] = useState('')
   const [leadId, setLeadId] = useState('')
   const [name, setName] = useState('')
@@ -113,11 +120,14 @@ export default function DesignCenterScreen() {
   useEffect(() => { refresh() }, [])
 
   useEffect(() => {
-    const state = routerLocation.state as { leadId?: string } | null
+    const state = routerLocation.state as { leadId?: string; returnTo?: string } | null
     if (!state?.leadId || isLoading) return
     resetNewForm()
     setLeadId(state.leadId)
     setShowNew(true)
+    // returnTo is only sent when this came from LeadStatusSheet's "Go to
+    // Design Center →" — not when reached some other way.
+    if (state.returnTo) { setFromLeadId(state.leadId); setReturnTo(state.returnTo) }
     navigate(routerLocation.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routerLocation.state, isLoading])
@@ -149,6 +159,20 @@ export default function DesignCenterScreen() {
 
   function resetNewForm() {
     setProjectId(''); setLeadId(''); setName(''); setNotes(''); setNewPackageFiles([]); setFormError('')
+  }
+
+  // Closes a sheet normally, unless this screen was entered via a Lead deep
+  // link — then every dismissal (X, backdrop, or a completed save) returns
+  // to that lead on /leads instead.
+  function dismiss(closeLocally: () => void) {
+    if (returnTo) {
+      const id = fromLeadId
+      const to = returnTo
+      setFromLeadId(''); setReturnTo('')
+      navigate(to, { state: { leadId: id } })
+    } else {
+      closeLocally()
+    }
   }
 
   function openNew() {
@@ -212,14 +236,14 @@ export default function DesignCenterScreen() {
       const versionResult = await addDesignVersion(firstVersion)
       if (!versionResult.ok) {
         setPackages(prev => [pkg, ...prev])
-        setShowNew(false)
+        dismiss(() => setShowNew(false))
         setSnack({ open: true, msg: `Package created, but the files could not be saved (${versionResult.error ?? 'unknown error'}). Add them via "+ Add Version".`, type: 'error' })
         return
       }
     }
     setPackages(prev => [pkg, ...prev])
     if (firstVersion) setVersions(prev => [firstVersion!, ...prev])
-    setShowNew(false)
+    dismiss(() => setShowNew(false))
     setSnack({ open: true, msg: newPackageFiles.length > 0 ? `Design package created with ${newPackageFiles.length} file${newPackageFiles.length > 1 ? 's' : ''}.` : 'Design package created.', type: 'success' })
   }
 
@@ -490,7 +514,7 @@ export default function DesignCenterScreen() {
       </BottomSheet>
 
       {/* New Design Package Sheet */}
-      <BottomSheet isOpen={showNew} onClose={() => setShowNew(false)} title="New Design Package" height="full">
+      <BottomSheet isOpen={showNew} onClose={() => dismiss(() => setShowNew(false))} title="New Design Package" height="full">
         <div className="space-y-3">
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <p className="text-xs text-slate-500">Link to the Lead if the project hasn't been created yet, or to the Project once it has.</p>

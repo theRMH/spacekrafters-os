@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Phone, Trash2, CheckSquare, Square, X, ListChecks, ChevronDown, MapPin, FileDown, FileUp } from 'lucide-react'
 import { useCRM } from '../../context/CRMContext'
 import { useAuth } from '../../context/AuthContext'
@@ -170,21 +170,47 @@ function fmtDateTime(val: string): string {
   return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+// Persists the list's filters/search/scroll position across a navigate-away
+// (e.g. into a Lead-driven Appointment/Site Visit/Quotation flow) and back,
+// since routing to another screen unmounts this one and would otherwise
+// reset all of this local state to its defaults. sessionStorage (not
+// Context/global state) is enough — this is view state, not data, and only
+// needs to survive within the current tab/session.
+const LEADS_FILTERS_KEY = 'sk_leads_filters_v1'
+interface PersistedLeadsFilters {
+  bucketFilter: BucketFilter
+  dateFilter: FilterKey
+  customFrom: string
+  customTo: string
+  search: string
+  scrollY: number
+}
+function loadPersistedFilters(): PersistedLeadsFilters {
+  const fallback: PersistedLeadsFilters = { bucketFilter: 'active', dateFilter: 'all', customFrom: '', customTo: '', search: '', scrollY: 0 }
+  try {
+    const raw = sessionStorage.getItem(LEADS_FILTERS_KEY)
+    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback
+  } catch {
+    return fallback
+  }
+}
+
 export default function LeadsScreen() {
   const navigate = useNavigate()
-  const { leads, addLead, updateLead, deleteLead, bulkDeleteLeads, restoreLead, permanentlyDeleteLead } = useCRM()
+  const routerLocation = useLocation()
+  const { leads, isLoading, addLead, updateLead, deleteLead, bulkDeleteLeads, restoreLead, permanentlyDeleteLead } = useCRM()
   const { can, user } = useAuth()
   // Roles without full CRM access (edit_lead) only ever act on leads currently
   // assigned to them — scope their list down instead of showing the whole pipeline.
   const assignedOnly = !can('edit_lead')
   const canSeeAppointments = can('view_appointments')
 
-  const [bucketFilter, setBucketFilter] = useState<BucketFilter>('active')
-  const [dateFilter, setDateFilter] = useState<FilterKey>('all')
-  const [customFrom, setCustomFrom] = useState('')
-  const [customTo, setCustomTo] = useState('')
+  const [bucketFilter, setBucketFilter] = useState<BucketFilter>(() => loadPersistedFilters().bucketFilter)
+  const [dateFilter, setDateFilter] = useState<FilterKey>(() => loadPersistedFilters().dateFilter)
+  const [customFrom, setCustomFrom] = useState(() => loadPersistedFilters().customFrom)
+  const [customTo, setCustomTo] = useState(() => loadPersistedFilters().customTo)
   const [appointments, setAppointments] = useState<Appointment[]>([])
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(() => loadPersistedFilters().search)
   const [selected, setSelected] = useState<Lead | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
@@ -193,6 +219,10 @@ export default function LeadsScreen() {
   const [permaDeleteTarget, setPermaDeleteTarget] = useState<Lead | null>(null)
   const [restoring, setRestoring] = useState(false)
   const [showStatusSheet, setShowStatusSheet] = useState(false)
+  // Independent of `selected`/`showStatusSheet` (the Lead Detail sheet's own
+  // Update Status trigger) — the list card's own Update Status button opens
+  // LeadStatusSheet directly, without the Detail sheet appearing underneath.
+  const [quickStatusLeadId, setQuickStatusLeadId] = useState<string | null>(null)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -237,6 +267,55 @@ export default function LeadsScreen() {
       setAssignableMembers(users.filter(u => u.status === 'active' && ASSIGNABLE_LEAD_OWNER_ROLES.some(r => hasRole(u, r))))
       setAllManagedUsers(users)
     })
+  }, [])
+
+  // Reciprocal half of the leadId deep-link pattern Appointments/SiteVisits/
+  // Quotations/Requirements/Design Center use when dismissing a sheet that
+  // was opened via LeadStatusSheet's "Go to X →" buttons — they navigate
+  // straight back here with the lead's id (see each screen's `dismiss()`),
+  // and this reopens that exact lead's Detail sheet instead of landing on a
+  // bare list.
+  useEffect(() => {
+    const state = routerLocation.state as { leadId?: string } | null
+    if (!state?.leadId || isLoading) return
+    const lead = leads.find(l => l.id === state.leadId)
+    if (lead) setSelected(lead)
+    navigate(routerLocation.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.state, isLoading])
+
+  // Persist filters/search so they survive the unmount+remount that
+  // navigating into a Lead-driven flow (Appointment/Site Visit/Quotation/
+  // Requirements/Design Center) and back causes.
+  useEffect(() => {
+    try {
+      const prev = loadPersistedFilters()
+      sessionStorage.setItem(LEADS_FILTERS_KEY, JSON.stringify({ ...prev, bucketFilter, dateFilter, customFrom, customTo, search }))
+    } catch { /* sessionStorage unavailable — filters just won't persist */ }
+  }, [bucketFilter, dateFilter, customFrom, customTo, search])
+
+  // Restores scroll position once the (persisted, filtered) list has actually
+  // rendered — restoring any earlier would scroll to a position the shorter,
+  // still-loading list doesn't have yet.
+  useEffect(() => {
+    if (isLoading) return
+    const { scrollY } = loadPersistedFilters()
+    if (scrollY > 0) window.scrollTo(0, scrollY)
+    // Only on the initial load of this screen instance, not on every leads update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading])
+
+  // Continuously saves scroll position (not just on unmount — a route change
+  // doesn't reliably run cleanup before the page has already scrolled away).
+  useEffect(() => {
+    function saveScroll() {
+      try {
+        const prev = loadPersistedFilters()
+        sessionStorage.setItem(LEADS_FILTERS_KEY, JSON.stringify({ ...prev, scrollY: window.scrollY }))
+      } catch { /* sessionStorage unavailable — scroll position just won't persist */ }
+    }
+    window.addEventListener('scroll', saveScroll, { passive: true })
+    return () => window.removeEventListener('scroll', saveScroll)
   }, [])
 
   // Only for the Qualified/Appointment filter split — gated the same way
@@ -650,6 +729,12 @@ export default function LeadsScreen() {
                   </div>
                 )}
               </div>
+              {!selectMode && lead.status !== 'won' && lead.status !== 'lost' && (
+                <button onClick={e => { e.stopPropagation(); setQuickStatusLeadId(lead.id) }}
+                  className="w-full mt-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 active:bg-blue-100">
+                  Update Status
+                </button>
+              )}
             </div>
           )
         })}
@@ -806,6 +891,18 @@ export default function LeadsScreen() {
           onDone={(msg) => setSnack({ open: true, msg, type: 'success' })}
         />
       )}
+
+      {quickStatusLeadId && (() => {
+        const quickStatusLead = leads.find(l => l.id === quickStatusLeadId)
+        return quickStatusLead ? (
+          <LeadStatusSheet
+            isOpen={!!quickStatusLeadId}
+            onClose={() => setQuickStatusLeadId(null)}
+            lead={quickStatusLead}
+            onDone={(msg) => setSnack({ open: true, msg, type: 'success' })}
+          />
+        ) : null
+      })()}
 
       {/* New / Edit Lead Sheet */}
       <BottomSheet

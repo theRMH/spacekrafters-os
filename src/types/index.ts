@@ -260,6 +260,7 @@ export interface SiteVisitRoom {
   measurements?: string
   lengthFt?: string
   widthFt?: string
+  heightFt?: string
   notes?: string
   photos?: string[]
 }

@@ -58,6 +58,13 @@ export default function AppointmentsScreen() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
+  // Set (together with returnTo) when this screen was opened via a Lead's
+  // leadId deep link that explicitly asked for a return destination. While
+  // set, every dismissal of the New/Edit/Detail sheet (X, backdrop tap, or a
+  // successful save) returns there instead of leaving the bare Appointments
+  // list showing underneath.
+  const [fromLeadId, setFromLeadId] = useState('')
+  const [returnTo, setReturnTo] = useState('')
   const [leadId, setLeadId] = useState('')
   const [clientName, setClientName] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
@@ -92,10 +99,13 @@ export default function AppointmentsScreen() {
   }
 
   useEffect(() => {
-    const state = routerLocation.state as { leadId?: string } | null
+    const state = routerLocation.state as { leadId?: string; returnTo?: string } | null
     if (!state?.leadId) return
     handleLeadPick(state.leadId)
     setShowNew(true)
+    // returnTo is only sent when this came from LeadStatusSheet's "Go to
+    // Appointments →" — not when reached some other way (e.g. sidebar nav).
+    if (state.returnTo) { setFromLeadId(state.leadId); setReturnTo(state.returnTo) }
     navigate(routerLocation.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routerLocation.state])
@@ -119,6 +129,20 @@ export default function AppointmentsScreen() {
     setLeadId(''); setClientName(''); setScheduledAt(`${todayInputValue()}T`); setLocation('')
     setStatus('scheduled'); setNotes(''); setFormError('')
     setAssignedToIds(user ? [user.id] : [])
+  }
+
+  // Closes a sheet normally, unless this screen was entered via a Lead deep
+  // link carrying returnTo — then every dismissal (X, backdrop, Cancel, or a
+  // completed save) returns to that origin page instead.
+  function dismiss(closeLocally: () => void) {
+    if (returnTo) {
+      const id = fromLeadId
+      const to = returnTo
+      setFromLeadId(''); setReturnTo('')
+      navigate(to, { state: { leadId: id } })
+    } else {
+      closeLocally()
+    }
   }
 
   function openNew() {
@@ -172,7 +196,7 @@ export default function AppointmentsScreen() {
     setSaving(false)
     if (!result.ok) { setFormError(result.error ?? 'Could not save appointment.'); return }
     setAppointments(prev => [appt, ...prev])
-    setShowNew(false)
+    dismiss(() => setShowNew(false))
     setSnack({ open: true, msg: 'Appointment scheduled!', type: 'success' })
 
     const notifyIds = assignedToIds.filter(id => id !== user?.id)
@@ -216,8 +240,7 @@ export default function AppointmentsScreen() {
     setSaving(false)
     if (!result.ok) { setFormError(result.error ?? 'Could not update appointment.'); return }
     setAppointments(prev => prev.map(a => (a.id === updated.id ? updated : a)))
-    setShowEdit(false)
-    setSelected(null)
+    dismiss(() => { setShowEdit(false); setSelected(null) })
 
     const previouslyAssigned = new Set(selected.assignedToIds ?? (selected.coordinatorId ? [selected.coordinatorId] : []))
     const newlyAssignedIds = assignedToIds.filter(id => id !== user?.id && !previouslyAssigned.has(id))
@@ -309,7 +332,7 @@ export default function AppointmentsScreen() {
       </div>
 
       {/* Appointment Detail Sheet */}
-      <BottomSheet isOpen={!!selected && !showEdit} onClose={() => setSelected(null)} title={selected?.clientName ?? ''} height="full">
+      <BottomSheet isOpen={!!selected && !showEdit} onClose={() => dismiss(() => setSelected(null))} title={selected?.clientName ?? ''} height="full">
         {selected && (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
@@ -350,7 +373,7 @@ export default function AppointmentsScreen() {
       {/* New / Edit Appointment Sheet */}
       <BottomSheet
         isOpen={showNew || showEdit}
-        onClose={() => { setShowNew(false); setShowEdit(false) }}
+        onClose={() => dismiss(() => { setShowNew(false); setShowEdit(false) })}
         title={showEdit ? 'Edit Appointment' : 'New Appointment'}
         height="full"
       >
