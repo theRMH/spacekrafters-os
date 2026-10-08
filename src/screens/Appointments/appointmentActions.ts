@@ -8,9 +8,37 @@
 import { upsertAppointment } from '../../services/appointmentService'
 import { toProperIso } from './appointmentDate'
 import { sendNotification } from '../../utils/notifications'
-import type { Appointment, Lead, UserRole } from '../../types'
+import type { Appointment, AppointmentStatus, Lead, UserRole } from '../../types'
 
 interface ActionResult { ok: boolean; error?: string; updated?: Appointment }
+
+const STATUS_LABEL: Record<AppointmentStatus, string> = {
+  scheduled: 'Scheduled', completed: 'Completed', rescheduled: 'Rescheduled', cancelled: 'Cancelled',
+}
+
+// The single "Update Status" action an assignee (or MD/owner) performs —
+// kept separate from the full Edit form (which can also change date/time/
+// location/assignees and is role-gated to edit_appointment) so the actual
+// assignee has a narrow, correctly-gated way to mark their own appointment
+// Completed/Cancelled without needing broader edit rights. Every call is
+// recorded in statusHistory, matching the audit trail every other approval
+// chain (Quotation/Design) already keeps.
+export async function updateAppointmentStatus(
+  appt: Appointment, status: AppointmentStatus, decidedByName: string, decidedByRole?: UserRole, note?: string,
+): Promise<ActionResult> {
+  const now = new Date().toISOString()
+  const updated: Appointment = {
+    ...appt,
+    status,
+    statusHistory: [...(appt.statusHistory ?? []), {
+      status, label: STATUS_LABEL[status], note: note?.trim() || undefined,
+      by: decidedByName, byRole: decidedByRole, at: now,
+    }],
+    updatedAt: now,
+  }
+  const result = await upsertAppointment(updated)
+  return { ...result, updated: result.ok ? updated : undefined }
+}
 
 // Mirrors MDTasksScreen.handleDecision()'s field writes exactly.
 export async function decideAppointmentReschedule(

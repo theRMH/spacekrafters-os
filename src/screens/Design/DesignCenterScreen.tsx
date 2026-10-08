@@ -14,15 +14,14 @@ import { getAllProjects } from '../../services/projectService'
 import { getAllDesignPackages, upsertDesignPackage, getAllDesignVersions, addDesignVersion } from '../../services/designService'
 import { getAllQuotations } from '../../services/quotationService'
 import { addAuditLog } from '../../services/auditLogService'
-import { getManagedUsersDirectory } from '../../services/userService'
-import { sendNotification } from '../../utils/notifications'
 import { approvalHistoryEntry } from '../../utils/approvalHistory'
+import { changeDesignStatus } from './designActions'
 import { ROLE_LABELS } from '../../data/permissions'
 import type { Project, DesignPackage, DesignPackageStatus, DesignVersion, AuditLog, Quotation } from '../../types'
 
 // Same MD-approval terminology as Quotations, via StatusBadge's `label`
 // override — 'client_review' is legacy (pre-existing packages only).
-const DESIGN_STATUS_LABEL: Record<DesignPackageStatus, string> = {
+export const DESIGN_STATUS_LABEL: Record<DesignPackageStatus, string> = {
   in_progress:         'Created',
   pending_pc_review:   'Pending PC Review',
   pc_rejected:         'PC Rejected — Back to Designer',
@@ -36,21 +35,9 @@ const DESIGN_STATUS_LABEL: Record<DesignPackageStatus, string> = {
   client_review:       'Client Review',
 }
 
-// Wording for each approval-history entry (rejections are labelled separately —
-// they depend on which stage the rejection happened at).
-const DESIGN_HISTORY_LABEL: Partial<Record<DesignPackageStatus, string>> = {
-  in_progress:         'Back to in progress',
-  pending_pc_review:   'Submitted for PC review',
-  internal_review:     'PC approved — sent to MD for approval',
-  internally_approved: 'MD approved',
-  sent_to_client:      'Sent to client',
-  client_approved:     'Client approved',
-  revision_requested:  'Revision requested',
-}
-
 // Who's currently responsible and what happens next, per stage — shown
 // directly on the Detail sheet so this is never ambiguous.
-function designWorkflowInfo(status: DesignPackageStatus): { responsible: string; next: string } {
+export function designWorkflowInfo(status: DesignPackageStatus): { responsible: string; next: string } {
   switch (status) {
     case 'in_progress':         return { responsible: 'Designer', next: 'Submit for PC review' }
     case 'pending_pc_review':   return { responsible: 'PC',       next: 'PC approves or rejects' }
@@ -74,7 +61,7 @@ function fmtDateTime(val: string): string {
 
 export default function DesignCenterScreen() {
   const { user, can } = useAuth()
-  const { leads } = useCRM()
+  const { leads, updateLead } = useCRM()
   const routerLocation = useLocation()
   const navigate = useNavigate()
   const canUpload = can('upload_design')
@@ -148,6 +135,16 @@ export default function DesignCenterScreen() {
   useEffect(() => {
     const state = routerLocation.state as { leadId?: string; returnTo?: string } | null
     if (!state?.leadId || isLoading) return
+    // LeadStatusSheet's "Go to Design Center →" is reachable by anyone who
+    // can act on the lead (e.g. a Project Coordinator), but only
+    // owner/designer can actually create a package (sks_design_packages'
+    // RLS insert policy). Opening the form for anyone else would always
+    // fail to save, so just land on the list instead.
+    if (!canUpload) {
+      setSnack({ open: true, msg: 'Only the design team or MD can start a design package — ask a designer to pick this lead up.', type: 'error' })
+      navigate(routerLocation.pathname, { replace: true, state: null })
+      return
+    }
     resetNewForm()
     setLeadId(state.leadId)
     setShowNew(true)
@@ -156,7 +153,7 @@ export default function DesignCenterScreen() {
     if (state.returnTo) { setFromLeadId(state.leadId); setReturnTo(state.returnTo) }
     navigate(routerLocation.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routerLocation.state, isLoading])
+  }, [routerLocation.state, isLoading, canUpload])
 
   // Deep-link from the Approval page's "Review" on a PC-pending design
   // package — opens this exact package's Detail sheet directly.
@@ -186,18 +183,6 @@ export default function DesignCenterScreen() {
 
   function versionsFor(pkgId: string): DesignVersion[] {
     return versions.filter(v => v.designPackageId === pkgId).sort((a, b) => b.versionNumber - a.versionNumber)
-  }
-
-  // Best-effort heads-up to the MD(s) that a design is waiting on them.
-  async function notifyMdPending(pkg: DesignPackage) {
-    const mdIds = (await getManagedUsersDirectory()).filter(u => u.role === 'owner' && u.id !== user?.id).map(u => u.id)
-    await sendNotification(mdIds, 'Design Pending MD Approval', `"${pkg.name}" (${packageLinkLabel(pkg)}) is waiting for your approval.`)
-  }
-
-  // Same, for the new PC review step ahead of MD.
-  async function notifyPcPending(pkg: DesignPackage) {
-    const pcIds = (await getManagedUsersDirectory()).filter(u => u.role === 'project_coordinator' && u.id !== user?.id).map(u => u.id)
-    await sendNotification(pcIds, 'Design Pending PC Review', `"${pkg.name}" (${packageLinkLabel(pkg)}) is waiting for PC review.`)
   }
 
   function resetNewForm() {
@@ -313,25 +298,20 @@ export default function DesignCenterScreen() {
     setSnack({ open: true, msg: 'Version added.', type: 'success' })
   }
 
+  // Delegates the actual transition + history + notify + Lead-advance to
+  // designActions.ts's changeDesignStatus() — the same function the compact
+  // Lead-page DesignStatusCard calls, so there is exactly one implementation
+  // of that logic. What stays here is screen-specific: local state updates
+  // and the audit log.
   async function handleStatusChange(status: DesignPackageStatus, note?: string, labelOverride?: string) {
     if (!selected) return
-    // 'rejected' is legacy (client-side rejection used to write it too) — kept
-    // only so old records still label correctly; new rejections always pass
-    // their own labelOverride (see rejectTarget) instead of relying on this.
-    const label = labelOverride ?? (status === 'rejected'
-      ? (selected.status === 'internal_review' ? 'MD rejected' : 'Client rejected')
-      : DESIGN_HISTORY_LABEL[status] ?? status)
-    const isRejection = status === 'rejected' || status === 'pc_rejected' || status === 'md_rejected'
-    const updated: DesignPackage = {
-      ...selected, status,
-      rejectionReason: isRejection ? note : undefined,
-      statusHistory: [...(selected.statusHistory ?? []), approvalHistoryEntry(status, label, user, note)],
-      updatedAt: new Date().toISOString(),
-    }
-    const result = await upsertDesignPackage(updated)
-    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update status.', type: 'error' }); return }
-    if (status === 'pending_pc_review') notifyPcPending(updated)
-    if (status === 'internal_review') notifyMdPending(updated)
+    const lead = selected.leadId ? leads.find(l => l.id === selected.leadId) : undefined
+    const result = await changeDesignStatus({
+      pkg: selected, status, note, labelOverride, user,
+      packageLabel: packageLinkLabel(selected), lead, updateLead,
+    })
+    if (!result.ok || !result.updated) { setSnack({ open: true, msg: result.error ?? 'Could not update status.', type: 'error' }); return }
+    const updated = result.updated
     if (user) {
       const log: AuditLog = {
         id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,

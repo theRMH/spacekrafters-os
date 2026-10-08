@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { decideAppointmentReschedule } from './appointmentActions'
+import { decideAppointmentReschedule, updateAppointmentStatus } from './appointmentActions'
 import { upsertAppointment } from '../../services/appointmentService'
 import type { Appointment } from '../../types'
 
@@ -58,5 +58,26 @@ describe('decideAppointmentReschedule', () => {
     const appt = baseAppointment({ status: 'rescheduled', rescheduleRequestStatus: 'requested', scheduledAt: '2026-10-06T09:00:00.000Z' })
     const result = await decideAppointmentReschedule(appt, true, '', 'M. Nirmal Kumar', 'owner')
     expect(result.updated?.scheduledAt).toBe('2026-10-06T09:00:00.000Z')
+  })
+})
+
+describe('updateAppointmentStatus', () => {
+  it('sets the new status and appends a statusHistory entry with who/when/note', async () => {
+    const appt = baseAppointment({ status: 'scheduled' })
+    const result = await updateAppointmentStatus(appt, 'completed', 'Santhosh', 'site_engineer', 'Done')
+    expect(result.updated?.status).toBe('completed')
+    expect(result.updated?.statusHistory).toHaveLength(1)
+    expect(result.updated?.statusHistory?.[0]).toMatchObject({
+      status: 'completed', label: 'Completed', by: 'Santhosh', byRole: 'site_engineer', note: 'Done',
+    })
+  })
+
+  it('appends to existing statusHistory rather than replacing it', async () => {
+    const appt = baseAppointment({
+      status: 'scheduled',
+      statusHistory: [{ status: 'scheduled', label: 'Scheduled', by: 'Raj Kamal', at: '2026-10-01T00:00:00.000Z' }],
+    })
+    const result = await updateAppointmentStatus(appt, 'cancelled', 'Santhosh')
+    expect(result.updated?.statusHistory).toHaveLength(2)
   })
 })

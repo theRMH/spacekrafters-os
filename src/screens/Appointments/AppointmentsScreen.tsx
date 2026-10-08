@@ -20,6 +20,7 @@ import { getManagedUsersDirectory } from '../../services/userService'
 import { getRoleDisplayLabel } from '../../data/permissions'
 import { sendNotification } from '../../utils/notifications'
 import { fmtDateTime, toLocalInputValue, todayInputValue, nowTimeInputValue, isPastScheduledAt, toProperIso } from './appointmentDate'
+import { updateAppointmentStatus } from './appointmentActions'
 import type { Appointment, AppointmentStatus, AuditLog, ManagedUser } from '../../types'
 
 type Filter = 'all' | AppointmentStatus
@@ -75,6 +76,26 @@ export default function AppointmentsScreen() {
   const [assignableMembers, setAssignableMembers] = useState<ManagedUser[]>([])
   const [assignedToIds, setAssignedToIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [statusSaving, setStatusSaving] = useState(false)
+
+  // Only the actual assignee(s) or MD/owner can mark their own appointment
+  // Completed/Cancelled — not every PC holding the broader edit_appointment
+  // permission (that still gates the full Edit form separately).
+  function canActOnAppointment(appt: Appointment): boolean {
+    const ids = appt.assignedToIds ?? (appt.coordinatorId ? [appt.coordinatorId] : [])
+    return (!!user && ids.includes(user.id)) || user?.role === 'owner'
+  }
+
+  async function handleUpdateStatus(appt: Appointment, status: AppointmentStatus) {
+    if (!user || statusSaving) return
+    setStatusSaving(true)
+    const result = await updateAppointmentStatus(appt, status, user.name, user.role)
+    setStatusSaving(false)
+    if (!result.ok || !result.updated) { setSnack({ open: true, msg: result.error ?? 'Could not update status.', type: 'error' }); return }
+    setAppointments(prev => prev.map(a => (a.id === result.updated!.id ? result.updated! : a)))
+    setSelected(result.updated)
+    setSnack({ open: true, msg: 'Appointment updated.', type: 'success' })
+  }
 
   async function refresh() {
     setIsLoading(true)
@@ -320,6 +341,12 @@ export default function AppointmentsScreen() {
               </div>
               <StatusBadge status={appt.status} size="xs" />
             </div>
+            {appt.status === 'scheduled' && canActOnAppointment(appt) && (
+              <button onClick={e => { e.stopPropagation(); setSelected(appt) }}
+                className="w-full mt-3 py-2 rounded-xl text-xs font-bold text-white active:opacity-90" style={{ background: '#0F2A4A' }}>
+                Update Status
+              </button>
+            )}
           </div>
         ))}
 
@@ -359,6 +386,25 @@ export default function AppointmentsScreen() {
                 </div>
               ))}
             </div>
+
+            {selected.status === 'scheduled' && (
+              canActOnAppointment(selected) ? (
+                <div className="flex gap-2">
+                  <button disabled={statusSaving} onClick={() => handleUpdateStatus(selected, 'completed')}
+                    className="flex-1 py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#059669' }}>
+                    Mark Complete
+                  </button>
+                  <button disabled={statusSaving} onClick={() => handleUpdateStatus(selected, 'cancelled')}
+                    className="flex-1 py-3 rounded-xl text-sm font-bold border border-red-200 bg-red-50 text-red-700 active:bg-red-100 disabled:opacity-50">
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 text-center py-2">
+                  Waiting on {(selected.assignedToNames && selected.assignedToNames.length > 0 ? selected.assignedToNames : [selected.coordinatorName]).join(', ')}.
+                </p>
+              )
+            )}
 
             {user?.role === 'owner' && (
               <button onClick={() => setShowDeleteDialog(true)}

@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { StatusBadge } from '../../components/badges/StatusBadge'
+import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllProjects } from '../../services/projectService'
 import { getAllTasks } from '../../services/taskService'
 import { getAllMRFs } from '../../services/mrfService'
@@ -17,6 +18,7 @@ import { getAllPurchaseRequests, getAllPurchaseOrders } from '../../services/pro
 import { getAllQuotations } from '../../services/quotationService'
 import { getAllDesignPackages } from '../../services/designService'
 import { PROJECT_STAGE_ORDER, PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
+import { LeadStatusSheet } from '../Leads/LeadStatusSheet'
 import { buildMyTaskFeed } from './myTaskFeed'
 import type {
   Appointment, DailyReport, Lead, MaterialRequestForm, Project,
@@ -51,6 +53,10 @@ export default function MyTaskScreen() {
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [designPackages, setDesignPackages] = useState<DesignPackage[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  // Items whose real action is a Lead-status change (e.g. Site Visit
+  // completion) open LeadStatusSheet inline here instead of navigating away.
+  const [quickStatusLeadId, setQuickStatusLeadId] = useState<string | null>(null)
+  const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   useEffect(() => {
     (async () => {
@@ -164,7 +170,7 @@ export default function MyTaskScreen() {
               {item.person && <p className="text-xs font-semibold text-teal-700 mt-3">Assigned to: {item.person}</p>}
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
                 <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-500">Pending</span>
-                <button onClick={() => navigate(item.linkTo)}
+                <button onClick={() => (item.leadAction ? setQuickStatusLeadId(item.leadAction.leadId) : navigate(item.linkTo, item.linkToState ? { state: item.linkToState } : undefined))}
                   className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 active:bg-blue-700">
                   Update Status
                 </button>
@@ -207,6 +213,20 @@ export default function MyTaskScreen() {
           })}
         </div>
       </div>
+
+      {quickStatusLeadId && (() => {
+        const quickStatusLead = leads.find(l => l.id === quickStatusLeadId)
+        return quickStatusLead ? (
+          <LeadStatusSheet
+            isOpen={!!quickStatusLeadId}
+            onClose={() => setQuickStatusLeadId(null)}
+            lead={quickStatusLead}
+            onDone={(msg) => setSnack({ open: true, msg, type: 'success' })}
+          />
+        ) : null
+      })()}
+
+      <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
     </div>
   )
 }

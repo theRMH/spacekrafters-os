@@ -237,8 +237,21 @@ export interface Appointment {
   rescheduleAcceptedAt?: string
   rescheduleMdNotes?: string
   rescheduleHistory?: RescheduleDecisionItem[]
+  // Every manual status change (Scheduled/Completed/Cancelled) made via
+  // Update Status — reschedule accept/reject already has its own
+  // rescheduleHistory above; this is the general-purpose audit trail.
+  statusHistory?: AppointmentStatusHistoryItem[]
   createdAt: string
   updatedAt: string
+}
+
+export interface AppointmentStatusHistoryItem {
+  status: AppointmentStatus
+  label: string
+  note?: string
+  by: string
+  byRole?: UserRole
+  at: string
 }
 
 export type FollowUpStatus = 'pending' | 'done' | 'overdue'
@@ -262,6 +275,9 @@ export interface SiteVisitRoom {
   lengthFt?: string
   widthFt?: string
   heightFt?: string
+  // Auto-calculated from lengthFt/widthFt/heightFt (sq.ft, or cu.ft once a
+  // height is entered) — same shape as RequirementLineItem.calculatedTotal.
+  calculatedTotal?: string
   notes?: string
   photos?: string[]
 }

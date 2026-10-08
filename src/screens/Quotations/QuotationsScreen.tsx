@@ -16,6 +16,7 @@ import { BUSINESS_DIVISION_LABEL, BUSINESS_CATEGORY_LABEL, BUSINESS_BRAND_LABEL 
 import { getAllRequirements } from '../../services/requirementService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllQuotations, upsertQuotation, deleteQuotation } from '../../services/quotationService'
+import { changeQuotationStatus } from './quotationActions'
 import { getAllProjects, upsertProject } from '../../services/projectService'
 import { addAuditLog } from '../../services/auditLogService'
 import { downloadQuotationExcel } from '../../utils/quotationExport'
@@ -44,7 +45,7 @@ function normalizeQuotationUnits(q: Quotation): Quotation {
 // the quotation flow specifically. Passed via StatusBadge's `label` override
 // rather than editing the shared status-label map, since 'internally_approved'
 // is also a Lead status and renaming it there would relabel Leads too.
-const QUOTATION_STATUS_LABEL: Record<QuotationStatus, string> = {
+export const QUOTATION_STATUS_LABEL: Record<QuotationStatus, string> = {
   draft:               'Draft',
   pending_pc_review:   'Pending PC Review',
   pc_rejected:         'PC Rejected — Back to QS',
@@ -57,21 +58,14 @@ const QUOTATION_STATUS_LABEL: Record<QuotationStatus, string> = {
   rejected:            'Rejected',
 }
 
-// Wording for each approval-history entry (rejections are labelled separately —
-// they depend on which stage the rejection happened at).
-const STATUS_HISTORY_LABEL: Partial<Record<QuotationStatus, string>> = {
-  pending_pc_review:   'Sent to PC for review',
-  internal_review:     'PC approved — sent to MD for approval',
-  internally_approved: 'MD approved',
-  sent_to_client:      'Sent to client',
-  client_approved:     'Client approved',
-  revision_requested:  'Client requested a revision',
-}
-
 // Who's currently responsible and what happens next, per stage — shown
-// directly on the Detail sheet so this is never ambiguous.
-function quotationWorkflowInfo(status: QuotationStatus): { responsible: string; next: string } {
-  switch (status) {
+// directly on the Detail sheet so this is never ambiguous. Takes the full
+// Quotation (not just its status) because 'client_approved' has two distinct
+// sub-states: the advance decision still pending, or already made
+// (advanceStatus/advancePaymentReceived set) — without that, "Next" stayed
+// stuck on "Choose an advance payment option" forever, even after it was chosen.
+export function quotationWorkflowInfo(q: Pick<Quotation, 'status' | 'advanceStatus' | 'advancePaymentReceived'>): { responsible: string; next: string } {
+  switch (q.status) {
     case 'draft':               return { responsible: 'QS',      next: 'Send to PC for review' }
     case 'pending_pc_review':   return { responsible: 'PC',      next: 'PC approves or rejects' }
     case 'pc_rejected':         return { responsible: 'QS',      next: 'Revise and resubmit for PC review' }
@@ -80,7 +74,9 @@ function quotationWorkflowInfo(status: QuotationStatus): { responsible: string; 
     case 'internally_approved': return { responsible: 'PC / MD', next: 'Send to client' }
     case 'sent_to_client':      return { responsible: 'Client',  next: 'Awaiting client decision (Approval page)' }
     case 'revision_requested':  return { responsible: 'QS',      next: 'Revise and resend to client' }
-    case 'client_approved':     return { responsible: 'PC / MD', next: 'Choose an advance payment option' }
+    case 'client_approved':
+      if (q.advanceStatus || q.advancePaymentReceived) return { responsible: '—', next: 'Quotation complete — proceed in Design Center' }
+      return { responsible: 'PC / MD', next: 'Choose an advance payment option' }
     case 'rejected':            return { responsible: 'QS',      next: 'Revise and resubmit' }
   }
 }
@@ -438,29 +434,24 @@ export default function QuotationsScreen() {
     if (needsReapproval) notifyPcPending(updated, 'Quotation was edited and needs review again.')
   }
 
+  // Delegates the actual transition + history + notify + Lead-advance to
+  // quotationActions.ts's changeQuotationStatus() — the same function the
+  // compact Lead-page QuotationStatusCard calls, so there is exactly one
+  // implementation of that logic. What stays here is screen-specific:
+  // local state updates, project contractValue sync, and the legacy
+  // 'rejected' audit log.
   async function handleStatusChange(q: Quotation, status: Quotation['status'], note?: string, labelOverride?: string): Promise<boolean> {
-    // 'rejected' is legacy (client-side rejection used to write it too) — kept
-    // only so old records still label correctly; new rejections always pass
-    // their own labelOverride (see rejectTarget) instead of relying on this.
-    const label = labelOverride ?? (status === 'rejected'
-      ? (q.status === 'internal_review' ? 'MD rejected' : 'Client rejected')
-      : STATUS_HISTORY_LABEL[status] ?? status)
-    const isRejection = status === 'rejected' || status === 'pc_rejected' || status === 'md_rejected'
-    const updated: Quotation = {
-      ...q, status,
-      sentAt: status === 'sent_to_client' ? new Date().toISOString() : q.sentAt,
-      approvedAt: status === 'client_approved' ? new Date().toISOString() : q.approvedAt,
-      rejectionReason: isRejection ? note : undefined,
-      statusHistory: [...(q.statusHistory ?? []), makeHistory(status, label, note)],
-      updatedAt: new Date().toISOString(),
-    }
-    const result = await upsertQuotation(updated)
-    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update status.', type: 'error' }); return false }
+    const lead = leads.find(l => l.id === q.leadId)
+    const result = await changeQuotationStatus({
+      quotation: q, status, note, labelOverride,
+      decidedByName: user?.name ?? 'Unknown', decidedByRole: user?.role,
+      leadLabel: lead?.name, lead, updateLead,
+    })
+    if (!result.ok || !result.updated) { setSnack({ open: true, msg: result.error ?? 'Could not update status.', type: 'error' }); return false }
+    const updated = result.updated
     setQuotations(prev => prev.map(x => (x.id === updated.id ? updated : x)))
     setSelected(updated)
     setSnack({ open: true, msg: 'Status updated.', type: 'success' })
-    if (status === 'pending_pc_review') notifyPcPending(updated, 'Sent to PC for review.')
-    if (status === 'internal_review') notifyMdPending(updated, 'Sent to MD for approval.')
 
     // Project already exists (this is a later revision, not the initial project-creation flow
     // in ProjectsScreen) — sync its contract value to the newly approved amount.
@@ -500,8 +491,6 @@ export default function QuotationsScreen() {
     setShowSendChoice(false)
     const ok = await handleStatusChange(selected, 'sent_to_client', undefined, activity)
     if (!ok) return
-    const lead = leads.find(l => l.id === selected.leadId)
-    if (lead) await updateLead(lead.id, {}, activity)
     setSnack({ open: true, msg: `${activity} — recorded in the activity log (nothing was actually sent).`, type: 'success' })
   }
 
@@ -666,10 +655,10 @@ export default function QuotationsScreen() {
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Responsible</p>
-                  <p className="text-sm font-bold text-indigo-900">{quotationWorkflowInfo(selected.status).responsible}</p>
+                  <p className="text-sm font-bold text-indigo-900">{quotationWorkflowInfo(selected).responsible}</p>
                 </div>
               </div>
-              <p className="text-xs text-indigo-700 mt-1.5">Next: {quotationWorkflowInfo(selected.status).next}</p>
+              <p className="text-xs text-indigo-700 mt-1.5">Next: {quotationWorkflowInfo(selected).next}</p>
             </div>
 
             <div>

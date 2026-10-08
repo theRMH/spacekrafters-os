@@ -18,6 +18,15 @@ export interface MyTaskItem {
   note?: string           // an optional longer free-text line (a reason, a material list, ...)
   person?: string         // who else is involved/responsible, if a specific name is known (bare name, no "Assigned:" prefix — the UI adds that)
   linkTo: string
+  // Router state to carry when navigating to linkTo, so the destination
+  // screen's own deep-link effect (e.g. AppointmentsScreen's state.appointmentId)
+  // opens the exact record instead of landing on a bare list.
+  linkToState?: Record<string, unknown>
+  // Set when the real action is a Lead-status change rather than something
+  // on a dedicated screen (e.g. Site Visit completion lives on the Lead, not
+  // on SiteVisitsScreen) — the UI opens LeadStatusSheet inline for this lead
+  // instead of navigating anywhere.
+  leadAction?: { leadId: string }
 }
 
 function isToday(iso: string): boolean {
@@ -150,6 +159,7 @@ export function buildMyTaskFeed(opts: {
       subjectLabel: 'Lead', subject: leadById.get(a.leadId)?.name ?? a.clientName,
       meta: [fmtDateTime(a.scheduledAt), a.location].filter(Boolean),
       linkTo: '/appointments',
+      linkToState: { appointmentId: a.id },
     })
   }
   for (const v of siteVisits) {
@@ -160,7 +170,10 @@ export function buildMyTaskFeed(opts: {
       title: 'Site Visit Today', badge: 'Site Visit', badgeCls: 'bg-purple-50 text-purple-700',
       subjectLabel: 'Lead', subject: leadById.get(v.leadId)?.name ?? v.leadId,
       meta: [fmtDateTime(v.visitDate), `${v.rooms.length} room(s)`],
-      linkTo: '/site-visits',
+      // Completion is a Lead-level action (see LeadStatusSheet's
+      // canCompleteSiteVisit), not anything on SiteVisitsScreen itself.
+      linkTo: `/leads/${v.leadId}`,
+      leadAction: { leadId: v.leadId },
     })
   }
 
@@ -260,6 +273,27 @@ export function buildMyTaskFeed(opts: {
         subjectLabel: project ? 'Project' : 'Lead', subject: project?.name ?? lead?.name ?? p.leadId ?? p.projectId ?? 'Unassigned',
         meta: [`Package: ${p.name}`],
         note: p.status === 'md_rejected' ? p.rejectionReason : undefined,
+        linkTo: '/design',
+      })
+    }
+  }
+
+  // 9. Designer — packages PC sent back for revision (status 'pc_rejected'),
+  // routed to whoever actually created the package (createdBy is a name,
+  // matching the name-match convention already used e.g. in LeadsScreen.tsx's
+  // Assign To picker), not every designer broadly.
+  if (role === 'designer') {
+    for (const p of designPackages ?? []) {
+      if (p.status !== 'pc_rejected') continue
+      if (p.createdBy !== user.name) continue
+      const lead = p.leadId ? leadById.get(p.leadId) : undefined
+      const project = projectById.get(p.projectId ?? '')
+      items.push({
+        key: `design-revise-${p.id}`, at: p.updatedAt,
+        title: 'Design Sent Back for Revision', badge: 'Revision Needed', badgeCls: 'bg-amber-50 text-amber-700',
+        subjectLabel: project ? 'Project' : 'Lead', subject: project?.name ?? lead?.name ?? p.leadId ?? p.projectId ?? 'Unassigned',
+        meta: [`Package: ${p.name}`],
+        note: p.rejectionReason,
         linkTo: '/design',
       })
     }

@@ -13,6 +13,7 @@ import { getAllSiteVisits } from '../../services/siteVisitService'
 import { BUSINESS_DIVISION_LABEL, BUSINESS_CATEGORY_LABEL, BUSINESS_BRAND_LABEL } from '../../data/businessDivisions'
 import type { Appointment, FollowUp, SiteVisit } from '../../types'
 import { LeadStatusSheet, LEAD_STATUS_LABEL } from './LeadStatusSheet'
+import { LeadActivityHistory } from './LeadActivityHistory'
 
 type Tab = 'overview' | 'appointments' | 'follow-ups' | 'site-visits' | 'activity'
 
@@ -239,22 +240,7 @@ export default function LeadDetailScreen() {
 
         {tab === 'activity' && (
           <div className="bg-white border border-slate-100 rounded-2xl p-4">
-            <div className="space-y-3 divide-y divide-slate-100">
-              {[...lead.activity].reverse().map((entry, i) => (
-                <div key={entry.id} className={i > 0 ? 'pt-3' : ''}>
-                  <div className="flex gap-2.5">
-                    <div className="flex flex-col items-center pt-1 flex-shrink-0">
-                      <div className="w-2 h-2 rounded-full" style={{ background: '#0F2A4A' }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-bold uppercase mb-0.5" style={{ color: '#0F2A4A' }}>{entry.label}</p>
-                      {entry.note && <p className="text-xs text-slate-700 leading-relaxed">{entry.note}</p>}
-                      <p className="text-[11px] text-slate-400 mt-1">{entry.updatedBy} · {fmtDateTime(entry.updatedAt)}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <LeadActivityHistory activity={lead.activity} />
           </div>
         )}
       </div>

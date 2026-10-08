@@ -568,8 +568,8 @@ export default function LeadsScreen() {
     return matchSearch && inRangeOf(l.createdAt, range)
   })
 
-  // "Active" isn't literally every lead — it mirrors FENSTER's Active filter:
-  // every open stage, with Won and Lost broken out as their own separate pills.
+  // "Active" is the open pipeline only — Won and Lost both get their own
+  // separate pills and are excluded from this total.
   const activeCount = dateScoped.filter(l => {
     const b = leadBucket(l, appointments)
     return b !== 'won' && b !== 'lost'
