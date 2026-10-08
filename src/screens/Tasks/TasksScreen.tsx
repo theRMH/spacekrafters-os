@@ -11,17 +11,14 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllProjects } from '../../services/projectService'
 import { getAllAppointments } from '../../services/appointmentService'
-import { getManagedUsersDirectory } from '../../services/userService'
-import { sendNotification } from '../../utils/notifications'
 import { fmtDateTime } from '../Appointments/appointmentDate'
-import { decideAppointmentReschedule } from '../Appointments/appointmentActions'
-import { LeadStatusSheet, ROLE_FOR_LEAD_STATUS } from '../Leads/LeadStatusSheet'
+import { LeadStatusSheet } from '../Leads/LeadStatusSheet'
 import { ProjectStatusSheet } from '../ProjectWorkspace/ProjectStatusSheet'
 import {
   pipelineStage, pipelineBucket, pipelineStageLabel, pipelineBadgeStatus,
   BUCKET_LABEL, BUCKET_ORDER, type PipelineStage, type PipelineBucket,
 } from './pipelineStage'
-import type { Project, Appointment, Lead, ManagedUser } from '../../types'
+import type { Project, Appointment, Lead } from '../../types'
 
 type BucketFilter = 'all' | PipelineBucket
 
@@ -54,19 +51,20 @@ export default function TasksScreen() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, can } = useAuth()
-  const { leads, updateLead } = useCRM()
+  const { leads } = useCRM()
 
   // Mirrors LeadsScreen.tsx's own visibility rule for leads.
   const canManageLeads = can('edit_lead')
-  // Gates loading appointment/user data for the qualified_* stage refinement
-  // and the in-page reschedule-approval mini-flow below — only roles that
-  // already have appointment visibility elsewhere in the app see that detail.
+  // Gates loading appointment data for the qualified_* stage refinement —
+  // only roles that already have appointment visibility elsewhere in the app
+  // see that detail.
   const canSeeAppointments = can('view_appointments')
-  const isOwner = can('view_md_tasks') // the only role allowed to approve/reject a reschedule
+  // Only the MD sees a way to act on a pending reschedule — the action
+  // itself now happens on the Approval page, not here.
+  const isOwner = can('view_md_tasks')
 
   const [projects, setProjects] = useState<Project[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
-  const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [pipelineOpen, setPipelineOpen] = useState(true)
   const [pipelineSearch, setPipelineSearch] = useState('')
@@ -79,26 +77,17 @@ export default function TasksScreen() {
   const [openLeadId, setOpenLeadId] = useState<string | null>(null)
   const [openProjectId, setOpenProjectId] = useState<string | null>(null)
 
-  // In-page reschedule-approval mini-flow — the one pipeline stage where the
-  // real LeadStatusSheet would navigate to /md-tasks, which conflicts with
-  // this dashboard staying entirely on the Tasks page.
-  const [mdNotes, setMdNotes] = useState('')
-  const [actionSaving, setActionSaving] = useState(false)
-  const [actionError, setActionError] = useState('')
-
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   useEffect(() => {
     async function load() {
       setIsLoading(true)
-      const [projs, appts, users] = await Promise.all([
+      const [projs, appts] = await Promise.all([
         getAllProjects(),
         canSeeAppointments ? getAllAppointments() : Promise.resolve([]),
-        canSeeAppointments ? getManagedUsersDirectory() : Promise.resolve([]),
       ])
       setProjects(projs)
       setAppointments(appts)
-      setManagedUsers(users)
       setIsLoading(false)
     }
     load()
@@ -145,8 +134,6 @@ export default function TasksScreen() {
       if (project) setOpenProjectId(project.id)
       return
     }
-    setMdNotes('')
-    setActionError('')
     setOpenLeadId(lead.id)
   }
 
@@ -164,61 +151,6 @@ export default function TasksScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, location.search])
 
-  // Replicates MDTasksScreen.handleDecision()'s field writes exactly — same
-  // Appointment update, same lead.status advance to 'site_visit_scheduled'
-  // (+ assignee + notification) on approval — so approving from here behaves
-  // identically to approving from /md-tasks, just without leaving the page.
-  async function handleDecideInline(approved: boolean) {
-    if (!liveLead) return
-    const appt = pendingApptFor(liveLead, appointments)
-    if (!appt) return
-    setActionSaving(true)
-    const result = await decideAppointmentReschedule(appt, approved, mdNotes, user?.name ?? 'Unknown', user?.role)
-    if (!result.ok || !result.updated) {
-      setActionSaving(false)
-      setActionError(result.error ?? 'Could not record decision.')
-      return
-    }
-    setAppointments(prev => prev.map(a => (a.id === result.updated!.id ? result.updated! : a)))
-
-    const advance = approved && liveLead.status === 'qualified'
-    const note = approved
-      ? 'MD accepted the appointment reschedule' + (advance ? ' — site visit scheduled' : '') + (mdNotes.trim() ? `: ${mdNotes.trim()}` : '')
-      : `MD rejected the appointment reschedule${mdNotes.trim() ? `: ${mdNotes.trim()}` : ''}`
-    let newAssigneeId: string | undefined
-    if (advance) {
-      const role = ROLE_FOR_LEAD_STATUS['site_visit_scheduled']
-      const person = role ? managedUsers.find(u => u.role === role) : undefined
-      newAssigneeId = person?.id
-      await updateLead(liveLead.id, {
-        status: 'site_visit_scheduled',
-        assignedRole: role,
-        assignedToId: person?.id,
-        assignedToName: person?.fullName,
-      }, note)
-    } else {
-      await updateLead(liveLead.id, {}, note)
-    }
-    if (liveLead.ownerId) {
-      await sendNotification(
-        [liveLead.ownerId],
-        approved ? 'Reschedule Accepted' : 'Reschedule Rejected',
-        `${liveLead.name} (${liveLead.leadNumber ?? liveLead.id}) — ${approved ? 'MD accepted the reschedule.' : 'MD rejected the reschedule.'}${mdNotes.trim() ? ` Notes: ${mdNotes.trim()}` : ''}`,
-      )
-    }
-    if (newAssigneeId && newAssigneeId !== liveLead.assignedToId) {
-      await sendNotification(
-        [newAssigneeId],
-        'New Lead Task',
-        `${liveLead.name} (${liveLead.leadNumber ?? liveLead.id}) — Site Visit Scheduled. Assigned by ${user?.name ?? 'MD'}.`,
-        `/tasks?leadId=${liveLead.id}`,
-      )
-    }
-    setActionSaving(false)
-    setSnack({ open: true, msg: approved ? 'Reschedule accepted.' : 'Reschedule rejected.', type: 'success' })
-    setOpenLeadId(null)
-    setMdNotes('')
-  }
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
@@ -312,10 +244,10 @@ export default function TasksScreen() {
         />
       )}
 
-      {/* In-page reschedule approve/reject — the one stage LeadStatusSheet
-          itself would send to /md-tasks for. */}
+      {/* Informational only — a pending reschedule is decided on the
+          Approval page, the single place every MD approval happens. */}
       <BottomSheet isOpen={!!openLeadId && liveStage === 'qualified_pending_approval'}
-        onClose={() => setOpenLeadId(null)} title="Review Reschedule Request" height="full">
+        onClose={() => setOpenLeadId(null)} title="Reschedule Requested" height="full">
         {liveLead && (() => {
           const appt = pendingApptFor(liveLead, appointments)
           return (
@@ -328,24 +260,11 @@ export default function TasksScreen() {
                 <p className="text-[11px] text-slate-400">Requested by {appt?.rescheduleRequestedBy ?? '—'}{appt?.rescheduleRequestedAt ? ` · ${fmtDateTime(appt.rescheduleRequestedAt)}` : ''}</p>
               </div>
 
-              {actionError && <p className="text-xs text-red-600 font-semibold">{actionError}</p>}
-
               {isOwner ? (
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-500 mb-1 block">Notes <span className="font-normal text-slate-400">(optional)</span></label>
-                    <textarea value={mdNotes} onChange={e => setMdNotes(e.target.value)} rows={3}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-                  </div>
-                  <button disabled={actionSaving} onClick={() => handleDecideInline(true)}
-                    className="w-full py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
-                    {actionSaving ? 'Saving…' : 'Approve'}
-                  </button>
-                  <button disabled={actionSaving} onClick={() => handleDecideInline(false)}
-                    className="w-full py-3 rounded-xl border border-red-200 bg-red-50 text-sm font-bold text-red-700 active:bg-red-100 disabled:opacity-50">
-                    Reject
-                  </button>
-                </div>
+                <button onClick={() => { setOpenLeadId(null); navigate('/approval') }}
+                  className="w-full py-3 rounded-xl text-sm font-bold text-white active:opacity-90" style={{ background: '#0F2A4A' }}>
+                  Review in Approval →
+                </button>
               ) : (
                 <p className="text-sm text-slate-500 text-center py-4">Waiting on MD review — no action available here.</p>
               )}

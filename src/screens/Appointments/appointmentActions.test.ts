@@ -6,6 +6,12 @@ import type { Appointment } from '../../types'
 vi.mock('../../services/appointmentService', () => ({
   upsertAppointment: vi.fn(async () => ({ ok: true })),
 }))
+// decideRescheduleAndAdvanceLead (added alongside decideAppointmentReschedule
+// in this file) pulls in sendNotification, which transitively imports the
+// Supabase client — crashes in vitest's Node environment without this, same
+// as every other test file here that ends up importing a real screen.
+vi.mock('../../lib/supabase', () => ({ supabase: null, isSupabaseConfigured: false }))
+vi.mock('../../utils/notifications', () => ({ sendNotification: vi.fn(async () => {}) }))
 
 function baseAppointment(overrides: Partial<Appointment> = {}): Appointment {
   return {

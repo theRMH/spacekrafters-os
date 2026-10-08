@@ -14,11 +14,14 @@ import { getAllDailyReports } from '../../services/dailyReportService'
 import { getAllLeaveApplications } from '../../services/leaveService'
 import { getAllExpenseRequests } from '../../services/expenseService'
 import { getAllPurchaseRequests, getAllPurchaseOrders } from '../../services/procurementService'
+import { getAllQuotations } from '../../services/quotationService'
+import { getAllDesignPackages } from '../../services/designService'
 import { PROJECT_STAGE_ORDER, PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
 import { buildMyTaskFeed } from './myTaskFeed'
 import type {
   Appointment, DailyReport, Lead, MaterialRequestForm, Project,
   PurchaseOrder, PurchaseRequest, SiteVisit, Task, ExpenseRequest, LeaveApplication,
+  Quotation, DesignPackage,
 } from '../../types'
 
 function isToday(iso: string): boolean {
@@ -45,19 +48,21 @@ export default function MyTaskScreen() {
   const [expenseRequests, setExpenseRequests] = useState<ExpenseRequest[]>([])
   const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([])
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
+  const [quotations, setQuotations] = useState<Quotation[]>([])
+  const [designPackages, setDesignPackages] = useState<DesignPackage[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     (async () => {
       setIsLoading(true)
-      const [p, t, m, a, sv, dr, la, er, pr, po] = await Promise.all([
+      const [p, t, m, a, sv, dr, la, er, pr, po, q, dp] = await Promise.all([
         getAllProjects(), getAllTasks(), getAllMRFs(), getAllAppointments(), getAllSiteVisits(),
         getAllDailyReports(), getAllLeaveApplications(), getAllExpenseRequests(),
-        getAllPurchaseRequests(), getAllPurchaseOrders(),
+        getAllPurchaseRequests(), getAllPurchaseOrders(), getAllQuotations(), getAllDesignPackages(),
       ])
       setProjects(p); setTasks(t); setMrfs(m); setAppointments(a); setSiteVisits(sv)
       setDailyReports(dr); setLeaveApplications(la); setExpenseRequests(er)
-      setPurchaseRequests(pr); setPurchaseOrders(po)
+      setPurchaseRequests(pr); setPurchaseOrders(po); setQuotations(q); setDesignPackages(dp)
       setIsLoading(false)
     })()
   }, [])
@@ -66,9 +71,9 @@ export default function MyTaskScreen() {
     if (!user) return []
     return buildMyTaskFeed({
       user, leads: leads as Lead[], projects, tasks, mrfs, appointments, siteVisits, dailyReports,
-      leaveApplications, expenseRequests, purchaseRequests, purchaseOrders,
+      leaveApplications, expenseRequests, purchaseRequests, purchaseOrders, quotations, designPackages,
     })
-  }, [user, leads, projects, tasks, mrfs, appointments, siteVisits, dailyReports, leaveApplications, expenseRequests, purchaseRequests, purchaseOrders])
+  }, [user, leads, projects, tasks, mrfs, appointments, siteVisits, dailyReports, leaveApplications, expenseRequests, purchaseRequests, purchaseOrders, quotations, designPackages])
 
   const completedTasks = useMemo(() => tasks.filter(t => t.assigneeId === user?.id && t.status === 'completed'), [tasks, user])
   const todayVisits = useMemo(() => {

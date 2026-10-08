@@ -22,7 +22,7 @@ import { downloadQuotationExcel } from '../../utils/quotationExport'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { sendNotification } from '../../utils/notifications'
 import { ROLE_LABELS } from '../../data/permissions'
-import type { Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem, Project, AuditLog, DiscountType, QuotationStatus, QuotationStatusHistoryItem } from '../../types'
+import type { Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem, Project, AuditLog, DiscountType, QuotationStatus, QuotationStatusHistoryItem, AdvanceTermOption } from '../../types'
 
 const UNIT_OPTIONS = ['sqft', 'nos', 'rft', 'sft', 'lot', 'set', 'lsm', 'cft', 'kgs']
 
@@ -46,7 +46,10 @@ function normalizeQuotationUnits(q: Quotation): Quotation {
 // is also a Lead status and renaming it there would relabel Leads too.
 const QUOTATION_STATUS_LABEL: Record<QuotationStatus, string> = {
   draft:               'Draft',
+  pending_pc_review:   'Pending PC Review',
+  pc_rejected:         'PC Rejected — Back to QS',
   internal_review:     'Pending MD Approval',
+  md_rejected:         'MD Rejected — Back to PC',
   internally_approved: 'MD Approved',
   sent_to_client:      'Awaiting Client Approval',
   revision_requested:  'Revision Requested',
@@ -55,13 +58,31 @@ const QUOTATION_STATUS_LABEL: Record<QuotationStatus, string> = {
 }
 
 // Wording for each approval-history entry (rejections are labelled separately —
-// they depend on whether the MD or the client rejected).
+// they depend on which stage the rejection happened at).
 const STATUS_HISTORY_LABEL: Partial<Record<QuotationStatus, string>> = {
-  internal_review:     'Sent to MD for approval',
+  pending_pc_review:   'Sent to PC for review',
+  internal_review:     'PC approved — sent to MD for approval',
   internally_approved: 'MD approved',
   sent_to_client:      'Sent to client',
   client_approved:     'Client approved',
   revision_requested:  'Client requested a revision',
+}
+
+// Who's currently responsible and what happens next, per stage — shown
+// directly on the Detail sheet so this is never ambiguous.
+function quotationWorkflowInfo(status: QuotationStatus): { responsible: string; next: string } {
+  switch (status) {
+    case 'draft':               return { responsible: 'QS',      next: 'Send to PC for review' }
+    case 'pending_pc_review':   return { responsible: 'PC',      next: 'PC approves or rejects' }
+    case 'pc_rejected':         return { responsible: 'QS',      next: 'Revise and resubmit for PC review' }
+    case 'internal_review':     return { responsible: 'MD',      next: 'MD approves or rejects' }
+    case 'md_rejected':         return { responsible: 'PC',      next: 'Resubmit to MD, or revise first' }
+    case 'internally_approved': return { responsible: 'PC / MD', next: 'Send to client' }
+    case 'sent_to_client':      return { responsible: 'Client',  next: 'Awaiting client decision (Approval page)' }
+    case 'revision_requested':  return { responsible: 'QS',      next: 'Revise and resend to client' }
+    case 'client_approved':     return { responsible: 'PC / MD', next: 'Choose an advance payment option' }
+    case 'rejected':            return { responsible: 'QS',      next: 'Revise and resubmit' }
+  }
 }
 
 function fmtDate(val: string): string {
@@ -100,22 +121,49 @@ function sectionsFromRequirement(req: Requirement): BOQSection[] {
   }))
 }
 
-function computeTotals(sections: BOQSection[], discountType: DiscountType, discountValue: number) {
+// Order is Subtotal -> Discount -> Taxable Amount -> Tax -> Transport -> Net.
+// Tax is calculated on the discounted (taxable) amount, never on the
+// original subtotal — a flat discount is applied proportionally across line
+// items so each item's own tax% still applies correctly to its share.
+function computeTotals(sections: BOQSection[], discountType: DiscountType, discountValue: number, transportCost: number) {
   let totalAmount = 0
+  for (const section of sections) {
+    for (const item of section.items) totalAmount += item.quantity * item.rate
+  }
+  const discountAmount = discountType === 'percentage'
+    ? totalAmount * (discountValue / 100)
+    : discountValue
+  const discountRatio = totalAmount > 0 ? discountAmount / totalAmount : 0
   let taxAmount = 0
   for (const section of sections) {
     for (const item of section.items) {
-      const amount = item.quantity * item.rate
-      totalAmount += amount
-      taxAmount += amount * ((item.taxPercent ?? 0) / 100)
+      const taxableItemAmount = item.quantity * item.rate * (1 - discountRatio)
+      taxAmount += taxableItemAmount * ((item.taxPercent ?? 0) / 100)
     }
   }
-  const preDiscountTotal = totalAmount + taxAmount
-  const discountAmount = discountType === 'percentage'
-    ? preDiscountTotal * (discountValue / 100)
-    : discountValue
-  const netAmount = preDiscountTotal - discountAmount
-  return { totalAmount, taxAmount, discountAmount, netAmount }
+  const taxableAmount = totalAmount - discountAmount
+  const netAmount = taxableAmount + taxAmount + transportCost
+  return { totalAmount, taxAmount, discountAmount, taxableAmount, netAmount }
+}
+
+// With Advance: amount from the chosen %/₹ entry. Without Advance: ₹0 due
+// now. Full Advance: the entire net amount upfront. Returns undefined for
+// every field when no option is chosen yet, so it never writes partial/zero
+// values nobody actually picked.
+function computeAdvanceTerm(netAmount: number, option: AdvanceTermOption | '', type: DiscountType, value: number) {
+  if (!option) return {}
+  if (option === 'without_advance') {
+    return { advanceTermOption: option, advanceTermAmount: 0, advanceTermBalance: netAmount }
+  }
+  if (option === 'full_advance') {
+    return { advanceTermOption: option, advanceTermAmount: netAmount, advanceTermBalance: 0 }
+  }
+  const amount = type === 'percentage' ? netAmount * (value / 100) : value
+  const clamped = Math.min(Math.max(amount, 0), netAmount)
+  return {
+    advanceTermOption: option, advanceTermType: type, advanceTermValue: value,
+    advanceTermAmount: clamped, advanceTermBalance: netAmount - clamped,
+  }
 }
 
 export default function QuotationsScreen() {
@@ -159,10 +207,17 @@ export default function QuotationsScreen() {
   const [sections, setSections] = useState<BOQSection[]>([newSection()])
   const [discountType, setDiscountType] = useState<DiscountType>('amount')
   const [discountValue, setDiscountValue] = useState(0)
+  const [transportCost, setTransportCost] = useState(0)
+  const [advanceTermOption, setAdvanceTermOption] = useState<AdvanceTermOption | ''>('')
+  const [advanceTermType, setAdvanceTermType] = useState<DiscountType>('percentage')
+  const [advanceTermValue, setAdvanceTermValue] = useState(0)
   const [documentFiles, setDocumentFiles] = useState<string[]>([])
   const [terms, setTerms] = useState('')
   const [paymentTerms, setPaymentTerms] = useState('')
   const [formError, setFormError] = useState('')
+  // Target of the shared "Reject Quotation" sheet — which status a rejection
+  // from the currently open stage writes, and who it's then waiting on.
+  const [rejectTarget, setRejectTarget] = useState<{ status: QuotationStatus; label: string }>({ status: 'md_rejected', label: 'MD rejected' })
 
   function makeHistory(status: QuotationStatus, label: string, note?: string): QuotationStatusHistoryItem {
     return { status, label, note: note || undefined, by: user?.name ?? 'Unknown', byRole: user?.role, at: new Date().toISOString() }
@@ -172,6 +227,12 @@ export default function QuotationsScreen() {
   async function notifyMdPending(q: Quotation, what: string) {
     const mdIds = (await getManagedUsersDirectory()).filter(u => u.role === 'owner' && u.id !== user?.id).map(u => u.id)
     await sendNotification(mdIds, 'Quotation Pending MD Approval', `${leadName(q.leadId)} — ${fmtCurrency(q.netAmount)}. ${what}`)
+  }
+
+  // Same, for the new PC review step ahead of MD.
+  async function notifyPcPending(q: Quotation, what: string) {
+    const pcIds = (await getManagedUsersDirectory()).filter(u => u.role === 'project_coordinator' && u.id !== user?.id).map(u => u.id)
+    await sendNotification(pcIds, 'Quotation Pending PC Review', `${leadName(q.leadId)} — ${fmtCurrency(q.netAmount)}. ${what}`)
   }
 
   async function refresh() {
@@ -198,6 +259,18 @@ export default function QuotationsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routerLocation.state, isLoading])
 
+  // Deep-link from the Approval page's "Review" on a PC-pending quotation —
+  // opens this exact quotation's Detail sheet directly (same pattern as
+  // AppointmentsScreen's appointmentId deep link).
+  useEffect(() => {
+    const state = routerLocation.state as { quotationId?: string } | null
+    if (!state?.quotationId || isLoading) return
+    const found = quotations.find(q => q.id === state.quotationId)
+    if (found) setSelected(found)
+    navigate(routerLocation.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.state, quotations, isLoading])
+
   function leadName(id: string): string {
     return leads.find(l => l.id === id)?.name ?? id
   }
@@ -215,7 +288,9 @@ export default function QuotationsScreen() {
 
   function resetForm() {
     setLeadId(''); setRequirementId(''); setSections([newSection()])
-    setDiscountType('amount'); setDiscountValue(0); setDocumentFiles([])
+    setDiscountType('amount'); setDiscountValue(0); setTransportCost(0)
+    setAdvanceTermOption(''); setAdvanceTermType('percentage'); setAdvanceTermValue(0)
+    setDocumentFiles([])
     setTerms(''); setPaymentTerms(''); setFormError('')
   }
 
@@ -245,6 +320,10 @@ export default function QuotationsScreen() {
     // only have the computed discountAmount — treat that as a flat ₹ value.
     setDiscountType(q.discountType ?? 'amount')
     setDiscountValue(q.discountValue ?? q.discountAmount)
+    setTransportCost(q.transportCost ?? 0)
+    setAdvanceTermOption(q.advanceTermOption ?? '')
+    setAdvanceTermType(q.advanceTermType ?? 'percentage')
+    setAdvanceTermValue(q.advanceTermValue ?? 0)
     setDocumentFiles(q.documentFiles ?? [])
     setTerms(q.terms ?? ''); setPaymentTerms(q.paymentTerms ?? '')
     setFormError('')
@@ -259,6 +338,10 @@ export default function QuotationsScreen() {
 
   function updateSectionTitle(id: string, title: string) {
     setSections(prev => prev.map(s => (s.id === id ? { ...s, title } : s)))
+  }
+
+  function updateSectionNotes(id: string, notes: string) {
+    setSections(prev => prev.map(s => (s.id === id ? { ...s, notes } : s)))
   }
 
   function removeSection(id: string) {
@@ -296,16 +379,18 @@ export default function QuotationsScreen() {
       setFormError('Lead and at least one section with a titled, priced line item are required.')
       return
     }
-    const { totalAmount, taxAmount, discountAmount, netAmount } = computeTotals(valid, discountType, discountValue)
+    const { totalAmount, taxAmount, discountAmount, taxableAmount, netAmount } = computeTotals(valid, discountType, discountValue, transportCost)
+    const advanceTerm = computeAdvanceTerm(netAmount, advanceTermOption, advanceTermType, advanceTermValue)
     const now = new Date().toISOString()
     const quotation: Quotation = {
       id: `quo_${Date.now()}`,
       leadId, requirementId: requirementId || undefined,
-      // A new quotation never goes straight to the client: it starts out waiting for MD approval.
-      version: 1, status: 'internal_review',
-      statusHistory: [makeHistory('internal_review', 'Created — sent to MD for approval')],
-      sections: valid, totalAmount, taxAmount,
+      // A new quotation never goes straight to MD: it starts out waiting for PC review.
+      version: 1, status: 'pending_pc_review',
+      statusHistory: [makeHistory('pending_pc_review', 'Created — sent to PC for review')],
+      sections: valid, totalAmount, taxAmount, taxableAmount, transportCost: transportCost || undefined,
       discountType, discountValue, discountAmount, netAmount,
+      ...advanceTerm,
       documentFiles: documentFiles.length > 0 ? documentFiles : undefined,
       terms: terms.trim() || undefined, paymentTerms: paymentTerms.trim() || undefined,
       createdBy: user?.id ?? '', createdAt: now, updatedAt: now,
@@ -314,8 +399,8 @@ export default function QuotationsScreen() {
     if (!result.ok) { setFormError(result.error ?? 'Could not save quotation.'); return }
     setQuotations(prev => [quotation, ...prev])
     dismiss(() => setShowNew(false))
-    setSnack({ open: true, msg: 'Quotation created and sent to MD for approval.', type: 'success' })
-    notifyMdPending(quotation, 'New quotation created.')
+    setSnack({ open: true, msg: 'Quotation created and sent to PC for review.', type: 'success' })
+    notifyPcPending(quotation, 'New quotation created.')
   }
 
   async function handleUpdateQuotation() {
@@ -325,21 +410,23 @@ export default function QuotationsScreen() {
       setFormError('At least one section with a titled, priced line item is required.')
       return
     }
-    const { totalAmount, taxAmount, discountAmount, netAmount } = computeTotals(valid, discountType, discountValue)
-    // Changing an MD-approved (or rejected / revision-requested) quotation means
-    // the version the MD approved is no longer the one on screen — it must be
-    // approved again before it can be sent to the client.
-    const needsReapproval = selected.status === 'internally_approved' || selected.status === 'rejected' || selected.status === 'revision_requested'
+    const { totalAmount, taxAmount, discountAmount, taxableAmount, netAmount } = computeTotals(valid, discountType, discountValue, transportCost)
+    const advanceTerm = computeAdvanceTerm(netAmount, advanceTermOption, advanceTermType, advanceTermValue)
+    // Changing an approved/rejected quotation means the version anyone
+    // already approved is no longer the one on screen — it must go through
+    // the full PC -> MD chain again, never skipping straight back to MD.
+    const needsReapproval = ['internally_approved', 'rejected', 'revision_requested', 'pc_rejected', 'md_rejected'].includes(selected.status)
     const updated: Quotation = {
       ...selected, leadId, requirementId: requirementId || undefined,
-      sections: valid, totalAmount, taxAmount,
+      sections: valid, totalAmount, taxAmount, taxableAmount, transportCost: transportCost || undefined,
       discountType, discountValue, discountAmount, netAmount,
+      ...advanceTerm,
       documentFiles: documentFiles.length > 0 ? documentFiles : undefined,
       terms: terms.trim() || undefined, paymentTerms: paymentTerms.trim() || undefined,
       ...(needsReapproval ? {
-        status: 'internal_review' as const,
+        status: 'pending_pc_review' as const,
         rejectionReason: undefined,
-        statusHistory: [...(selected.statusHistory ?? []), makeHistory('internal_review', 'Edited — sent back to MD for approval')],
+        statusHistory: [...(selected.statusHistory ?? []), makeHistory('pending_pc_review', 'Edited — resubmitted for PC review')],
       } : {}),
       updatedAt: new Date().toISOString(),
     }
@@ -347,20 +434,23 @@ export default function QuotationsScreen() {
     if (!result.ok) { setFormError(result.error ?? 'Could not update quotation.'); return }
     setQuotations(prev => prev.map(q => (q.id === updated.id ? updated : q)))
     dismiss(() => { setShowEdit(false); setSelected(null) })
-    setSnack({ open: true, msg: needsReapproval ? 'Quotation updated and sent back to MD for approval.' : 'Quotation updated.', type: 'success' })
-    if (needsReapproval) notifyMdPending(updated, 'Quotation was edited and needs approval again.')
+    setSnack({ open: true, msg: needsReapproval ? 'Quotation updated and sent back to PC for review.' : 'Quotation updated.', type: 'success' })
+    if (needsReapproval) notifyPcPending(updated, 'Quotation was edited and needs review again.')
   }
 
   async function handleStatusChange(q: Quotation, status: Quotation['status'], note?: string, labelOverride?: string): Promise<boolean> {
-    // 'rejected' is used both by the MD (while pending approval) and by the client (after sending).
+    // 'rejected' is legacy (client-side rejection used to write it too) — kept
+    // only so old records still label correctly; new rejections always pass
+    // their own labelOverride (see rejectTarget) instead of relying on this.
     const label = labelOverride ?? (status === 'rejected'
       ? (q.status === 'internal_review' ? 'MD rejected' : 'Client rejected')
       : STATUS_HISTORY_LABEL[status] ?? status)
+    const isRejection = status === 'rejected' || status === 'pc_rejected' || status === 'md_rejected'
     const updated: Quotation = {
       ...q, status,
       sentAt: status === 'sent_to_client' ? new Date().toISOString() : q.sentAt,
       approvedAt: status === 'client_approved' ? new Date().toISOString() : q.approvedAt,
-      rejectionReason: status === 'rejected' ? note : undefined,
+      rejectionReason: isRejection ? note : undefined,
       statusHistory: [...(q.statusHistory ?? []), makeHistory(status, label, note)],
       updatedAt: new Date().toISOString(),
     }
@@ -369,6 +459,7 @@ export default function QuotationsScreen() {
     setQuotations(prev => prev.map(x => (x.id === updated.id ? updated : x)))
     setSelected(updated)
     setSnack({ open: true, msg: 'Status updated.', type: 'success' })
+    if (status === 'pending_pc_review') notifyPcPending(updated, 'Sent to PC for review.')
     if (status === 'internal_review') notifyMdPending(updated, 'Sent to MD for approval.')
 
     // Project already exists (this is a later revision, not the initial project-creation flow
@@ -494,7 +585,8 @@ export default function QuotationsScreen() {
   }
 
   const filtered = quotations.filter(q => !search || leadName(q.leadId).toLowerCase().includes(search.toLowerCase()))
-  const formTotals = computeTotals(sections, discountType, discountValue)
+  const formTotals = computeTotals(sections, discountType, discountValue, transportCost)
+  const formAdvanceTerm = computeAdvanceTerm(formTotals.netAmount, advanceTermOption, advanceTermType, advanceTermValue)
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
@@ -566,6 +658,20 @@ export default function QuotationsScreen() {
               </div>
             </div>
 
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Current Stage</p>
+                  <p className="text-sm font-bold text-indigo-900">{QUOTATION_STATUS_LABEL[selected.status]}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Responsible</p>
+                  <p className="text-sm font-bold text-indigo-900">{quotationWorkflowInfo(selected.status).responsible}</p>
+                </div>
+              </div>
+              <p className="text-xs text-indigo-700 mt-1.5">Next: {quotationWorkflowInfo(selected.status).next}</p>
+            </div>
+
             <div>
               <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Sections</p>
               <div className="space-y-3">
@@ -588,6 +694,12 @@ export default function QuotationsScreen() {
                           </p>
                         </div>
                       ))}
+                      {section.notes && (
+                        <div className="p-3.5 border-t border-slate-100 bg-slate-50">
+                          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-0.5">Notes</p>
+                          <p className="text-xs text-slate-600">{section.notes}</p>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -596,13 +708,31 @@ export default function QuotationsScreen() {
 
             <div className="bg-slate-50 rounded-2xl p-3.5 space-y-1.5">
               <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.totalAmount)}</span></div>
-              <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.taxAmount)}</span></div>
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500">Discount{selected.discountType === 'percentage' && selected.discountValue ? ` (${selected.discountValue}%)` : ''}</span>
                 <span className="font-semibold text-slate-700">-{fmtCurrency(selected.discountAmount)}</span>
               </div>
+              <div className="flex justify-between text-xs"><span className="text-slate-500">Taxable Amount</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.taxableAmount ?? selected.totalAmount - selected.discountAmount)}</span></div>
+              <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.taxAmount)}</span></div>
+              {!!selected.transportCost && (
+                <div className="flex justify-between text-xs"><span className="text-slate-500">Transport Cost</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.transportCost)}</span></div>
+              )}
               <div className="flex justify-between text-sm pt-1.5 border-t border-slate-200"><span className="font-bold text-slate-800">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(selected.netAmount)}</span></div>
             </div>
+
+            {selected.advanceTermOption && (
+              <div className="bg-white border border-slate-100 rounded-2xl p-3.5 space-y-1">
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Advance Payment Terms</p>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">
+                    {selected.advanceTermOption === 'with_advance' ? 'With Advance' : selected.advanceTermOption === 'full_advance' ? 'Full Advance' : 'Without Advance'}
+                    {selected.advanceTermOption === 'with_advance' && selected.advanceTermType === 'percentage' && selected.advanceTermValue ? ` (${selected.advanceTermValue}%)` : ''}
+                  </span>
+                  <span className="font-semibold text-slate-700">{fmtCurrency(selected.advanceTermAmount ?? 0)}</span>
+                </div>
+                <div className="flex justify-between text-xs"><span className="text-slate-500">Balance Due</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.advanceTermBalance ?? selected.netAmount)}</span></div>
+              </div>
+            )}
 
             {selected.documentFiles && selected.documentFiles.length > 0 && (
               <div>
@@ -625,13 +755,35 @@ export default function QuotationsScreen() {
             <div className="space-y-2">
               <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Status Actions</p>
               <div className="flex flex-wrap gap-2">
-                {/* Quotations created before the approval flow was enforced can still be sitting in Draft. */}
+                {/* Quotations created before the PC/approval flow was enforced can still be sitting in Draft. */}
                 {selected.status === 'draft' && can('create_quotation') && (
-                  <button onClick={() => handleStatusChange(selected, 'internal_review')}
+                  <button onClick={() => handleStatusChange(selected, 'pending_pc_review')}
                     className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
-                    Send to MD for Approval
+                    Send to PC for Review
                   </button>
                 )}
+
+                {/* QS -> PC: new, ahead of the existing MD step below. */}
+                {selected.status === 'pending_pc_review' && !can('approve_quotation_pc') && (
+                  <p className="text-xs text-slate-500">Waiting for PC review.</p>
+                )}
+                {selected.status === 'pending_pc_review' && can('approve_quotation_pc') && (
+                  <div className="w-full flex justify-center gap-3">
+                    <button onClick={() => handleStatusChange(selected, 'internal_review')}
+                      className="px-10 py-3.5 rounded-xl bg-emerald-600 text-sm font-bold text-white active:bg-emerald-700">
+                      PC Approve
+                    </button>
+                    <button onClick={() => { setRejectReason(''); setRejectTarget({ status: 'pc_rejected', label: 'PC rejected' }); setShowReject(true) }}
+                      className="px-10 py-3.5 rounded-xl border border-red-300 bg-white text-sm font-bold text-red-600 active:bg-red-50">
+                      Reject
+                    </button>
+                  </div>
+                )}
+                {selected.status === 'pc_rejected' && (
+                  <p className="w-full text-xs text-slate-500">Rejected by PC — edit the quotation to address it and resubmit for PC review.</p>
+                )}
+
+                {/* PC -> MD: unchanged from before, except Reject now returns to PC (md_rejected) instead of a dead-end 'rejected'. */}
                 {selected.status === 'internal_review' && !can('approve_quotation_internal') && (
                   <p className="text-xs text-slate-500">Waiting for MD approval.</p>
                 )}
@@ -641,11 +793,24 @@ export default function QuotationsScreen() {
                       className="px-10 py-3.5 rounded-xl bg-red-500 text-sm font-bold text-white active:bg-red-600">
                       MD Approve
                     </button>
-                    <button onClick={() => { setRejectReason(''); setShowReject(true) }}
+                    <button onClick={() => { setRejectReason(''); setRejectTarget({ status: 'md_rejected', label: 'MD rejected' }); setShowReject(true) }}
                       className="px-10 py-3.5 rounded-xl border border-red-300 bg-white text-sm font-bold text-red-600 active:bg-red-50">
                       Reject
                     </button>
                   </div>
+                )}
+
+                {/* MD rejected -> back to PC, the previous responsible person. PC can
+                    resubmit directly, or use the normal Edit button first if changes
+                    are needed (which routes back through PC review again). */}
+                {selected.status === 'md_rejected' && !can('approve_quotation_pc') && (
+                  <p className="text-xs text-slate-500">Rejected by MD — waiting for PC.</p>
+                )}
+                {selected.status === 'md_rejected' && can('approve_quotation_pc') && (
+                  <button onClick={() => handleStatusChange(selected, 'internal_review', undefined, 'PC resubmitted to MD')}
+                    className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
+                    Resubmit to MD
+                  </button>
                 )}
                 {selected.status === 'internally_approved' && can('send_quotation_client') && (
                   <button onClick={() => { setSendChannel(null); setShowSendChoice(true) }}
@@ -678,11 +843,17 @@ export default function QuotationsScreen() {
               </div>
             </div>
 
-            {selected.status === 'rejected' && selected.rejectionReason && (
+            {(selected.status === 'rejected' || selected.status === 'pc_rejected' || selected.status === 'md_rejected') && selected.rejectionReason && (
               <div className="bg-red-50 border border-red-100 rounded-2xl p-3.5">
-                <p className="text-xs font-bold text-red-700">Rejected by MD</p>
+                <p className="text-xs font-bold text-red-700">
+                  {selected.status === 'md_rejected' ? 'Rejected by MD' : selected.status === 'pc_rejected' ? 'Rejected by PC' : 'Rejected'}
+                </p>
                 <p className="text-xs text-red-600 mt-0.5">{selected.rejectionReason}</p>
-                <p className="text-[12px] text-red-500 mt-1">Edit the quotation to address this and it goes back to the MD for approval.</p>
+                <p className="text-[12px] text-red-500 mt-1">
+                  {selected.status === 'pc_rejected'
+                    ? 'Edit the quotation to address this and it goes back to PC for review.'
+                    : 'Edit the quotation to address this, or PC can resubmit directly to MD.'}
+                </p>
               </div>
             )}
 
@@ -734,7 +905,8 @@ export default function QuotationsScreen() {
         )}
       </BottomSheet>
 
-      {/* MD rejection — reason required */}
+      {/* PC or MD rejection — reason required. Target status/label set by
+          whichever Reject button opened this (see rejectTarget). */}
       <BottomSheet isOpen={showReject} onClose={() => setShowReject(false)} title="Reject Quotation">
         <div className="space-y-3 pb-4">
           <div>
@@ -747,7 +919,7 @@ export default function QuotationsScreen() {
             onClick={async () => {
               if (!selected) return
               setShowReject(false)
-              await handleStatusChange(selected, 'rejected', rejectReason.trim())
+              await handleStatusChange(selected, rejectTarget.status, rejectReason.trim(), rejectTarget.label)
             }}
             className="w-full py-3.5 rounded-xl bg-red-500 text-sm font-bold text-white active:bg-red-600 disabled:opacity-40">
             Reject Quotation
@@ -822,15 +994,32 @@ export default function QuotationsScreen() {
                       </tr>
                     ))}
                   </tbody>
+                  {section.notes && (
+                    <tfoot>
+                      <tr>
+                        <td colSpan={5} className="px-2 py-1.5 border border-slate-200 text-slate-500 italic">Notes: {section.notes}</td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               ))}
 
               <div className="flex justify-end">
                 <div className="w-56 space-y-1">
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold">{fmtCurrency(selected.totalAmount)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold">{fmtCurrency(selected.taxAmount)}</span></div>
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Discount</span><span className="font-semibold">-{fmtCurrency(selected.discountAmount)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-slate-500">Taxable Amount</span><span className="font-semibold">{fmtCurrency(selected.taxableAmount ?? selected.totalAmount - selected.discountAmount)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold">{fmtCurrency(selected.taxAmount)}</span></div>
+                  {!!selected.transportCost && (
+                    <div className="flex justify-between text-xs"><span className="text-slate-500">Transport Cost</span><span className="font-semibold">{fmtCurrency(selected.transportCost)}</span></div>
+                  )}
                   <div className="flex justify-between text-sm border-t border-slate-300 pt-1"><span className="font-bold">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(selected.netAmount)}</span></div>
+                  {selected.advanceTermOption && (
+                    <>
+                      <div className="flex justify-between text-xs pt-1"><span className="text-slate-500">Advance ({selected.advanceTermOption === 'with_advance' ? 'With Advance' : selected.advanceTermOption === 'full_advance' ? 'Full Advance' : 'Without Advance'})</span><span className="font-semibold">{fmtCurrency(selected.advanceTermAmount ?? 0)}</span></div>
+                      <div className="flex justify-between text-xs"><span className="text-slate-500">Balance Due</span><span className="font-semibold">{fmtCurrency(selected.advanceTermBalance ?? selected.netAmount)}</span></div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -950,6 +1139,10 @@ export default function QuotationsScreen() {
                     </div>
 
                     <div className="text-right text-xs font-bold text-slate-700 pt-1">Section total: {fmtCurrency(sectionTotal)}</div>
+
+                    <textarea value={section.notes ?? ''} onChange={e => updateSectionNotes(section.id, e.target.value)}
+                      placeholder="Notes for this room/section (optional)" rows={2}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-400 resize-none" />
                   </div>
                 )
               })}
@@ -970,6 +1163,15 @@ export default function QuotationsScreen() {
                 placeholder={discountType === 'percentage' ? 'e.g. 10' : 'e.g. 5000'}
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
             </div>
+            <p className="text-[11px] text-slate-400 mt-1">Applied before tax — tax is calculated on the discounted (taxable) amount.</p>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Transport Cost</label>
+            <input type="number" min="0" step="0.01" value={transportCost || ''}
+              onChange={e => setTransportCost(parseFloat(e.target.value) || 0)}
+              placeholder="e.g. 5000"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
 
           <div>
@@ -979,12 +1181,45 @@ export default function QuotationsScreen() {
 
           <div className="bg-slate-50 rounded-2xl p-3.5 space-y-1.5">
             <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.totalAmount)}</span></div>
-            <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.taxAmount)}</span></div>
             <div className="flex justify-between text-xs">
               <span className="text-slate-500">Discount{discountType === 'percentage' && discountValue ? ` (${discountValue}%)` : ''}</span>
               <span className="font-semibold text-slate-700">-{fmtCurrency(formTotals.discountAmount)}</span>
             </div>
+            <div className="flex justify-between text-xs"><span className="text-slate-500">Taxable Amount</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.taxableAmount)}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.taxAmount)}</span></div>
+            {!!transportCost && (
+              <div className="flex justify-between text-xs"><span className="text-slate-500">Transport Cost</span><span className="font-semibold text-slate-700">{fmtCurrency(transportCost)}</span></div>
+            )}
             <div className="flex justify-between text-sm pt-1.5 border-t border-slate-200"><span className="font-bold text-slate-800">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(formTotals.netAmount)}</span></div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Advance Payment Option</label>
+            <SearchableSelect value={advanceTermOption} onChange={v => setAdvanceTermOption(v as AdvanceTermOption)} options={[
+              { value: 'with_advance', label: 'With Advance' },
+              { value: 'without_advance', label: 'Without Advance' },
+              { value: 'full_advance', label: 'Full Advance' },
+            ]} placeholder="Not set" />
+            {advanceTermOption === 'with_advance' && (
+              <div className="flex gap-2 mt-2">
+                <div className="w-32">
+                  <SearchableSelect value={advanceTermType} onChange={v => setAdvanceTermType(v as DiscountType)} options={[
+                    { value: 'percentage', label: 'Percentage (%)' },
+                    { value: 'amount', label: 'Amount (₹)' },
+                  ]} />
+                </div>
+                <input type="number" min="0" step="0.01" value={advanceTermValue || ''}
+                  onChange={e => setAdvanceTermValue(parseFloat(e.target.value) || 0)}
+                  placeholder={advanceTermType === 'percentage' ? 'e.g. 50' : 'e.g. 50000'}
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+              </div>
+            )}
+            {advanceTermOption && (
+              <div className="flex justify-between text-xs mt-2 bg-slate-50 rounded-xl px-4 py-2.5">
+                <span className="text-slate-500">Advance: <span className="font-semibold text-slate-700">{fmtCurrency(formAdvanceTerm.advanceTermAmount ?? 0)}</span></span>
+                <span className="text-slate-500">Balance: <span className="font-semibold text-slate-700">{fmtCurrency(formAdvanceTerm.advanceTermBalance ?? formTotals.netAmount)}</span></span>
+              </div>
+            )}
           </div>
 
           <div>

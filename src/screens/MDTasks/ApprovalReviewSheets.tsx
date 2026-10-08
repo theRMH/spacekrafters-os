@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
@@ -40,12 +41,19 @@ interface Props {
   projects: Project[]
   onClose: () => void
   onDecided: (result: { quotation?: Quotation; design?: DesignPackage }) => void
+  // Previous/Next across the current tab's full pending queue — omitted (or
+  // both false) when there's nothing to page through.
+  onPrev?: () => void
+  onNext?: () => void
+  hasPrev?: boolean
+  hasNext?: boolean
 }
 
 // The MD's review sheets for a pending Quotation or Design package, with
-// Approve / Reject (reason required). Used by both the MD Task page and the
-// Approval tab so both apply exactly the same decision and history rules.
-export function ApprovalReviewSheets({ quote, design, versions, projects, onClose, onDecided }: Props) {
+// Approve / Reject (reason required). Used by the Approval tab (the only
+// place this flow lives — see ApprovalScreen.tsx) to apply exactly the same
+// decision and history rules everywhere a Quotation/Design is reviewed.
+export function ApprovalReviewSheets({ quote, design, versions, projects, onClose, onDecided, onPrev, onNext, hasPrev, hasNext }: Props) {
   const { user } = useAuth()
   const { leads } = useCRM()
   const [rejecting, setRejecting] = useState(false)
@@ -152,18 +160,21 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
     setSnack({ open: true, msg: approved ? 'Design approved.' : 'Design rejected.', type: 'success' })
   }
 
-  // Approve / Reject footer shared by both review sheets.
-  function decisionFooter(onApprove: () => void, onReject: () => void, rejectLabel: string) {
+  // Approve / Reject footer shared by both review sheets — full-width
+  // selectable cards (FENSTER-style) rather than a plain button pair.
+  function decisionFooter(onApprove: () => void, onReject: () => void, rejectLabel: string, approveHint: string, rejectHint: string) {
     if (!rejecting) {
       return (
-        <div className="flex gap-2">
+        <div className="space-y-2.5">
           <button disabled={saving} onClick={onApprove}
-            className="flex-1 py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#059669' }}>
-            Approve
+            className="w-full text-left p-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50 active:bg-emerald-100 disabled:opacity-50">
+            <p className="text-sm font-bold text-emerald-800">Approve</p>
+            <p className="text-xs text-emerald-600 mt-0.5">{approveHint}</p>
           </button>
           <button disabled={saving} onClick={() => { setReason(''); setRejecting(true) }}
-            className="flex-1 py-3 rounded-xl text-sm font-bold border border-red-200 bg-red-50 text-red-700 active:opacity-90 disabled:opacity-50">
-            Reject
+            className="w-full text-left p-4 rounded-2xl border-2 border-red-200 bg-red-50 active:bg-red-100 disabled:opacity-50">
+            <p className="text-sm font-bold text-red-800">Reject</p>
+            <p className="text-xs text-red-600 mt-0.5">{rejectHint}</p>
           </button>
         </div>
       )
@@ -183,18 +194,52 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
     )
   }
 
+  // The purple-band-equivalent header FENSTER uses, in SpaceKrafters' own
+  // navy brand color — title, Lead Owner, Previous/Next, close. Rendered as
+  // the sheet's own first content block (full-bleed via negative margins)
+  // rather than BottomSheet's generic title bar, so it can carry the nav row.
+  function reviewHeader(title: string, ownerName: string | undefined) {
+    const showNav = onPrev || onNext
+    return (
+      <div className="-mx-5 -mt-4 px-5 pt-4 pb-4 mb-4" style={{ background: 'linear-gradient(135deg, #0F2A4A, #16385E)' }}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-lg font-extrabold text-white truncate">{title}</h2>
+            {ownerName && <p className="text-xs text-white/80 mt-0.5">Lead Owner: {ownerName}</p>}
+          </div>
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center shrink-0 active:bg-white/25">
+            <X size={16} className="text-white" />
+          </button>
+        </div>
+        {showNav && (
+          <div className="flex items-center justify-between mt-3">
+            <button disabled={!hasPrev} onClick={onPrev}
+              className="flex items-center gap-1 text-xs font-semibold text-white bg-white/15 px-3 py-1.5 rounded-lg disabled:text-white/40 disabled:bg-white/5">
+              <ChevronLeft size={14} /> Previous
+            </button>
+            <button disabled={!hasNext} onClick={onNext}
+              className="flex items-center gap-1 text-xs font-semibold text-white bg-white/15 px-3 py-1.5 rounded-lg disabled:text-white/40 disabled:bg-white/5">
+              Next <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <>
       {/* Quotation review — the same sheet handles both the MD's own internal
           approval (status 'internal_review') and the client-approval stage
           (status 'sent_to_client'), branching only on which decision to record. */}
-      <BottomSheet isOpen={!!quote} onClose={onClose} title={quote?.status === 'sent_to_client' ? 'Review Client Approval' : 'Review Quotation'} height="full">
+      <BottomSheet isOpen={!!quote} onClose={onClose} height="full">
         {quote && (() => {
           const q = quote
           const isClientStage = q.status === 'sent_to_client'
           const lead = leadFor(q.leadId)
           return (
             <div className="space-y-4 pb-4">
+              {reviewHeader(isClientStage ? 'Client Approval' : 'Approve Quotation', lead?.ownerName)}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-sm space-y-1">
                 <p className="font-bold text-slate-800">{lead?.name ?? q.leadId} {lead?.leadNumber ? `(${lead.leadNumber})` : ''}</p>
                 <p className="text-slate-600">Contact: {lead?.phone ?? '—'}</p>
@@ -243,20 +288,24 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
               {q.paymentTerms && <div><p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p><p className="text-xs text-slate-600">{q.paymentTerms}</p></div>}
 
               {isClientStage
-                ? decisionFooter(() => decideClientApproval(true), () => decideClientApproval(false), 'Request Revision')
-                : decisionFooter(() => decideQuotation(true), () => decideQuotation(false), 'Reject Quotation')}
+                ? decisionFooter(() => decideClientApproval(true), () => decideClientApproval(false), 'Request Revision',
+                    'Client approved — move the project forward.', 'Client requested changes to this quotation.')
+                : decisionFooter(() => decideQuotation(true), () => decideQuotation(false), 'Reject Quotation',
+                    'Quotation is correct — send it for client sign-off.', 'Quotation needs revision.')}
             </div>
           )
         })()}
       </BottomSheet>
 
       {/* Design review */}
-      <BottomSheet isOpen={!!design} onClose={onClose} title="Review Design" height="full">
+      <BottomSheet isOpen={!!design} onClose={onClose} height="full">
         {design && (() => {
           const p = design
           const pkgVersions = versions.filter(v => v.designPackageId === p.id).sort((a, b) => b.versionNumber - a.versionNumber)
+          const designOwner = p.leadId ? leadFor(p.leadId)?.ownerName : undefined
           return (
             <div className="space-y-4 pb-4">
+              {reviewHeader('Approve Designing', designOwner)}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-sm space-y-1">
                 <p className="font-bold text-slate-800">{p.name}</p>
                 <p className="text-slate-600">{designLink(p)}</p>
@@ -281,7 +330,8 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
                 </div>
               </div>
 
-              {decisionFooter(() => decideDesign(true), () => decideDesign(false), 'Reject Design')}
+              {decisionFooter(() => decideDesign(true), () => decideDesign(false), 'Reject Design',
+                'Design is correct — approve it.', 'Design needs revision.')}
             </div>
           )
         })()}

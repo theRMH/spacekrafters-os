@@ -34,7 +34,6 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { icon: Users,         label: 'Leads',        path: '/leads',        permission: 'view_leads'        },
       { icon: Calendar,      label: 'Appointments', path: '/appointments', permission: 'view_appointments' },
       { icon: ClipboardList, label: 'Follow-ups',   path: '/follow-ups',   permission: 'view_activity'     },
-      { icon: Wrench,        label: 'Task',         path: '/md-tasks',    permission: 'view_md_tasks'     },
       { icon: ShieldCheck,   label: 'Approval',     path: '/approval',    permission: 'view_md_tasks'     },
     ],
   },

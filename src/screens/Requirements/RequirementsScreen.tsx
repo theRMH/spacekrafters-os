@@ -26,7 +26,19 @@ function fmtDate(val: string): string {
 }
 
 function newLineItem(roomName = ''): RequirementLineItem {
-  return { id: `li_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, roomName, description: '', unit: 'sqft', quantity: 0 }
+  return {
+    id: `li_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, roomName, description: '', unit: 'sqft', quantity: 0,
+    lengthFt: '', widthFt: '', heightFt: '', calculatedTotal: '',
+  }
+}
+
+// Length×Width = area (sq.ft); adding Height upgrades it to volume (cu.ft).
+// Blank/non-numeric inputs just produce no total yet, not an error.
+function calcLineItemTotal(length?: string, width?: string, height?: string): string {
+  const l = parseFloat(length ?? ''), w = parseFloat(width ?? ''), h = parseFloat(height ?? '')
+  if (isNaN(l) || isNaN(w)) return ''
+  if (!isNaN(h) && h > 0) return `${(l * w * h).toLocaleString('en-IN', { maximumFractionDigits: 2 })} cu.ft`
+  return `${(l * w).toLocaleString('en-IN', { maximumFractionDigits: 2 })} sq.ft`
 }
 
 function lineItemsFromSiteVisit(visit: SiteVisit): RequirementLineItem[] {
@@ -36,6 +48,8 @@ function lineItemsFromSiteVisit(visit: SiteVisit): RequirementLineItem[] {
     description: room.measurements ? `${room.name} — ${room.measurements}` : room.name,
     unit: 'sqft',
     quantity: 0,
+    lengthFt: room.lengthFt ?? '', widthFt: room.widthFt ?? '', heightFt: room.heightFt ?? '',
+    calculatedTotal: calcLineItemTotal(room.lengthFt, room.widthFt, room.heightFt),
   }))
 }
 
@@ -286,6 +300,9 @@ export default function RequirementsScreen() {
                       <span className="text-xs font-semibold text-slate-600">{item.quantity} {item.unit}</span>
                     </div>
                     <p className="text-[12px] text-slate-500 mt-0.5">{item.description}</p>
+                    {item.calculatedTotal && (
+                      <p className="text-[12px] font-semibold text-indigo-600 mt-0.5">Total: {item.calculatedTotal}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -360,6 +377,31 @@ export default function RequirementsScreen() {
                   <input value={item.description} onChange={e => updateLineItem(item.id, { description: e.target.value })}
                     placeholder="Description"
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                  <div className="flex items-start gap-2">
+                    <div className="w-1/3">
+                      <label className="text-[10px] font-semibold text-slate-400 mb-0.5 block">Length (ft)</label>
+                      <input type="number" min="0" step="0.01" value={item.lengthFt ?? ''}
+                        onChange={e => updateLineItem(item.id, { lengthFt: e.target.value, calculatedTotal: calcLineItemTotal(e.target.value, item.widthFt, item.heightFt) })}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                    </div>
+                    <span className="text-slate-400 text-sm mt-6">×</span>
+                    <div className="w-1/3">
+                      <label className="text-[10px] font-semibold text-slate-400 mb-0.5 block">Width (ft)</label>
+                      <input type="number" min="0" step="0.01" value={item.widthFt ?? ''}
+                        onChange={e => updateLineItem(item.id, { widthFt: e.target.value, calculatedTotal: calcLineItemTotal(item.lengthFt, e.target.value, item.heightFt) })}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                    </div>
+                    <span className="text-slate-400 text-sm mt-6">×</span>
+                    <div className="w-1/3">
+                      <label className="text-[10px] font-semibold text-slate-400 mb-0.5 block">Height (ft)</label>
+                      <input type="number" min="0" step="0.01" value={item.heightFt ?? ''}
+                        onChange={e => updateLineItem(item.id, { heightFt: e.target.value, calculatedTotal: calcLineItemTotal(item.lengthFt, item.widthFt, e.target.value) })}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                    </div>
+                  </div>
+                  {item.calculatedTotal && (
+                    <p className="text-xs font-semibold text-indigo-600">Total: {item.calculatedTotal}</p>
+                  )}
                   <div className="flex items-center gap-2">
                     <input type="number" min="0" step="0.01" value={item.quantity || ''}
                       onChange={e => updateLineItem(item.id, { quantity: parseFloat(e.target.value) || 0 })}

@@ -1,9 +1,9 @@
 import { PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
 import { LEAD_STATUS_LABEL } from '../Leads/LeadStatusSheet'
 import type {
-  Appointment, AuthUser, DailyReport, DailyTask, ExpenseRequest, Lead,
+  Appointment, AuthUser, DailyReport, DailyTask, DesignPackage, ExpenseRequest, Lead,
   LeaveApplication, MaterialRequestForm, Project, PurchaseOrder, PurchaseRequest,
-  SiteVisit, Task,
+  Quotation, SiteVisit, Task,
 } from '../../types'
 
 export interface MyTaskItem {
@@ -57,8 +57,10 @@ export function buildMyTaskFeed(opts: {
   expenseRequests?: ExpenseRequest[]
   purchaseRequests?: PurchaseRequest[]
   purchaseOrders?: PurchaseOrder[]
+  quotations?: Quotation[]
+  designPackages?: DesignPackage[]
 }): MyTaskItem[] {
-  const { user, leads, projects, tasks, mrfs, appointments, siteVisits, dailyReports, leaveApplications, expenseRequests, purchaseRequests, purchaseOrders } = opts
+  const { user, leads, projects, tasks, mrfs, appointments, siteVisits, dailyReports, leaveApplications, expenseRequests, purchaseRequests, purchaseOrders, quotations, designPackages } = opts
   const role = user.role
   const items: MyTaskItem[] = []
   const projectById = new Map(projects.map(p => [p.id, p]))
@@ -90,7 +92,10 @@ export function buildMyTaskFeed(opts: {
       title: `Lead: ${LEAD_STATUS_LABEL[l.status]}`, badge: 'Lead', badgeCls: 'bg-sky-50 text-sky-700',
       subjectLabel: 'Lead', subject: l.name,
       meta: [l.leadNumber ? `ID: ${l.leadNumber}` : '', l.city, l.phone].filter(Boolean),
-      person: l.ownerName,
+      // The actual current assignee (an explicit hand-off, or the lead's
+      // owner if none) — not always ownerName, now that a lead can be
+      // reassigned to someone else mid-pipeline.
+      person: l.assignedToName ?? l.ownerName,
       linkTo: `/leads/${l.id}`,
     })
   }
@@ -223,6 +228,39 @@ export function buildMyTaskFeed(opts: {
         subjectLabel: 'Order', subject: fmtCurrency(po.amount),
         meta: [],
         linkTo: '/procurement',
+      })
+    }
+  }
+
+  // 8. PC review queue — Quotations/Designs waiting on the project_coordinator
+  // (approve_quotation_pc/approve_design_pc), the QS -> PC -> MD step ahead of
+  // the existing MD approval. The actual Approve/Reject action lives on the
+  // Quotations/Design Center screens themselves (same place MD already acts),
+  // not a separate approval surface — this is just discoverability.
+  if (role === 'project_coordinator') {
+    for (const q of quotations ?? []) {
+      if (q.status !== 'pending_pc_review' && q.status !== 'md_rejected') continue
+      const lead = leadById.get(q.leadId)
+      items.push({
+        key: `quo-pc-${q.id}`, at: q.updatedAt,
+        title: q.status === 'md_rejected' ? 'Quotation Rejected by MD — Resubmit' : 'Review Quotation', badge: 'Quotation', badgeCls: 'bg-blue-50 text-blue-700',
+        subjectLabel: 'Lead', subject: lead?.name ?? q.leadId,
+        meta: [lead?.leadNumber ? `ID: ${lead.leadNumber}` : '', `v${q.version}`, fmtCurrency(q.netAmount)].filter(Boolean),
+        note: q.status === 'md_rejected' ? q.rejectionReason : undefined,
+        linkTo: '/quotations',
+      })
+    }
+    for (const p of designPackages ?? []) {
+      if (p.status !== 'pending_pc_review' && p.status !== 'md_rejected') continue
+      const lead = p.leadId ? leadById.get(p.leadId) : undefined
+      const project = projectById.get(p.projectId ?? '')
+      items.push({
+        key: `design-pc-${p.id}`, at: p.updatedAt,
+        title: p.status === 'md_rejected' ? 'Design Rejected by MD — Resubmit' : 'Review Design', badge: 'Designing', badgeCls: 'bg-violet-50 text-violet-700',
+        subjectLabel: project ? 'Project' : 'Lead', subject: project?.name ?? lead?.name ?? p.leadId ?? p.projectId ?? 'Unassigned',
+        meta: [`Package: ${p.name}`],
+        note: p.status === 'md_rejected' ? p.rejectionReason : undefined,
+        linkTo: '/design',
       })
     }
   }

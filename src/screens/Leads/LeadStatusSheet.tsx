@@ -7,6 +7,7 @@ import { DateField } from '../../components/forms/DateField'
 import { TimeField } from '../../components/forms/TimeField'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { BUSINESS_DIVISION_LABEL, BUSINESS_BRAND_LABEL } from '../../data/businessDivisions'
+import { getRoleDisplayLabel } from '../../data/permissions'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { getManagedUsersDirectory } from '../../services/userService'
@@ -16,9 +17,8 @@ import { getAllRequirements } from '../../services/requirementService'
 import { getAllDesignPackages } from '../../services/designService'
 import { getAllAppointments, upsertAppointment } from '../../services/appointmentService'
 import { toProperIso } from '../Appointments/appointmentDate'
-import { decideAppointmentReschedule } from '../Appointments/appointmentActions'
 import { sendNotification } from '../../utils/notifications'
-import type { Appointment, Lead, LeadStatus, ManagedUser, UserRole } from '../../types'
+import type { Appointment, Lead, LeadStatus, ManagedUser } from '../../types'
 
 function todayStr(): string {
   const d = new Date()
@@ -34,22 +34,6 @@ function waLink(lead: Lead): string | null {
   if (!digits) return null
   const intl = digits.length === 10 ? `91${digits}` : digits
   return `https://wa.me/${intl}?text=${encodeURIComponent(`Hi ${lead.name}, this is regarding your enquiry with SpaceKrafters.`)}`
-}
-
-export const ROLE_FOR_LEAD_STATUS: Partial<Record<LeadStatus, UserRole>> = {
-  new:                    'project_coordinator',
-  contacted:              'project_coordinator',
-  qualified:              'project_coordinator',
-  site_visit_scheduled:  'site_engineer',
-  site_visit_done:       'project_coordinator',
-  requirements_captured: 'project_coordinator',
-  quotation_drafted:     'owner',
-  internally_approved:   'designer',
-  design_in_progress:    'designer',
-  design_approved:       'project_coordinator',
-  sent_to_client:        'project_coordinator',
-  negotiating:           'project_coordinator',
-  client_approved:       'accounts',
 }
 
 export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
@@ -78,7 +62,7 @@ interface Props {
 }
 
 export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
-  const { user } = useAuth()
+  const { user, can } = useAuth()
   const { updateLead } = useCRM()
   const navigate = useNavigate()
 
@@ -101,9 +85,13 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   const [advanceAmount, setAdvanceAmount] = useState('')
   const [advanceRef, setAdvanceRef] = useState('')
   const [saving, setSaving] = useState(false)
+  const [showReassign, setShowReassign] = useState(false)
+  const [reassignTo, setReassignTo] = useState('')
 
   useEffect(() => {
     if (!isOpen) return
+    setShowReassign(false)
+    setReassignTo('')
     getManagedUsersDirectory().then(setUsers)
     getAllAppointments().then(a => {
       const relevant = a.filter(appt => appt.leadId === lead.id && appt.status.trim().toLowerCase() !== 'cancelled')
@@ -123,42 +111,44 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     getAllDesignPackages().then(pkgs => setHasDesignPackage(pkgs.some(p => p.leadId === lead.id)))
   }, [isOpen, lead.id])
 
-  function nextResponsible(status: LeadStatus): { role?: UserRole; id?: string; name?: string } {
-    const role = ROLE_FOR_LEAD_STATUS[status]
-    if (!role) return {}
-    const person = users.find(u => u.role === role)
-    return { role, id: person?.id, name: person?.fullName }
-  }
-
+  // Advancing a lead's status never reassigns it — the current assignee
+  // (resolved below via effectiveAssigneeId/Name) stays responsible across
+  // every stage until they, or the MD, explicitly hand it to someone else
+  // via the "Assign To" control rendered below the Lead Details card. This
+  // replaces the old behaviour of silently reassigning to "whichever managed
+  // user happens to hold the stage's default role" on every transition,
+  // which is what let a lead jump to someone who was never actually told.
   async function save(status: LeadStatus, note: string, extra?: Partial<Lead>) {
     setSaving(true)
-    const { role, id, name } = nextResponsible(status)
-    const newAssigneeId = extra?.assignedToId ?? id
-    const result = await updateLead(lead.id, {
-      status,
-      assignedRole: role,
-      assignedToId: id,
-      assignedToName: name,
-      ...extra,
-    }, note)
+    const result = await updateLead(lead.id, { status, ...extra }, note)
     setSaving(false)
     if (result.ok) {
-      // Only the newly-assigned person, and only when the assignment
-      // actually changed — not on every save (e.g. Won/Lost, which don't
-      // reassign anyone).
-      if (newAssigneeId && newAssigneeId !== lead.assignedToId) {
-        await sendNotification(
-          [newAssigneeId],
-          'New Lead Task',
-          `${lead.name} (${lead.leadNumber ?? lead.id}) — ${LEAD_STATUS_LABEL[status]}. ${note}. Assigned by ${user?.name ?? 'System'}.`,
-          `/tasks?leadId=${lead.id}`,
-        )
-      }
       onDone(note)
       onClose()
     } else {
       onDone(result.error ?? 'Could not update status.')
     }
+  }
+
+  // Explicit hand-off — the only way assignedToId/Name/Role ever changes.
+  async function submitReassign(personId: string) {
+    const person = users.find(u => u.id === personId)
+    if (!person) return
+    setSaving(true)
+    const result = await updateLead(lead.id, {
+      assignedToId: person.id, assignedToName: person.fullName, assignedRole: person.role,
+    }, `Assigned to ${person.fullName}`)
+    setSaving(false)
+    if (!result.ok) { onDone(result.error ?? 'Could not reassign.'); return }
+    await sendNotification(
+      [person.id],
+      'New Lead Task',
+      `${lead.name} (${lead.leadNumber ?? lead.id}) — ${LEAD_STATUS_LABEL[lead.status]}. Assigned by ${user?.name ?? 'System'}.`,
+      `/tasks?leadId=${lead.id}`,
+    )
+    setShowReassign(false)
+    setReassignTo('')
+    onDone(`Assigned to ${person.fullName}.`)
   }
 
   async function submitContacted() {
@@ -171,61 +161,6 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
 
   async function submitConfirmAppointment() {
     await save('site_visit_scheduled', 'Appointment confirmed — site visit scheduled')
-  }
-
-  // Same field writes and lead advance as MDTasksScreen.handleDecision() and
-  // TasksScreen's in-page decision: Accept moves a qualified lead to Site Visit,
-  // Reject leaves the lead where it is. Nothing advances before this runs.
-  async function decideReschedule(approved: boolean) {
-    if (!latestAppointment || user?.role !== 'owner') return
-    setSaving(true)
-    const result = await decideAppointmentReschedule(latestAppointment, approved, '', user.name ?? 'Unknown', user.role)
-    if (!result.ok || !result.updated) {
-      setSaving(false)
-      onDone(result.error ?? 'Could not record decision.')
-      return
-    }
-    const advance = approved && lead.status === 'qualified'
-    const note = approved
-      ? 'MD accepted the appointment reschedule' + (advance ? ' — site visit scheduled' : '')
-      : 'MD rejected the appointment reschedule'
-    let leadResult
-    let newAssignee: { id?: string; name?: string } = {}
-    if (advance) {
-      const role = ROLE_FOR_LEAD_STATUS['site_visit_scheduled']
-      const person = role ? users.find(u => u.role === role) : undefined
-      newAssignee = { id: person?.id, name: person?.fullName }
-      leadResult = await updateLead(lead.id, {
-        status: 'site_visit_scheduled', assignedRole: role,
-        assignedToId: person?.id, assignedToName: person?.fullName,
-      }, note)
-    } else {
-      leadResult = await updateLead(lead.id, {}, note)
-    }
-    if (!leadResult.ok) {
-      setSaving(false)
-      onDone(leadResult.error ?? 'Could not update lead.')
-      return
-    }
-    if (lead.ownerId) {
-      await sendNotification(
-        [lead.ownerId],
-        approved ? 'Reschedule Accepted' : 'Reschedule Rejected',
-        `${lead.name} (${lead.leadNumber ?? lead.id}) — ${approved ? 'MD accepted the reschedule.' : 'MD rejected the reschedule.'}`,
-      )
-    }
-    if (newAssignee.id && newAssignee.id !== lead.assignedToId) {
-      await sendNotification(
-        [newAssignee.id],
-        'New Lead Task',
-        `${lead.name} (${lead.leadNumber ?? lead.id}) — Site Visit Scheduled. Assigned by ${user?.name ?? 'MD'}.`,
-        `/tasks?leadId=${lead.id}`,
-      )
-    }
-    setLatestAppointment(result.updated)
-    setSaving(false)
-    onDone(approved ? 'Reschedule accepted — lead moved to Site Visit.' : 'Reschedule rejected.')
-    onClose()
   }
 
   async function submitReschedule() {
@@ -327,8 +262,24 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     navigate(`/projects?leadId=${lead.id}`)
   }
 
-  const { role: respRole, name: respName } = { role: ROLE_FOR_LEAD_STATUS[lead.status], name: lead.assignedToName }
-  const canAct = !respRole || user?.role === respRole || user?.role === 'owner'
+  // The lead's current, actually-assigned person — assignedToId/Name if an
+  // explicit hand-off has happened, otherwise the lead's own Owner (the
+  // original explicit "Assign To" from Leads), otherwise genuinely nobody.
+  // Never a role-based guess — see save()'s comment above.
+  const effectiveAssigneeId = lead.assignedToId ?? lead.ownerId
+  const effectiveAssigneeName = lead.assignedToName ?? lead.ownerName
+  // Same gate LeadsScreen.tsx/LeadDetailScreen.tsx already use for their own
+  // "Current Action Needed" card — full managers (edit_lead) always act;
+  // otherwise only the actual assignee. A lead nobody's assigned to is NOT
+  // fair game for just anyone — it stays gated to managers until someone
+  // explicitly assigns it.
+  const canAct = can('edit_lead') || user?.id === effectiveAssigneeId
+  // Tighter than canAct — completing the Site Visit step specifically is
+  // reserved for the actual assignee (or the MD), not any edit_lead manager.
+  // A SiteVisit record existing (hasSiteVisit) only means someone logged a
+  // visit; it must never by itself let the wrong person mark the lead's
+  // stage done on the real assignee's behalf.
+  const canCompleteSiteVisit = user?.id === effectiveAssigneeId || user?.role === 'owner'
 
   const btn = 'w-full py-3 rounded-xl text-sm font-bold active:opacity-90 disabled:opacity-50'
   const primaryBtn = `${btn} text-white`
@@ -338,7 +289,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     if (!canAct) {
       return (
         <p className="text-sm text-slate-500 py-6 text-center">
-          Waiting on {respName ?? (respRole ? respRole.replace('_', ' ') : 'the next step')}.
+          Waiting on {effectiveAssigneeName ?? 'Not Assigned'}.
         </p>
       )
     }
@@ -379,22 +330,18 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
         if (pendingReschedule && latestAppointment) {
           return (
             <div className="space-y-3">
-              <p className="text-sm text-slate-600">
-                Reschedule requested — {user?.role === 'owner' ? 'accept it to move this lead to Site Visit, or reject it.' : 'waiting on MD review.'}
-              </p>
+              <p className="text-sm text-slate-600">Reschedule requested — waiting on MD review.</p>
               <p className="text-xs text-slate-500">Reason: {latestAppointment.rescheduleReason}</p>
               {latestAppointment.rescheduledDate && (
                 <p className="text-xs text-slate-500">Requested new date: {new Date(latestAppointment.rescheduledDate).toLocaleString('en-IN')}</p>
               )}
+              {/* The MD decides this on the Approval page now, not here — one
+                  central approval destination instead of a second copy of
+                  Accept/Reject on the lead itself. */}
               {user?.role === 'owner' && (
-                <>
-                  <button disabled={saving} onClick={() => decideReschedule(true)} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-                    Accept
-                  </button>
-                  <button disabled={saving} onClick={() => decideReschedule(false)} className={`${btn} border border-red-200 bg-red-50 text-red-700`}>
-                    Reject
-                  </button>
-                </>
+                <button onClick={() => { onClose(); navigate('/approval') }} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                  Review in Approval →
+                </button>
               )}
             </div>
           )
@@ -447,9 +394,15 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
           <div className="space-y-3">
             {hasSiteVisit && <p className="text-sm text-slate-600">Site visit is on record.</p>}
             {hasSiteVisit ? (
-              <button disabled={saving} onClick={submitSiteVisitScheduled} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-                Mark Site Visit Done
-              </button>
+              canCompleteSiteVisit ? (
+                <button disabled={saving} onClick={submitSiteVisitScheduled} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                  Mark Site Visit Done
+                </button>
+              ) : (
+                <p className="text-sm text-slate-500 text-center py-4">
+                  Waiting on {effectiveAssigneeName ?? 'Not Assigned'} to mark the Site Visit done.
+                </p>
+              )
             ) : (
               <button onClick={() => { onClose(); navigate('/site-visits', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
                 Go to Site Visits →
@@ -598,6 +551,9 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   }
 
   const wa = waLink(lead)
+  // These early stages only ever need a phone call — WhatsApp is hidden and
+  // Call takes the full row, solid green.
+  const soloCall = lead.status === 'new' || lead.status === 'contacted' || lead.status === 'qualified' || lead.status === 'site_visit_done'
 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title={`Update Status — ${LEAD_STATUS_LABEL[lead.status]}`} height="full">
@@ -628,14 +584,42 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
           </div>
         </div>
 
-        <div className={lead.status === 'qualified' ? '' : 'grid grid-cols-2 gap-2.5'}>
+        {/* Explicit hand-off — the only way the current assignee changes.
+            Shown to whoever can currently act (the assignee themself, or the
+            MD), so they can pass this lead to the next person only once
+            they're ready to, instead of it happening automatically. */}
+        {canAct && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-3.5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-slate-500">
+                Currently assigned to: <span className="font-bold text-slate-700">{effectiveAssigneeName ?? 'Not Assigned'}</span>
+              </p>
+              <button type="button" onClick={() => { setShowReassign(s => !s); setReassignTo('') }} className="text-xs font-bold text-indigo-600 shrink-0">
+                {showReassign ? 'Cancel' : 'Reassign'}
+              </button>
+            </div>
+            {showReassign && (
+              <div className="space-y-2">
+                <SearchableSelect value={reassignTo} onChange={setReassignTo}
+                  options={users.filter(u => u.status === 'active').map(u => ({ value: u.id, label: `${u.fullName} – ${getRoleDisplayLabel(u.role, u.displayRole)}` }))}
+                  placeholder="Select a person…" searchPlaceholder="Search team…" />
+                <button type="button" disabled={!reassignTo || saving} onClick={() => submitReassign(reassignTo)}
+                  className="w-full py-2.5 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
+                  Assign
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className={soloCall ? '' : 'grid grid-cols-2 gap-2.5'}>
           <a href={`tel:${lead.phone}`}
             className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold ${
-              lead.status === 'qualified' ? 'bg-emerald-700 text-white active:bg-emerald-800' : 'bg-emerald-50 text-emerald-700 active:bg-emerald-100'
+              soloCall ? 'bg-emerald-700 text-white active:bg-emerald-800' : 'bg-emerald-50 text-emerald-700 active:bg-emerald-100'
             }`}>
             <Phone size={15} /> Call
           </a>
-          {lead.status !== 'qualified' && (
+          {!soloCall && (
             <a href={wa ?? undefined} target="_blank" rel="noopener noreferrer"
               className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold ${wa ? 'bg-emerald-50 text-emerald-700 active:bg-emerald-100' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}>
               <MessageCircle size={15} /> WhatsApp

@@ -16,13 +16,27 @@ import { getAllSiteVisits, upsertSiteVisit, deleteSiteVisit } from '../../servic
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getRoleDisplayLabel } from '../../data/permissions'
 import { addAuditLog } from '../../services/auditLogService'
-import type { SiteVisit, SiteVisitRoom, SiteVisitChecklistItem, AuditLog, ManagedUser } from '../../types'
+import type { SiteVisit, SiteVisitRoom, SiteVisitChecklistItem, SiteChecklistItem, AuditLog, ManagedUser } from '../../types'
 
 const DEFAULT_CHECKLIST_LABELS = [
   'Electrical points marked',
   'Plumbing points marked',
   'Existing layout photographed',
   'Client requirements discussed',
+]
+
+// Standard Yes/No site-condition questions, asked on every visit — distinct
+// from the plain done/not-done Checklist above.
+const SITE_CHECKLIST_LABELS = [
+  'Site accessible?',
+  'Power available?',
+  'Water available?',
+  'Lighting available?',
+  'Working area clear?',
+  'Material storage available?',
+  'Workers allowed inside?',
+  'Other contractors present?',
+  'Site safe for work?',
 ]
 
 function fmtDate(val: string): string {
@@ -54,6 +68,10 @@ function defaultChecklist(): SiteVisitChecklistItem[] {
   return DEFAULT_CHECKLIST_LABELS.map((label, i) => ({ id: `chk_${Date.now()}_${i}`, label, checked: false }))
 }
 
+function defaultSiteChecklist(): SiteChecklistItem[] {
+  return SITE_CHECKLIST_LABELS.map((label, i) => ({ id: `sitechk_${Date.now()}_${i}`, label, answer: null }))
+}
+
 export default function SiteVisitsScreen() {
   const { user } = useAuth()
   const { leads } = useCRM()
@@ -82,6 +100,7 @@ export default function SiteVisitsScreen() {
   const [teamMemberIds, setTeamMemberIds] = useState<string[]>([])
   const [rooms, setRooms] = useState<SiteVisitRoom[]>([newRoom()])
   const [checklist, setChecklist] = useState<SiteVisitChecklistItem[]>(defaultChecklist())
+  const [siteChecklist, setSiteChecklist] = useState<SiteChecklistItem[]>(defaultSiteChecklist())
   const [notes, setNotes] = useState('')
   const [formError, setFormError] = useState('')
   const [assignableMembers, setAssignableMembers] = useState<ManagedUser[]>([])
@@ -141,6 +160,7 @@ export default function SiteVisitsScreen() {
 
   function resetForm() {
     setLeadId(''); setVisitDate(''); setTeamMemberIds(user ? [user.id] : []); setRooms([newRoom()]); setChecklist(defaultChecklist())
+    setSiteChecklist(defaultSiteChecklist())
     setNotes(''); setFormError('')
   }
 
@@ -161,6 +181,7 @@ export default function SiteVisitsScreen() {
     })
     setRooms(roomsWithFt.length ? roomsWithFt : [newRoom()])
     setChecklist(visit.checklist.length ? visit.checklist : defaultChecklist())
+    setSiteChecklist(visit.siteChecklist?.length ? visit.siteChecklist : defaultSiteChecklist())
     setNotes(visit.notes ?? '')
     setFormError('')
     setShowEdit(true)
@@ -178,6 +199,10 @@ export default function SiteVisitsScreen() {
     setChecklist(prev => prev.map(c => (c.id === id ? { ...c, checked: !c.checked } : c)))
   }
 
+  function setSiteChecklistAnswer(id: string, answer: 'yes' | 'no') {
+    setSiteChecklist(prev => prev.map(c => (c.id === id ? { ...c, answer: c.answer === answer ? null : answer } : c)))
+  }
+
   async function handleAddVisit() {
     const validRooms = rooms.filter(r => r.name.trim())
     if (!leadId || !visitDate || validRooms.length === 0 || teamMemberIds.length === 0) {
@@ -193,7 +218,7 @@ export default function SiteVisitsScreen() {
       id: `sv_${Date.now()}`,
       leadId, visitDate: new Date(visitDate).toISOString(),
       teamMemberIds, teamMemberNames: namesFor(teamMemberIds),
-      rooms: validRooms, checklist, notes: notes.trim() || undefined,
+      rooms: validRooms, checklist, siteChecklist, notes: notes.trim() || undefined,
       createdAt: now, updatedAt: now,
     }
     const result = await upsertSiteVisit(visit)
@@ -213,7 +238,7 @@ export default function SiteVisitsScreen() {
     const updated: SiteVisit = {
       ...selected, leadId, visitDate: new Date(visitDate).toISOString(),
       teamMemberIds, teamMemberNames: namesFor(teamMemberIds),
-      rooms: validRooms, checklist, notes: notes.trim() || undefined,
+      rooms: validRooms, checklist, siteChecklist, notes: notes.trim() || undefined,
       updatedAt: new Date().toISOString(),
     }
     const result = await upsertSiteVisit(updated)
@@ -338,6 +363,24 @@ export default function SiteVisitsScreen() {
               </div>
             </div>
 
+            {selected.siteChecklist && selected.siteChecklist.length > 0 && (
+              <div>
+                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Site Checklist</p>
+                <div className="bg-white border border-slate-100 rounded-2xl p-3.5 space-y-2">
+                  {selected.siteChecklist.map(item => (
+                    <div key={item.id} className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-slate-600">{item.label}</span>
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                        item.answer === 'yes' ? 'bg-emerald-50 text-emerald-700' : item.answer === 'no' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-400'
+                      }`}>
+                        {item.answer === 'yes' ? 'Yes' : item.answer === 'no' ? 'No' : 'Not answered'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {selected.notes && (
               <div>
                 <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Notes</p>
@@ -457,6 +500,31 @@ export default function SiteVisitsScreen() {
                     className="w-4 h-4 accent-indigo-600" />
                   <span className="text-xs text-slate-700">{item.label}</span>
                 </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-2 block">Site Checklist</label>
+            <div className="bg-slate-50 rounded-2xl p-3.5 space-y-2.5">
+              {siteChecklist.map(item => (
+                <div key={item.id} className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-slate-700 flex-1">{item.label}</span>
+                  <div className="flex gap-1.5 shrink-0">
+                    <button type="button" onClick={() => setSiteChecklistAnswer(item.id, 'yes')}
+                      className={`w-12 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
+                        item.answer === 'yes' ? 'bg-emerald-600 text-white' : 'bg-white border border-slate-200 text-slate-500'
+                      }`}>
+                      Yes
+                    </button>
+                    <button type="button" onClick={() => setSiteChecklistAnswer(item.id, 'no')}
+                      className={`w-12 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
+                        item.answer === 'no' ? 'bg-red-500 text-white' : 'bg-white border border-slate-200 text-slate-500'
+                      }`}>
+                      No
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           </div>

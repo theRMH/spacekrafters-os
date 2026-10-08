@@ -14,7 +14,7 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
-import { ROLE_LABELS, getRoleDisplayLabel } from '../../data/permissions'
+import { getRoleDisplayLabel } from '../../data/permissions'
 import {
   BUSINESS_DIVISION_OPTIONS, BUSINESS_DIVISION_LABEL,
   DIVISIONS_WITH_CATEGORY, BUSINESS_CATEGORY_OPTIONS, BUSINESS_CATEGORY_LABEL,
@@ -24,7 +24,7 @@ import { getManagedUsersDirectory } from '../../services/userService'
 import { getNextLeadNumber } from '../../services/leadService'
 import { getAllAppointments } from '../../services/appointmentService'
 import { hasRole } from '../../utils/permissions'
-import { LeadStatusSheet, LEAD_STATUS_LABEL, ROLE_FOR_LEAD_STATUS } from './LeadStatusSheet'
+import { LeadStatusSheet, LEAD_STATUS_LABEL } from './LeadStatusSheet'
 import { ImportLeadsSheet } from './ImportLeadsSheet'
 import { FILTERS, type FilterKey, resolveRange, inRange as inRangeOf } from '../Dashboard/dashboardDateUtils'
 import { leadsToCsvText, downloadCsv } from '../../utils/leadCsv'
@@ -843,7 +843,7 @@ export default function LeadsScreen() {
                   <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>
                   <p className="text-sm font-bold text-slate-800 mt-1">{LEAD_STATUS_LABEL[selected.status]}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Responsible: {selected.assignedToName ?? (ROLE_FOR_LEAD_STATUS[selected.status] ? ROLE_LABELS[ROLE_FOR_LEAD_STATUS[selected.status]!] : '—')}
+                    Responsible: {selected.assignedToName ?? selected.ownerName ?? 'Not Assigned'}
                   </p>
                 </div>
                 <button onClick={() => setShowStatusSheet(true)}

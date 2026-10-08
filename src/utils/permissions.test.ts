@@ -67,17 +67,15 @@ describe('getDefaultRoute', () => {
   })
 })
 
-describe('MD-only screens (Task / Approval)', () => {
+describe('MD-only screens (Approval)', () => {
   const roles = ['accounts', 'project_coordinator', 'site_engineer', 'designer', 'qs', 'purchase', 'admin'] as const
 
-  it('lets the owner (MD) open the MD Task and Approval screens', () => {
-    expect(canAccessScreen('owner', 'md-tasks')).toBe(true)
+  it('lets the owner (MD) open the Approval screen', () => {
     expect(canAccessScreen('owner', 'approval')).toBe(true)
   })
 
-  it('keeps every other role out of both screens', () => {
+  it('keeps every other role out', () => {
     for (const role of roles) {
-      expect(canAccessScreen(role, 'md-tasks')).toBe(false)
       expect(canAccessScreen(role, 'approval')).toBe(false)
     }
   })

@@ -1,34 +1,54 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo, useState } from 'react'
 import { AppHeader } from '../../components/layout/AppHeader'
-import { ApprovalSection, type ApprovalTab } from '../MDTasks/ApprovalSection'
-import { ApprovalHistory } from '../MDTasks/ApprovalHistory'
+import { DateField } from '../../components/forms/DateField'
+import { ApprovalSection } from '../MDTasks/ApprovalSection'
+import { FILTERS, type FilterKey, resolveRange } from '../Dashboard/dashboardDateUtils'
 
-// MD-only Approval tab: the pending items of the selected category at the top,
-// and below them the decision history of that same category only — Quotation
-// shows Quotation history, Designing shows Designing history, never mixed.
-// (Route is gated by `view_md_tasks`, which only the owner/MD has.)
+// MD-only Approval tab — the single place every Quotation/Designing/MRF/
+// Rescheduled Appointment decision happens, as one flat pending queue (no
+// per-type tab switcher, matching the FENSTER reference). Pending items
+// only — no decision history on this page. (Route is gated by
+// `view_md_tasks`, which only the owner/MD has.)
 export default function ApprovalScreen() {
-  const [tab, setTab] = useState<ApprovalTab>('quotation')
-  // Bumped after every decision so the history refetches straight away.
-  const [historyKey, setHistoryKey] = useState(0)
+  const [pendingCount, setPendingCount] = useState(0)
+
+  const [dateFilter, setDateFilter] = useState<FilterKey>('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const range = useMemo(() => resolveRange(dateFilter, new Date(), customFrom, customTo), [dateFilter, customFrom, customTo])
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
       <AppHeader />
       <div className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-14 z-20">
         <h1 className="text-lg font-extrabold text-slate-800">Approval</h1>
+        <p className="text-xs text-slate-400 mt-0.5">{pendingCount} pending approval{pendingCount === 1 ? '' : 's'} waiting for your review</p>
+        <div className="flex items-center gap-1.5 flex-wrap mt-3">
+          {FILTERS.map(f => (
+            <button key={f.key} onClick={() => setDateFilter(f.key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${dateFilter === f.key ? 'text-white' : 'bg-white border border-slate-200 text-slate-600'}`}
+              style={dateFilter === f.key ? { background: '#0F2A4A' } : {}}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {dateFilter === 'custom' && (
+          <div className="flex items-end gap-2 flex-wrap mt-2">
+            <div className="w-36">
+              <label className="text-[11px] font-semibold text-slate-400 mb-1 block">From</label>
+              <DateField value={customFrom} onChange={setCustomFrom} />
+            </div>
+            <span className="text-slate-400 text-xs pb-2.5">→</span>
+            <div className="w-36">
+              <label className="text-[11px] font-semibold text-slate-400 mb-1 block">To</label>
+              <DateField value={customTo} onChange={setCustomTo} />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="px-4 pt-4 space-y-6">
-        <ApprovalSection tab={tab} onTabChange={setTab} onDecided={() => setHistoryKey(k => k + 1)} />
-        {tab === 'quotation' && <ApprovalHistory refreshKey={historyKey} types={['Quotation']} title="Quotation Approval History" />}
-        {tab === 'design' && <ApprovalHistory refreshKey={historyKey} types={['Designing']} title="Designing Approval History" />}
-        {tab === 'mrf' && (
-          <p className="text-xs text-slate-400 text-center py-4">
-            Every MRF's full approval history is on the MRF itself — open it from the <Link to="/mrf" className="font-semibold text-indigo-600">MRF screen</Link>.
-          </p>
-        )}
+        <ApprovalSection range={range} onPendingCount={setPendingCount} />
       </div>
     </div>
   )

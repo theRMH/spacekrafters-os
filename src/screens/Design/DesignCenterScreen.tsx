@@ -24,7 +24,10 @@ import type { Project, DesignPackage, DesignPackageStatus, DesignVersion, AuditL
 // override — 'client_review' is legacy (pre-existing packages only).
 const DESIGN_STATUS_LABEL: Record<DesignPackageStatus, string> = {
   in_progress:         'Created',
+  pending_pc_review:   'Pending PC Review',
+  pc_rejected:         'PC Rejected — Back to Designer',
   internal_review:     'Pending MD Approval',
+  md_rejected:         'MD Rejected — Back to PC',
   internally_approved: 'MD Approved',
   sent_to_client:      'Sent to Client',
   client_approved:     'Client Approved',
@@ -34,14 +37,33 @@ const DESIGN_STATUS_LABEL: Record<DesignPackageStatus, string> = {
 }
 
 // Wording for each approval-history entry (rejections are labelled separately —
-// they depend on whether the MD or the client rejected).
+// they depend on which stage the rejection happened at).
 const DESIGN_HISTORY_LABEL: Partial<Record<DesignPackageStatus, string>> = {
   in_progress:         'Back to in progress',
-  internal_review:     'Submitted for MD approval',
+  pending_pc_review:   'Submitted for PC review',
+  internal_review:     'PC approved — sent to MD for approval',
   internally_approved: 'MD approved',
   sent_to_client:      'Sent to client',
   client_approved:     'Client approved',
   revision_requested:  'Revision requested',
+}
+
+// Who's currently responsible and what happens next, per stage — shown
+// directly on the Detail sheet so this is never ambiguous.
+function designWorkflowInfo(status: DesignPackageStatus): { responsible: string; next: string } {
+  switch (status) {
+    case 'in_progress':         return { responsible: 'Designer', next: 'Submit for PC review' }
+    case 'pending_pc_review':   return { responsible: 'PC',       next: 'PC approves or rejects' }
+    case 'pc_rejected':         return { responsible: 'Designer', next: 'Revise and resubmit for PC review' }
+    case 'internal_review':     return { responsible: 'MD',       next: 'MD approves or rejects' }
+    case 'md_rejected':         return { responsible: 'PC',       next: 'Resubmit to MD, or revise first' }
+    case 'internally_approved': return { responsible: 'PC / MD',  next: 'Send design to client' }
+    case 'sent_to_client':      return { responsible: 'Client',   next: 'Awaiting client decision' }
+    case 'client_review':       return { responsible: 'Client',   next: 'Awaiting client decision' }
+    case 'revision_requested':  return { responsible: 'Designer', next: 'Revise and resubmit' }
+    case 'client_approved':     return { responsible: '—',        next: 'Design approved' }
+    case 'rejected':            return { responsible: 'Designer', next: 'Revise and resubmit' }
+  }
 }
 
 function fmtDateTime(val: string): string {
@@ -56,6 +78,7 @@ export default function DesignCenterScreen() {
   const routerLocation = useLocation()
   const navigate = useNavigate()
   const canUpload = can('upload_design')
+  const canApprovePc = can('approve_design_pc')
   const canApprove = can('approve_design')
   const canRequestRevision = can('request_revision')
 
@@ -88,6 +111,9 @@ export default function DesignCenterScreen() {
   const [showSendChoice, setShowSendChoice] = useState(false)
   const [showReject, setShowReject] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  // Target of the shared "Reject Design" sheet — which status a rejection
+  // from the currently open stage writes, and who it's then waiting on.
+  const [rejectTarget, setRejectTarget] = useState<{ status: DesignPackageStatus; label: string }>({ status: 'md_rejected', label: 'MD rejected' })
 
   // Design starts at the Lead's `internally_approved` stage (LeadStatusSheet.tsx),
   // before a Project exists — Projects are only created once a Lead is Won. So a
@@ -132,6 +158,17 @@ export default function DesignCenterScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routerLocation.state, isLoading])
 
+  // Deep-link from the Approval page's "Review" on a PC-pending design
+  // package — opens this exact package's Detail sheet directly.
+  useEffect(() => {
+    const state = routerLocation.state as { packageId?: string } | null
+    if (!state?.packageId || isLoading) return
+    const found = packages.find(p => p.id === state.packageId)
+    if (found) setSelected(found)
+    navigate(routerLocation.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.state, packages, isLoading])
+
   function projectName(id: string | undefined): string {
     if (!id) return 'Unassigned'
     return projects.find(p => p.id === id)?.name ?? id
@@ -155,6 +192,12 @@ export default function DesignCenterScreen() {
   async function notifyMdPending(pkg: DesignPackage) {
     const mdIds = (await getManagedUsersDirectory()).filter(u => u.role === 'owner' && u.id !== user?.id).map(u => u.id)
     await sendNotification(mdIds, 'Design Pending MD Approval', `"${pkg.name}" (${packageLinkLabel(pkg)}) is waiting for your approval.`)
+  }
+
+  // Same, for the new PC review step ahead of MD.
+  async function notifyPcPending(pkg: DesignPackage) {
+    const pcIds = (await getManagedUsersDirectory()).filter(u => u.role === 'project_coordinator' && u.id !== user?.id).map(u => u.id)
+    await sendNotification(pcIds, 'Design Pending PC Review', `"${pkg.name}" (${packageLinkLabel(pkg)}) is waiting for PC review.`)
   }
 
   function resetNewForm() {
@@ -270,20 +313,24 @@ export default function DesignCenterScreen() {
     setSnack({ open: true, msg: 'Version added.', type: 'success' })
   }
 
-  async function handleStatusChange(status: DesignPackageStatus, note?: string) {
+  async function handleStatusChange(status: DesignPackageStatus, note?: string, labelOverride?: string) {
     if (!selected) return
-    // 'rejected' is used by the MD (while pending approval) and by the client (after sending).
-    const label = status === 'rejected'
+    // 'rejected' is legacy (client-side rejection used to write it too) — kept
+    // only so old records still label correctly; new rejections always pass
+    // their own labelOverride (see rejectTarget) instead of relying on this.
+    const label = labelOverride ?? (status === 'rejected'
       ? (selected.status === 'internal_review' ? 'MD rejected' : 'Client rejected')
-      : DESIGN_HISTORY_LABEL[status] ?? status
+      : DESIGN_HISTORY_LABEL[status] ?? status)
+    const isRejection = status === 'rejected' || status === 'pc_rejected' || status === 'md_rejected'
     const updated: DesignPackage = {
       ...selected, status,
-      rejectionReason: status === 'rejected' ? note : undefined,
+      rejectionReason: isRejection ? note : undefined,
       statusHistory: [...(selected.statusHistory ?? []), approvalHistoryEntry(status, label, user, note)],
       updatedAt: new Date().toISOString(),
     }
     const result = await upsertDesignPackage(updated)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update status.', type: 'error' }); return }
+    if (status === 'pending_pc_review') notifyPcPending(updated)
     if (status === 'internal_review') notifyMdPending(updated)
     if (user) {
       const log: AuditLog = {
@@ -387,6 +434,20 @@ export default function DesignCenterScreen() {
               )}
             </div>
 
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Current Stage</p>
+                  <p className="text-sm font-bold text-indigo-900">{DESIGN_STATUS_LABEL[selected.status]}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Responsible</p>
+                  <p className="text-sm font-bold text-indigo-900">{designWorkflowInfo(selected.status).responsible}</p>
+                </div>
+              </div>
+              <p className="text-xs text-indigo-700 mt-1.5">Next: {designWorkflowInfo(selected.status).next}</p>
+            </div>
+
             {selected.notes && (
               <div>
                 <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Notes</p>
@@ -397,11 +458,33 @@ export default function DesignCenterScreen() {
             <div className="space-y-2">
               <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Status Actions</p>
               <div className="flex flex-wrap gap-2">
-                {/* Whoever uploads the design (designer) submits it; only the MD approves/rejects. */}
-                {selected.status === 'in_progress' && (canUpload || canApprove) && (
-                  <button onClick={() => handleStatusChange('internal_review')}
+                {/* Whoever uploads the design (designer) submits it to PC first,
+                    then PC to MD — the MD step below is unchanged. */}
+                {selected.status === 'in_progress' && (canUpload || canApprovePc) && (
+                  <button onClick={() => handleStatusChange('pending_pc_review')}
                     className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
-                    Submit for MD Approval
+                    Submit for PC Review
+                  </button>
+                )}
+                {selected.status === 'pending_pc_review' && !canApprovePc && (
+                  <p className="text-xs text-slate-500">Waiting for PC review.</p>
+                )}
+                {selected.status === 'pending_pc_review' && canApprovePc && (
+                  <>
+                    <button onClick={() => handleStatusChange('internal_review', undefined, 'PC approved — sent to MD for approval')}
+                      className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
+                      PC Approve
+                    </button>
+                    <button onClick={() => { setRejectReason(''); setRejectTarget({ status: 'pc_rejected', label: 'PC rejected' }); setShowReject(true) }}
+                      className="px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-xs font-semibold text-red-700 active:bg-red-100">
+                      Reject
+                    </button>
+                  </>
+                )}
+                {selected.status === 'pc_rejected' && (canUpload || canApprovePc) && (
+                  <button onClick={() => handleStatusChange('pending_pc_review')}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
+                    Revise (add a version) then Resubmit for PC Review
                   </button>
                 )}
                 {selected.status === 'internal_review' && !canApprove && (
@@ -413,11 +496,21 @@ export default function DesignCenterScreen() {
                       className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
                       MD Approve
                     </button>
-                    <button onClick={() => { setRejectReason(''); setShowReject(true) }}
+                    <button onClick={() => { setRejectReason(''); setRejectTarget({ status: 'md_rejected', label: 'MD rejected' }); setShowReject(true) }}
                       className="px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-xs font-semibold text-red-700 active:bg-red-100">
                       Reject
                     </button>
                   </>
+                )}
+                {/* MD rejected -> back to PC, the previous responsible person. */}
+                {selected.status === 'md_rejected' && !canApprovePc && (
+                  <p className="text-xs text-slate-500">Rejected by MD — waiting for PC.</p>
+                )}
+                {selected.status === 'md_rejected' && canApprovePc && (
+                  <button onClick={() => handleStatusChange('internal_review', undefined, 'PC resubmitted to MD')}
+                    className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
+                    Resubmit to MD
+                  </button>
                 )}
                 {selected.status === 'rejected' && selected.rejectionReason && (canUpload || canApprove) && (
                   <button onClick={() => handleStatusChange('in_progress')}
@@ -462,11 +555,19 @@ export default function DesignCenterScreen() {
               </div>
             </div>
 
-            {selected.status === 'rejected' && selected.rejectionReason && (
+            {(selected.status === 'rejected' || selected.status === 'pc_rejected' || selected.status === 'md_rejected') && selected.rejectionReason && (
               <div className="bg-red-50 border border-red-100 rounded-2xl p-3.5">
-                <p className="text-xs font-bold text-red-700">Rejected by MD</p>
+                <p className="text-xs font-bold text-red-700">
+                  {selected.status === 'md_rejected' ? 'Rejected by MD' : selected.status === 'pc_rejected' ? 'Rejected by PC' : 'Rejected'}
+                </p>
                 <p className="text-xs text-red-600 mt-0.5">{selected.rejectionReason}</p>
-                <p className="text-[12px] text-red-500 mt-1">Revise the design (add a version), move it back to In Progress and submit it again.</p>
+                <p className="text-[12px] text-red-500 mt-1">
+                  {selected.status === 'pc_rejected'
+                    ? 'Revise the design (add a version) and resubmit for PC review.'
+                    : selected.status === 'md_rejected'
+                    ? 'PC can resubmit directly to MD, or revise it first.'
+                    : 'Revise the design (add a version), move it back to In Progress and submit it again.'}
+                </p>
               </div>
             )}
 
@@ -598,7 +699,7 @@ export default function DesignCenterScreen() {
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
           </div>
           <button disabled={!rejectReason.trim()}
-            onClick={async () => { setShowReject(false); await handleStatusChange('rejected', rejectReason.trim()) }}
+            onClick={async () => { setShowReject(false); await handleStatusChange(rejectTarget.status, rejectReason.trim(), rejectTarget.label) }}
             className="w-full py-3.5 rounded-xl bg-red-500 text-sm font-bold text-white active:bg-red-600 disabled:opacity-40">
             Reject Design
           </button>

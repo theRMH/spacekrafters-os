@@ -36,7 +36,6 @@ import VendorMasterScreen from './screens/Procurement/VendorMasterScreen'
 import MRFScreen from './screens/MRF/MRFScreen'
 import VendorLabourScreen from './screens/VendorLabour/VendorLabourScreen'
 import DailyReportScreen from './screens/DailyReport/DailyReportScreen'
-import MDTasksScreen from './screens/MDTasks/MDTasksScreen'
 import ApprovalScreen from './screens/Approval/ApprovalScreen'
 import ClientMasterScreen from './screens/Clients/ClientMasterScreen'
 import ProcurementScreen from './screens/Procurement/ProcurementScreen'
@@ -294,14 +293,6 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="daily-reports">
             <AppShell><DailyReportScreen /></AppShell>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/md-tasks"
-        element={
-          <ProtectedRoute screenPath="md-tasks">
-            <AppShell><MDTasksScreen /></AppShell>
           </ProtectedRoute>
         }
       />

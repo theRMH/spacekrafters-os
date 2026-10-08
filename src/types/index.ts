@@ -17,10 +17,11 @@ export type Permission =
   | 'view_site_visits' | 'add_site_visit' | 'edit_site_visit' | 'add_requirements'
   // Site Visit report — MD/authorized-only rollup of every submitted site visit
   | 'view_site_visit_reports'
-  // Quotations
-  | 'view_quotations' | 'create_quotation' | 'approve_quotation_internal' | 'send_quotation_client'
-  // Design
-  | 'view_design' | 'upload_design' | 'approve_design' | 'request_revision'
+  // Quotations — approve_quotation_pc is the new QS->PC step ahead of the
+  // existing MD step (approve_quotation_internal)
+  | 'view_quotations' | 'create_quotation' | 'approve_quotation_pc' | 'approve_quotation_internal' | 'send_quotation_client'
+  // Design — approve_design_pc mirrors approve_quotation_pc above
+  | 'view_design' | 'upload_design' | 'approve_design_pc' | 'approve_design' | 'request_revision'
   // Projects
   | 'view_projects' | 'create_project' | 'edit_project' | 'delete_project'
   // MD-only: approving a project's stage-advance request (Project Status Sheet)
@@ -271,6 +272,16 @@ export interface SiteVisitChecklistItem {
   checked: boolean
 }
 
+// Distinct from SiteVisitChecklistItem above (a plain done/not-done task
+// list) — this is a fixed set of Yes/No site-condition questions, answered
+// per visit. null = not yet answered, so an untouched item never silently
+// reads as a confirmed "No".
+export interface SiteChecklistItem {
+  id: string
+  label: string
+  answer: 'yes' | 'no' | null
+}
+
 export interface SiteVisit {
   id: string
   leadId: string
@@ -284,6 +295,8 @@ export interface SiteVisit {
   teamMemberNames?: string[]
   rooms: SiteVisitRoom[]
   checklist: SiteVisitChecklistItem[]
+  // Optional — absent on visits recorded before this existed.
+  siteChecklist?: SiteChecklistItem[]
   notes?: string
   createdAt: string
   updatedAt: string
@@ -295,6 +308,14 @@ export interface RequirementLineItem {
   description: string
   unit: string
   quantity: number
+  // Optional structured dimensions (usually pre-filled from the Site
+  // Visit's own room lengthFt/widthFt/heightFt) and the resulting
+  // auto-calculated, saved total — separate from quantity/unit above,
+  // which stay manually entered as before.
+  lengthFt?: string
+  widthFt?: string
+  heightFt?: string
+  calculatedTotal?: string
 }
 
 export interface Requirement {
@@ -308,9 +329,18 @@ export interface Requirement {
   updatedAt: string
 }
 
+// 'pending_pc_review'/'pc_rejected'/'md_rejected' are new — QS → PC → MD now
+// runs ahead of the existing MD step ('internal_review' onward, unchanged).
+// 'draft' and 'rejected' are kept only so quotations already in the database
+// in those states keep displaying/working — nothing new is written into
+// 'rejected' going forward (a MD rejection now writes 'md_rejected' instead,
+// since rejection returns to PC — the previous responsible person — not QS).
 export type QuotationStatus =
   | 'draft'
+  | 'pending_pc_review'
+  | 'pc_rejected'
   | 'internal_review'
+  | 'md_rejected'
   | 'internally_approved'
   | 'sent_to_client'
   | 'revision_requested'
@@ -343,9 +373,19 @@ export interface BOQSection {
   id: string
   title: string
   items: BOQLineItem[]
+  // Separate from BOQLineItem.notes above (per line item, unused) — this is
+  // one note per room/section, shown directly under that section.
+  notes?: string
 }
 
 export type DiscountType = 'percentage' | 'amount'
+
+// The proposed advance-payment TERM on the quotation itself (e.g. "50%
+// advance required"), set before/while sending to the client. Distinct from
+// advanceStatus/advancePaymentReceived below, which record whether that
+// money actually arrived once the client has approved — the two are
+// related in sequence (this is the plan, that is the fact) but never merged.
+export type AdvanceTermOption = 'with_advance' | 'without_advance' | 'full_advance'
 
 export interface Quotation {
   id: string
@@ -367,7 +407,18 @@ export interface Quotation {
   discountType?: DiscountType
   discountValue?: number
   discountAmount: number
+  // Subtotal minus discount — the base tax is actually calculated on.
+  // Optional: quotations saved before this existed don't have it.
+  taxableAmount?: number
+  // Flat ₹ transport/logistics cost, added after tax into netAmount.
+  transportCost?: number
   netAmount: number
+  advanceTermOption?: AdvanceTermOption
+  // Only meaningful when advanceTermOption === 'with_advance'.
+  advanceTermType?: DiscountType // reuses 'percentage' | 'amount' — same shape as the discount toggle
+  advanceTermValue?: number
+  advanceTermAmount?: number
+  advanceTermBalance?: number
   // A single supporting PDF (e.g. a signed/formatted copy) attached to this
   // quotation — array-typed to match this app's other file-list fields, but
   // the form caps it at one file.
@@ -377,7 +428,8 @@ export interface Quotation {
   sentAt?: string
   approvedAt?: string
   statusHistory?: QuotationStatusHistoryItem[]
-  // Set when the MD rejects (status 'rejected'); cleared on any later transition.
+  // Set on any rejection (status 'pc_rejected'/'md_rejected', or legacy
+  // 'rejected'); cleared on any later transition.
   rejectionReason?: string
   // Chosen once the client has approved (status === 'client_approved'): the
   // project proceeds to Design either With Advance (advance details recorded
@@ -651,12 +703,17 @@ export interface TaskDependency {
 
 // ─── Design Center ───────────────────────────────────────────────────────────
 // 'client_review' is legacy (kept so pre-existing packages still render a
-// sensible label) — new packages now go through the same MD-approval flow as
-// Quotations: in_progress -> internal_review -> internally_approved ->
-// sent_to_client -> client_approved | revision_requested | rejected.
+// sensible label) — new packages now go through the same QS/designer -> PC ->
+// MD -> client flow as Quotations: in_progress -> pending_pc_review ->
+// internal_review -> internally_approved -> sent_to_client -> client_approved
+// | revision_requested. 'pc_rejected'/'md_rejected' mirror Quotation's —
+// rejection returns to the previous responsible person. 'rejected' is kept
+// only so packages already in that state keep displaying/working; nothing
+// new writes it going forward.
 export type DesignPackageStatus =
   | 'in_progress' | 'client_review' | 'client_approved' | 'revision_requested'
-  | 'internal_review' | 'internally_approved' | 'sent_to_client' | 'rejected'
+  | 'pending_pc_review' | 'pc_rejected'
+  | 'internal_review' | 'md_rejected' | 'internally_approved' | 'sent_to_client' | 'rejected'
 
 // One entry per action on a design package's approval flow — who, when, and any
 // note (e.g. the MD's rejection reason).

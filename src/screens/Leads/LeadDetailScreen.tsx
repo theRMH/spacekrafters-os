@@ -10,10 +10,9 @@ import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllAppointments } from '../../services/appointmentService'
 import { getAllFollowUps } from '../../services/followUpService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
-import { ROLE_LABELS } from '../../data/permissions'
 import { BUSINESS_DIVISION_LABEL, BUSINESS_CATEGORY_LABEL, BUSINESS_BRAND_LABEL } from '../../data/businessDivisions'
 import type { Appointment, FollowUp, SiteVisit } from '../../types'
-import { LeadStatusSheet, LEAD_STATUS_LABEL, ROLE_FOR_LEAD_STATUS } from './LeadStatusSheet'
+import { LeadStatusSheet, LEAD_STATUS_LABEL } from './LeadStatusSheet'
 
 type Tab = 'overview' | 'appointments' | 'follow-ups' | 'site-visits' | 'activity'
 
@@ -158,7 +157,7 @@ export default function LeadDetailScreen() {
                   <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>
                   <p className="text-sm font-bold text-slate-800 mt-1">{LEAD_STATUS_LABEL[lead.status]}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Responsible: {lead.assignedToName ?? (ROLE_FOR_LEAD_STATUS[lead.status] ? ROLE_LABELS[ROLE_FOR_LEAD_STATUS[lead.status]!] : '—')}
+                    Responsible: {lead.assignedToName ?? lead.ownerName ?? 'Not Assigned'}
                   </p>
                 </div>
                 <button onClick={() => setShowStatusSheet(true)}

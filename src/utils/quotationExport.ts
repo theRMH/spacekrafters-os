@@ -15,13 +15,20 @@ export function downloadQuotationExcel(quotation: Quotation, leadName: string) {
     for (const item of section.items) {
       rows.push([section.title, item.description, item.unit, item.quantity, item.rate, item.taxPercent ?? 0, item.amount])
     }
+    if (section.notes) rows.push([section.title, `Notes: ${section.notes}`])
   }
 
   rows.push([])
   rows.push(['', '', '', '', '', 'Subtotal', quotation.totalAmount])
-  rows.push(['', '', '', '', '', 'Tax', quotation.taxAmount])
   rows.push(['', '', '', '', '', 'Discount', -quotation.discountAmount])
+  rows.push(['', '', '', '', '', 'Taxable Amount', quotation.taxableAmount ?? quotation.totalAmount - quotation.discountAmount])
+  rows.push(['', '', '', '', '', 'Tax', quotation.taxAmount])
+  if (quotation.transportCost) rows.push(['', '', '', '', '', 'Transport Cost', quotation.transportCost])
   rows.push(['', '', '', '', '', 'Net Amount', quotation.netAmount])
+  if (quotation.advanceTermOption) {
+    rows.push(['', '', '', '', '', `Advance (${quotation.advanceTermOption})`, quotation.advanceTermAmount ?? 0])
+    rows.push(['', '', '', '', '', 'Balance Due', quotation.advanceTermBalance ?? quotation.netAmount])
+  }
 
   const sheet = XLSX.utils.aoa_to_sheet(rows)
 
