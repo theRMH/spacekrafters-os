@@ -1,3 +1,274 @@
+### Added: Design client-decision actions (Client Approved / Revision Requested / Client Rejected) on the Lead page
+**Commit:** Uncommitted
+Same ask as the previous two — once a design is Sent to Client, the Lead page only showed a read-only reflection; recording the client's real-world decision required opening the full Design Package.
+- **Changed:** `src/screens/Design/DesignStatusCard.tsx` — added the same three buttons `DesignCenterScreen.tsx`'s Status Actions block shows for `status === 'sent_to_client'`: Client Approved / Client Rejected (gated on `approve_design`) and Revision Requested (gated on the separate `request_revision` permission), calling the shared `changeDesignStatus`. No reason capture on any of the three — matches the full screen exactly.
+- Once "Client Approved" is clicked here, the Lead page's `case 'client_approved'` (fixed two commits ago) automatically re-evaluates and shows "Mark Won → Create Project" next — no further wiring needed, that was already built to react to `designPackage.status` directly.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Added: "Send Design to Client" action directly on the Lead page's Design card
+**Commit:** Uncommitted
+Same ask as the earlier Quotation "Send to Client" addition, now for Design: once a package is MD Approved, the Lead page previously only showed a read-only reflection + "Open full Design Package →" link — the WhatsApp/Email send action was Design-Center-only.
+- **Changed:** `src/screens/Design/designActions.ts` — added `buildDesignClientMessage()`, the shared message-text builder extracted from `DesignCenterScreen.tsx`'s own `handleSendDesignToClient`, so both places send identical text.
+- **Changed:** `src/screens/Design/DesignCenterScreen.tsx` — its own send handler now calls the shared builder instead of duplicating the string.
+- **Changed:** `src/screens/Design/DesignStatusCard.tsx` — added "Send via WhatsApp" / "Send via Email" for `status === 'internally_approved'` (gated on `approve_design`, matching Design Center's own gate), fetching the latest design version's file links itself (`getAllDesignVersions()`) rather than threading that data down from `LeadStatusSheet.tsx`. Real `wa.me`/`mailto:` links open exactly as they do from Design Center (nothing is auto-sent), then the package moves to Sent to Client via the already-shared `changeDesignStatus`.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed: PC could never actually Approve/Reject a Design Package — same upsert/RLS gap as the appointments bug, pre-existing
+**Commit:** Uncommitted
+Reported via the Design Center's own "Cobra Package" review sheet (status Pending PC Review, PC Approve/Reject visible) — this is the same class of bug just found and fixed for Appointments, independently confirmed by checking `supabase/rls-policies.sql`: `sks_design_packages`' INSERT policy is `sks_has_role('owner') OR sks_has_role('designer')` only — `project_coordinator` isn't in it. Since `changeDesignStatus()` (the one shared function both `DesignCenterScreen.tsx`'s own detail sheet and the Lead-page's `DesignStatusCard` call) wrote through `upsertDesignPackage()` → Supabase `.upsert()`, and Postgres RLS evaluates the INSERT policy for any upsert regardless of whether the row already exists, a PC clicking "PC Approve" on an existing package was being rejected — on both surfaces, not something introduced this session.
+- **Changed:** `src/services/designService.ts` — added `updateDesignPackage()`, a true `.update().eq('id', ...)` call (no INSERT policy involved), alongside the existing `upsertDesignPackage()` (kept for genuine package creation, still owner/designer-only by design).
+- **Changed:** `src/screens/Design/designActions.ts` — `changeDesignStatus()` now calls `updateDesignPackage()` instead of `upsertDesignPackage()`. Fixes PC/MD Approve/Reject/Resubmit on both `DesignCenterScreen.tsx` and the Lead page's `DesignStatusCard` in one place, since both already route through this shared function.
+- No database/schema/RLS change — pure application-layer fix.
+- **Flagging, not changed:** three other call sites still write to `sks_design_packages` via the INSERT-requiring `upsertDesignPackage()` even though they're only ever editing an existing package — `CRMContext.tsx`'s `permanentlyDeleteLead()` (detaching a package from a deleted lead), `ProjectsScreen.tsx`'s project-save (attaching a package to a new project), and `ApprovalReviewSheets.tsx`'s `decideDesign()` (MD-only, so not actually broken today, but same latent risk if that ever changes). Worth the same `updateDesignPackage()` swap if a non-owner/designer role hits one of these.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed (follow-up): My Tasks' inline Appointment fix from the previous commit hit an RLS error instead
+**Commit:** Uncommitted
+The immediately-previous fix let Mohammed Fazil open an inline "Mark Complete/Cancel" sheet from My Tasks, but clicking "Mark Complete" failed with `new row violates row-level security policy for table "sks_appointments"`.
+- Root cause: `updateAppointmentStatus()` (and every appointment write in the app) goes through `appointmentService.ts`'s single `upsertAppointment()`, which calls Supabase's `.upsert()` — a SQL `INSERT ... ON CONFLICT DO UPDATE`. Postgres RLS evaluates the **INSERT** policy for that statement even when it resolves to the UPDATE branch on an existing row. `sks_appointments`' INSERT policy is `sks_has_role('owner') OR sks_has_role('admin') OR sks_has_role('project_coordinator')` — `designer` isn't in that list, so the write was rejected even though the UPDATE policy itself (`USING (true) WITH CHECK (true)`) is fully open. This is a real, pre-existing gap in the already-shipped "assignee can Mark Complete/Cancel their own appointment" feature on `AppointmentsScreen.tsx` too — it just hadn't been hit by a non-PC/MD/owner assignee until now.
+- The user clarified the actually-correct flow: completing an appointment is a **Lead-level** action — `LeadStatusSheet`'s `'qualified'` case already has working Complete/Rescheduled buttons that advance `Lead.status` to `'site_visit_scheduled'` (via `updateLead`, not a direct `sks_appointments` write at all) — exactly the same pattern Site Visit completion already uses. No new DB/RLS change needed; the fix is to stop writing to `sks_appointments` directly from My Tasks.
+- **Reverted:** `src/screens/MyTasks/MyTaskScreen.tsx` — removed the inline Mark Complete/Cancel sheet, its state, and the `updateAppointmentStatus` call added in the previous commit.
+- **Changed:** `src/screens/MyTasks/myTaskFeed.ts` — the "Appointment Today" item now uses `leadAction: { leadId }` (same as the Site Visit item right below it) instead of the just-added `appointmentAction`, so "Update Status" opens `LeadStatusSheet` inline on the Lead's own `'qualified'` Complete/Reschedule flow. Removed the now-unused `MyTaskItem.appointmentAction` field.
+- No database/schema/RLS change made. **Flagging, not fixed:** the underlying `upsertAppointment()`-always-needs-INSERT-rights gap is still live in `AppointmentsScreen.tsx`'s own "Mark Complete/Cancel" card for any assignee outside owner/admin/PC — worth a real fix (e.g. a true `.update()` path for status-only changes, or widening the INSERT policy) if that's hit again elsewhere.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed: My Tasks "Update Status" on an Appointment gave a Designer "You cannot open this page"
+**Commit:** Uncommitted
+Reported live: Raj Kamal (PC) assigned an appointment to Mohammed Fazil (Designer/"Junior Architect"), it correctly showed up in his My Tasks, but clicking "Update Status" sent him to `/appointments`, which errored with "You do not have permission to view this page" — the `designer` role (like several others) doesn't have the `view_appointments` permission, since that page lists every appointment company-wide, not just the viewer's own.
+- Confirmed with the user: don't widen `view_appointments` to more roles (that page's permission genuinely gates "see every appointment in the company," which stays PC/MD/owner-only); instead let whoever is personally assigned to one specific appointment act on just that one from My Tasks, without ever needing the gated page — same approach already used this session for Site Visits/Quotations/Design.
+- **Changed:** `src/screens/MyTasks/myTaskFeed.ts` — added `MyTaskItem.appointmentAction?: { appointmentId }`, set on the "Appointment Today" feed item instead of a bare `/appointments` navigation.
+- **Changed:** `src/screens/MyTasks/MyTaskScreen.tsx` — "Update Status" now opens a small inline sheet for `appointmentAction` items (Lead/Date/Location + Mark Complete / Cancel), calling the existing `updateAppointmentStatus()` from `appointmentActions.ts` directly — the exact same narrowly-gated function `AppointmentsScreen.tsx`'s own card already uses, just rendered without requiring that screen's broader permission.
+- No database/schema change, no permission-table change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed: Lead page's "Client Approved" stage jumped straight to "Mark Won → Create Project" after the advance decision, skipping Design
+**Commit:** Uncommitted
+Immediate follow-up to the previous fix — once the Advance decision correctly moved there, the very next step ("Mark Won → Create Project") appeared right after, with no step in between to actually start or finish Design. Correct flow, confirmed by the user: advance decision → Design Center → only once the client has approved the design is the lead ready to convert to a project.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — `case 'client_approved'`, once the advance decision is made, now branches on the real Design state: no `designPackage` yet → "Go to Design Center →"; a design package exists but isn't `client_approved` → inline `DesignStatusCard` (or a read-only reflection + "Review in Design Center →" for whoever can't act), same pattern already used for `case 'design_in_progress'`; only once `designPackage.status === 'client_approved'` does "Mark Won → Create Project" appear.
+- Root cause note: `Lead.status` stays `'client_approved'` forever once a human sets it — it's intentionally outside `LEAD_STATUS_ORDER`, so the self-healing resync (`impliedMinLeadStatus`) never advances it to `design_in_progress`/`design_approved` the way it does earlier stages. That means every later real-world state (no design / design in progress / design approved) has to be handled inside this one `case` block rather than relying on separate `case`s for those statuses, same constraint that shaped the `internally_approved` fix two commits ago.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed: Lead page's "Client Approved" stage showed a stale "Advance Amount Received" form instead of Proceed with/without Advance
+**Commit:** Uncommitted
+Reported by comparing the Quotations page (which correctly shows "Proceed with Advance" / "Proceed without Advance" at this stage, per an earlier fix this session) against the Lead page at the exact same quotation stage, which instead showed the old pre-Design-workflow form: a bare "Advance Amount Received" + "Reference" + "Confirm Advance Payment → Create Project" button that wrote `advancePaymentAmount`/`Ref` straight onto the Lead and jumped `Lead.status` to `'won'` immediately, skipping the real Quotation-level advance decision (and skipping Design) entirely. This was the leftover flagged two fixes ago.
+- **Changed:** `src/screens/Quotations/quotationActions.ts` — added `recordQuotationAdvanceDecision()`, a shared pure function (field patch + approval history + Lead activity note) extracted from `QuotationsScreen.tsx`'s own `saveAdvanceDecision`, so both the full screen and the compact Lead-page card use one implementation.
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — `saveAdvanceDecision` now calls the shared function instead of duplicating it; `fmtCurrency` exported for reuse.
+- **Changed:** `src/screens/Quotations/QuotationStatusCard.tsx` — added the same three Advance states `QuotationsScreen.tsx` has (Proceed with/without Advance choice, "Record Advance Payment (when received)" for the without-advance case, and a read-only "Payment Received" confirmation), reusing `recordQuotationAdvanceDecision`.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — `case 'client_approved'` now shows `QuotationStatusCard` (same inline-action pattern as the other stages) until the quotation's real advance decision (`advanceStatus`/`advancePaymentReceived`) has been made; only then does a separate "Mark Won → Create Project" button appear — preserving the one existing path that sets `Lead.status = 'won'` (required by `ProjectsScreen.tsx`'s own lead picker, which only lists `status === 'won'` leads) and triggers `/projects?leadId=`, just moved to the correct point in the sequence instead of being conflated with the advance decision. Removed the now-orphaned `advanceAmount`/`advanceRef` state and `submitAdvancePayment`.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Lead page's client-decision step restyled to match the Approval page's Approve/Reject cards
+**Commit:** Uncommitted
+At the Sent To Client / Negotiating stage, the Lead page previously showed a dropdown (Client Approved / Still Negotiating / Lost) + a single generic "Confirm" button. Per "adding accept and reject button same like approval page flow," replaced with the same big green/red card pair and copy the Approval page's own Client Approval sheet uses. Confirmed with the user: Approve = Client Approved; Reject = Still Negotiating (now asks for a reason, same as Approval's Reject); "Mark as Lost" stays reachable as a plain text link below the two cards rather than being a third big option.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — `case 'sent_to_client'/'negotiating'` rewritten: Approve (`bg-emerald-600`, "Client approved — move the project forward.") / Reject (`bg-red-600`, "Client requested changes to this quotation.") card pair, Reject revealing a required reason textarea before confirming to `negotiating`. Replaced the `clientOutcome` dropdown state with `showNegotiatingReason`/`negotiatingReason` and `showLostReason` (both reset when the sheet reopens), and split the old single `submitClientDecision` into `submitClientApprove`/`submitClientNegotiating`/`submitClientLost`.
+- No database/schema change — same three Lead-status outcomes as before (`client_approved`/`negotiating`/`lost`), just reached through different UI.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Added: "Send to Client" action directly on the Lead page at the MD Approved stage
+**Commit:** Uncommitted
+Follow-up to the previous fix — once that stopped the Lead page from dead-ending at "Go to Design Center," it only showed a read-only Quotation status card with a "Review in Quotations →" link, requiring the MD to leave the Lead page just to click "Send to Client." Per "Not like this, full access in leads page" (comparing the Lead-page card's read-only view against the full Quotations page, which has a working `Send to Client` button at this exact stage), the action now lives on the Lead page too.
+- **Changed:** `src/screens/Quotations/QuotationStatusCard.tsx` — added a "Send via WhatsApp" / "Send via Email" button pair for `status === 'internally_approved'` (gated on the `send_quotation_client` permission, widened into this component's `can` prop type), reusing the exact same `changeQuotationStatus` transition `QuotationsScreen.tsx`'s own "Send to Client" sheet calls — records the channel in the quotation's approval history and moves it to Sent to Client.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the `internally_approved` case now renders `QuotationStatusCard` inline (same "act here instead of leaving the page" pattern already used for `quotation_drafted`) whenever the viewer has `send_quotation_client`; everyone else still gets the read-only reflection + link.
+- **Not changed (deliberately, out of scope for this report):** the later Advance decision (Proceed with/without Advance, Record Advance Payment) still only lives on the full Quotations screen — that logic isn't a plain status transition today and the lead in question hadn't reached that stage yet. Flag if the same "act from the Lead page" treatment is wanted there too.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+## 2026-10-09
+
+### Fixed: Lead page jumped straight to "Go to Design Center" right after MD's internal quotation approval
+**Commit:** Uncommitted
+Reported by MD: once a quotation finishes PC/MD internal approval (status `internally_approved`), the Lead page's "Update Status" sheet immediately showed "Start a design package in the Design Center first" / "Go to Design Center →" — but Design Center's own New Design Package form blocks creation until the quotation is actually `client_approved` **and** a Proceed-with/without-Advance decision has been made (visible correctly in the Quotations tab: Send to Client → Client Approval → With/Without/Full Advance). The Lead page was skipping straight past those three real steps and dead-ending at a form that would just reject the attempt.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the `case 'internally_approved'` block now only offers "Go to Design Center" when the quotation has actually reached that ready state (`status === 'client_approved' && (advanceStatus || advancePaymentReceived)`, the same condition `DesignCenterScreen.tsx` itself gates on). Otherwise it shows a read-only Quotation Status card (current status, responsible party, real next step — e.g. "Next: Send to client") with a "Review in Quotations →" link, matching the pattern already used for the `quotation_drafted` stage.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+- **Flagging, not changed:** while reading this file I noticed `case 'client_approved'` (a few cases below) still runs its own old "Advance Amount Received" mini-form that, on submit, sets `Lead.status` straight to `'won'` — bypassing Design entirely and writing to `Lead.advancePaymentAmount/advancePaymentRef` rather than the Quotation's own `advanceStatus`/`advanceTermOption` fields used everywhere else. This looks like a leftover from before the Design workflow existed and may itself be a disconnected/stale path (similar in spirit to the Quotation and Design Lead-bypass bugs fixed earlier this session) — not touched here since it wasn't part of this report, but worth a look.
+
+### Lead-page PC/MD Approve-Reject buttons (Quotation) changed to solid green/red with white text
+**Commit:** Uncommitted
+Per two follow-up requests on the same pair of buttons: first "dark box white text" (tried a solid dark-navy fill for both, matching an earlier session's reschedule-approval button convention), then corrected to "pc approved green and reject red" — distinct solid colors per action, not navy for both.
+- **Changed:** `src/screens/Quotations/QuotationStatusCard.tsx` — the PC Approve/Reject and MD Approve/Reject button pairs (shown on the Lead page's compact Quotation status card) changed from pale outlined boxes (`border-emerald-200 bg-emerald-50 text-emerald-700` / `border-red-200 bg-red-50 text-red-700`) to solid fills: Approve `bg-emerald-600 text-white`, Reject `bg-red-600 text-white`.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+- **Note (not changed):** `src/screens/Design/DesignStatusCard.tsx` has the identical pale-box PC/MD Approve-Reject pattern for Design Packages but wasn't mentioned in this request, so it's left as-is — flagging in case the same color change is wanted there too.
+
+## 2026-10-09
+
+### Fixed: Unit dropdown box shorter than its Qty/Rate siblings in the Quotation line-item row
+**Commit:** Uncommitted
+Root cause: the "Unit" field is a `SearchableSelect compact` (a shared dropdown component, not a plain `<input>`), and its `compact` sizing (`px-2 py-1.5 text-xs`) was still the original small size — it never got the `py-2 text-base` bump the previous fix gave the Qty/Rate/Tax%/Amount inputs in the same row, so the box visibly sat shorter with smaller text.
+- **Changed:** `src/components/forms/SearchableSelect.tsx` — `compact` variant's trigger sizing changed to `px-2 py-2 text-base` and its chevron icon to the same 15px as the default variant, to match. This prop is only used by this one Unit field (confirmed via a full-codebase search), so no other screen is affected.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Qty/Unit/Rate/Tax%/Amount row in the Quotation line-item form made bigger too
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — the Qty/Unit/Rate/Tax%/Amount labels and boxes within each BOQ line item (which had been missed by the earlier form-wide text-size pass) bumped to match: labels `text-xs`→`text-sm`, inputs and the Amount value `text-sm`→`text-base`, input vertical padding `py-1.5`→`py-2`, label bottom margin `mb-0.5`→`mb-1`.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### New/Edit Quotation form spacing tuned down after being too loose
+**Commit:** Uncommitted
+Follow-up to the previous spacing pass on this same form, which the user found overshot (too much gap). Dialed the New/Edit Quotation BottomSheet back to a tighter, in-between density.
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — outer form gap `space-y-5`→`space-y-3.5`, section-list gap `space-y-4`→`space-y-3`, section/line-item card padding and internal gaps reduced one notch each (`p-4`→`p-3`, `p-3`→`p-2.5`, `space-y-3`→`space-y-2.5`/`space-y-2`, `gap-2`→`gap-1.5`), field-label bottom margin `mb-1.5`→`mb-1`, helper-text top margin `mt-1.5`→`mt-1`, and the Discount/Transport Cost/Terms/Payment Terms inputs and the submit button's vertical padding trimmed (`py-3`→`py-2.5`/`py-3`).
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Quotation totals relabeled (Material Cost / Subtotal) and Advance Payment Option removed from the quotation form
+**Commit:** Uncommitted
+Per explicit request. Order of the totals block is unchanged — only two labels changed meaning (old "Subtotal", the pre-discount line-item total, is now "Material Cost"; old "Taxable Amount", the post-discount figure, is now "Subtotal") — and the "Advance Payment Option" picker (With/Without/Full Advance + %/₹) is gone from the New/Edit Quotation form.
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — relabeled the totals rows in the New/Edit form and in both read-only Detail views (summary card + printable BOQ view) to Material Cost → Discount → Subtotal → Tax → (Transport Cost) → Net Amount. Removed the "Advance Payment Option" section (select + conditional %/₹ input + Advance/Balance preview) from the New/Edit form, and the now-unused `formAdvanceTerm` computation it alone drove.
+- **Changed:** `src/utils/quotationExport.ts` — same two label renames in the Excel export, for consistency with the on-screen totals.
+- **Not touched (deliberately):** `advanceTermOption`/`advanceTermType`/`advanceTermValue` state, `computeAdvanceTerm()`, and the save logic in `handleAddQuotation`/`handleUpdateQuotation` — removing only the input control means new quotations simply never get an advance term set (same end result), while editing an already-saved quotation that has one keeps that historical value intact instead of silently wiping it. The read-only "Advance Payment Terms" block on the Detail view (shown only when a quotation already has `advanceTermOption` set) and the separate post-approval "Choose an advance payment option" step (`advanceStatus`, a different field entirely, used in the Lead/Approval workflow) are untouched and unaffected.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### New/Edit Quotation form text made bigger throughout
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Quotations/QuotationsScreen.tsx` — the whole "New Quotation" / "Edit Quotation" BottomSheet form bumped up one size tier: field labels (`text-xs`→`text-sm`), section/line-item inputs and selects (`text-xs`→`text-sm`, `text-[10px]`→`text-xs`), section title and amount inputs (`text-sm`→`text-base`), the totals summary block and Net Amount row, the Advance/Terms/Payment Terms fields, and the "Create Quotation"/"Save Changes" button. Scoped to this form only — the Lead/Requirement/Reason-for-rejection/Advance-received sheets elsewhere in the same file were left untouched.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Site Visit room "Total" (cu.ft) text made bigger again
+**Commit:** Uncommitted
+- **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — the room "Total: … cu.ft" text (both the live form view while entering Length/Width/Height, and the saved detail view) bumped from `text-base` to `text-xl` per follow-up request.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed: Site Visit Report page was missing the Site Checklist (9 Yes/No questions) entirely
+**Commit:** Uncommitted
+Reported via screenshot: opening a site visit on the `/site-visit-report` page showed Client/Lead info, Rooms, and the plain done/not-done Checklist — but not the Site Checklist (Site accessible?/Power available?/Water available?/etc.), even though that data was captured and already correctly shown on the Site Visits screen's own detail view.
+- **Changed:** `src/screens/Reports/SiteVisitReportScreen.tsx` — added the missing "Site Checklist" section, rendering `selected.siteChecklist` with the same Yes/No/Not-answered pill styling already used in `SiteVisitsScreen.tsx`'s own detail sheet (copied the exact markup for visual consistency, not reinvented).
+- No database/schema change — this data was already being saved and fetched; the report screen just never rendered it.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### "Go to Site Visits" no longer reachable from the Lead page before the appointment's actual date/time
+**Commit:** Uncommitted
+Clarified via follow-up: at "Site Visit Scheduled," the Lead page's "Go to Site Visits →" button let anyone log the full Site Visit (checklist, room photos, measurements) immediately — even though the scheduled visit hadn't happened yet. Logging it only makes sense once the visit itself has actually taken place.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the `site_visit_scheduled` case now checks the linked appointment's `scheduledAt`. If that date/time is still in the future, the button is replaced with a read-only "Site visit is scheduled for {date} — it can be logged once that time arrives" message. Once the scheduled time passes, the button appears exactly as before.
+- **Deliberately left untouched:** the standalone Site Visits screen's own "+" (new site visit) button — that's a general-purpose entry point (e.g. logging an ad-hoc/walk-in visit not tied to any scheduled appointment), not the one you flagged. This fix is scoped to the Lead-page flow specifically.
+- No database/schema change — reads the appointment's existing `scheduledAt` field, which was already being fetched.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Site Visit room "Total" (cu.ft) text made bigger
+**Commit:** Uncommitted
+- **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — the room measurement "Total: X cu.ft" text (both the New/Edit form and the Detail view) went from `text-xs font-semibold` to `text-base font-bold`.
+- No database/schema change — styling only.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed: a lead MD assigned to someone else didn't show up in their My Tasks until they manually reloaded
+**Commit:** Uncommitted
+Reported: MD assigns a lead/task to Raj Kamal from their own session; Raj Kamal's My Tasks page (already open, logged in separately) doesn't show it until he refreshes the page.
+
+**Root cause:** `CRMContext.tsx`'s `leads` — the single shared source every screen reads from, including My Tasks' "Lead: ..." cards — only ever fetched once per session (on auth-ready / user change), never again. Reassigning a lead from a *different* browser session has no way to reach an already-open tab without either a live subscription or periodic polling; this app has neither for leads, so the assignee's tab kept showing stale data indefinitely until a manual reload forced a fresh fetch.
+- **Changed:** `src/context/CRMContext.tsx` — added a 30s polling interval alongside the existing fetch-on-auth-ready, matching the interval `NotificationBell.tsx` already polls notifications at (same pattern, not a new one). A reassignment now shows up in the assignee's My Tasks (and everywhere else `leads` feeds) within 30 seconds, no manual reload needed.
+- No database/schema change — this is a client-side refetch cadence only, reading the same `sks_leads` table the same way `refreshLeads()` already did.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+- **Not independently verifiable from code alone (no browser access this session):** the actual cross-session timing — please confirm a reassignment from one account shows up in the other account's My Tasks within ~30s without a reload.
+
+### Confirm Dialog buttons: smaller, properly centered text (shared component, affects every confirm dialog in the app)
+**Commit:** Uncommitted
+Reported via screenshot: "Delete Permanently" looked cramped/misaligned in the confirm dialog.
+- **Changed:** `src/components/feedback/Dialog.tsx` — Cancel/Confirm buttons: `text-sm` → `text-xs`, added explicit `flex items-center justify-center text-center` to the Cancel button (the Confirm button already had the flex centering; Cancel didn't). Since every confirm dialog in the app (including the bulk Lost/Permanently-Delete one below) uses this one shared component, this fixes it everywhere at once.
+- No database/schema change — styling only.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed: bulk-selecting leads while already viewing the Lost tab offered "Mark Lost" again instead of Permanently Delete
+**Commit:** Uncommitted
+Reported via screenshot: selecting all 8 already-Lost leads and opening the bulk action showed "Mark Selected Leads as Lost" — a no-op, since they're already Lost. The bulk action never checked which filter tab was active; it always ran the same "move to Lost" flow regardless.
+- **Changed:** `src/screens/Leads/LeadsScreen.tsx` — the bulk-select button, confirm dialog (title/message/confirm label), and handler are now context-aware: while viewing the **Lost** filter, the action becomes "Delete Permanently" (new `confirmBulkPermanentDelete()`, looping the existing single-lead `permanentlyDeleteLead()` — same cascade it already does, deleting the lead's Quotations/Design packages too). Every other filter tab keeps the original "Mark Lost" behavior unchanged.
+- No database/schema change — reuses the existing single-lead permanent-delete path, just offered in bulk. This is a real, irreversible delete once confirmed (same as the existing single-lead one), gated behind the same confirm dialog.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Notification system, part 2: Mark as Read / Mark All as Read, deep-linked PC notifications, and Project Task assignment was never notifying anyone
+**Commit:** Uncommitted
+Follow-up to the earlier same-day notification audit. This pass covers what was still genuinely missing, found by re-checking every workflow against the request rather than assuming the previous pass covered everything.
+
+**1. Mark as Read / Mark All as Read (new — didn't exist before).**
+- `src/services/notificationService.ts` — new `markAllNotificationsRead()`. No RLS change needed: the existing UPDATE policy already scopes to `user_id = sks_my_id()`, so a bulk update with no `WHERE` clause from the client still only ever touches the caller's own rows.
+- `src/components/layout/NotificationBell.tsx` — header gets a "Mark all read" action (shown only when there's something unread); each unread row gets its own small checkmark "Mark as read" control that marks it read without navigating (separate from clicking the row itself, which still opens the record **and** marks it read, as before). Restructured the row from `<button>` to `<div role="button">` so the inner mark-read `<button>` isn't invalid nested-button markup.
+
+**2. PC-pending Quotation/Design notifications now deep-link to the exact record, not just the list.**
+`/approval` is owner-only — a PC recipient clicking a "Quotation/Design Pending PC Review" notification that linked to `/approval` would hit a permission wall. These always linked to the bare `/quotations`/`/design` list instead, requiring PC to find the right one manually.
+- `src/screens/Quotations/QuotationsScreen.tsx`, `src/screens/Design/DesignCenterScreen.tsx` — their existing `?quotationId=`/`state.quotationId`-style deep-link effects now also read the id from the URL's query string (`?quotationId=...` / `?packageId=...`), since a notification's `url` is a plain link and can't carry router state the way the Approval page's "Review" button does.
+- `src/screens/Quotations/quotationActions.ts`, `src/screens/Quotations/QuotationsScreen.tsx`, `src/screens/Design/designActions.ts` — PC-pending and designer-revision notifications now link to `/quotations?quotationId=<id>` / `/design?packageId=<id>`, opening that exact record's Detail sheet directly.
+
+**3. Project Task assignment never notified anyone — found by checking every "assign" code path, not just the Lead/Appointment ones already covered.**
+- `src/screens/ProjectWorkspace/ProjectWorkspaceScreen.tsx` (`handleAddTask`), `src/screens/ProjectWorkspace/TaskDetailScreen.tsx` (`handleAddSubtask`, `handleReassign`) — creating a task/subtask with an assignee, or reassigning one, now notifies that person (skipped if they assigned it to themselves), linking to `/projects/:id/tasks/:taskId` — the same destination `myTaskFeed.ts` already uses for this entity.
+
+No database/schema/RLS changes — the table and its per-user RLS policy already supported everything here.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed: approving a rescheduled appointment silently skipped straight to Site Visit
+**Commit:** Uncommitted
+Reported via screenshots: approving a reschedule request immediately advanced the lead to "Site Visit Scheduled" and removed the Complete/Rescheduled choice — the user never got to decide what happens next.
+
+**Root cause:** `decideRescheduleAndAdvanceLead()` (`src/screens/Appointments/appointmentActions.ts`), the single function both the central Approval page and the Lead page's own reschedule flow call, had `const advance = approved && lead.status === 'qualified'` and wrote `{ status: 'site_visit_scheduled' }` straight onto the Lead whenever MD approved. An accepted reschedule should only confirm the appointment's new date — it's not the same thing as the site visit actually happening.
+- **Changed:** `src/screens/Appointments/appointmentActions.ts` — `decideRescheduleAndAdvanceLead()` no longer touches `lead.status` on approve or reject, either way — it now only updates the appointment and logs an activity entry. Both existing callers (the central `/approval` page and the Lead page) automatically get the fix since there's exactly one implementation.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the Lead's own "Pending MD Approval" section (previously just a read-only summary + a "Review in Approval →" link for owner) now shows the requester, reason, and requested date, plus — when the logged-in user is MD — inline Approve/Reject buttons (calling the same shared function) and a notes field, with "Open in Approval →" kept alongside. Non-MD users still see read-only pending status only, no action. Because lead.status no longer changes on approval, the Complete/Rescheduled choice reappears automatically once the sheet re-renders — no special-case logic needed for that part.
+- **Changed:** `src/screens/MDTasks/ApprovalSection.tsx` — corrected the Approve card's description text, which still said "moves this lead to Site Visit" (now stale).
+- **Added:** 2 regression tests in `src/screens/Appointments/appointmentActions.test.ts` asserting `updateLead` is never called with a `status` key, approved or rejected.
+- No database/schema change — the Lead page's reschedule approval reuses the exact same `sks_appointments`/activity-log writes the central Approval page already makes; both stay in sync because they're now provably the same function call, not two copies.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Notification system audit: infrastructure already exists end-to-end — fixed 7 notifications that weren't clickable
+**Commit:** Uncommitted
+Requested as a full notification system build. Investigated first (per the DB-safety instruction to inspect before changing anything) and found the entire system already built and wired in: `sks_notifications` table with RLS scoping every row to `user_id = sks_my_id()` (no client-side filtering needed, confirmed in `src/services/notificationService.ts`), `NotificationBell.tsx` with an unread-count badge, a dropdown panel (title/body/timestamp, unread visually distinct), click-to-mark-read, 30s polling, and full persistence across refresh/re-login (it reads straight from the table, nothing client-cached). `sendNotification()` (`src/utils/notifications.ts`) is already the single call every workflow uses — MRF, Project Stage, Product Sale, Leave, Lead reassignment, Appointment assignment, Quotation PC/MD, Design PC/MD, and Design revision all already call it on the right event, to the right recipients (role- or assignment-scoped, never broadcast).
+
+**The actual gap:** 7 of those calls were missing their 4th argument (the click-through `url`), so the notification fired and appeared in the bell correctly, but clicking it did nothing (`NotificationBell.tsx`'s `handleOpen()` only navigates `if (n.url)`). Added the missing links:
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — "Appointment Rescheduled" (sent to every MD when a reschedule is requested) now links to `/approval`. This was the most significant gap — it's the exact Rescheduled-Appointment MD-approval case you named explicitly, and it had no link at all.
+- **Changed:** `src/screens/Quotations/quotationActions.ts`, `src/screens/Quotations/QuotationsScreen.tsx` (the older, still-live duplicate pair — see note below) — "Quotation Pending MD Approval" → `/approval`, "Quotation Pending PC Review" → `/quotations`.
+- **Changed:** `src/screens/Design/designActions.ts` — "Design Pending MD Approval" → `/approval`, "Design Pending PC Review" → `/design`, "Design Sent Back for Revision" → `/design`.
+- **Pre-existing duplication flagged, not fixed:** `QuotationsScreen.tsx` still has its own local `notifyMdPending`/`notifyPcPending` (used by `handleAddQuotation`/`handleUpdateQuotation`) alongside the newer versions in `quotationActions.ts` (used by `handleStatusChange`) — both now correctly linked, but this is the kind of near-duplicate the instructions warned against. Didn't consolidate it this round since it's out of scope for a notification-links fix and touching it risks the already-verified status-change logic; flagging for a future pass.
+
+**Database safety:** no schema/RLS change needed or made — the table and its per-user RLS policy already fully support everything asked (specific recipients only, persists across refresh/re-login, no duplicate-system risk since every workflow already shares the one `sendNotification()` entry point).
+- **Verified:** `tsc --noEmit`, unit tests (73) and `npm run build` all clean.
+- **Not independently verifiable from code alone (no browser access this session):** that each notification's unread badge/count updates live and that no duplicate notification fires on a retried action — the UI already guards most of these triggers with `disabled={saving}` during the save, but please double-check by clicking through the scenarios in your own testing list.
+
+### Approve/Reject decision cards: side-by-side, solid dark fill, centered white text, bigger text/tighter box
+**Commit:** Uncommitted
+Iterated in three passes on the same two buttons — covers both places in the app using this exact title+description Approve/Reject card pattern: the Reschedule Appointment approval and the shared Quotation/Design MD-approval footer.
+- **Changed:** `src/screens/MDTasks/ApprovalSection.tsx` (Reschedule approval) and `src/screens/MDTasks/ApprovalReviewSheets.tsx` (`decisionFooter()`, shared by the Quotation and Design review sheets). Final state: side-by-side (`flex-1` each, was stacked), solid `bg-emerald-600`/`bg-red-600` fill with centered white text (was pale `-50` background, left-aligned, colored text), title bumped `text-sm`→`text-base` and description `text-xs`→`text-sm`, padding tightened `p-4`→`p-2.5`.
+- No database/schema change — styling only, same buttons/handlers/logic throughout.
+- **Verified:** `tsc --noEmit`, unit tests (73) and `npm run build` all clean after each pass.
+
+### Time picker replaced with the native browser/device picker, everywhere
+**Commit:** Uncommitted
+Per your request to change the custom 3-column (Hour/Minute/AM-PM) time picker. `TimeField` is a single shared component used by every time input in the app (Appointments, Lead reschedule, Attendance, Attendance Settings), so this one change covers all of them.
+- **Changed:** `src/components/forms/TimeField.tsx` — rewritten to a plain `<input type="time">`, letting the browser/OS supply its own native picker (12h with AM/PM per the device's locale, same as every phone's built-in time picker). Removed the custom portal-positioned dropdown and its hour/minute/AM-PM column logic entirely. The stored value format is unchanged (`'HH:mm'` 24h — the native input's own format), so `min`/`max` props and every caller's persisted data are unaffected; no caller needed changes.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (73) and `npm run build` all clean.
+
+### Fixed: Won/Lost leads sat in My Tasks forever as a "Pending" card with nothing to actually do
+**Commit:** Uncommitted
+Reported as "permanently deleted records still showing" — investigated both claims directly.
+
+**What I could confirm and fix:** `src/screens/MyTasks/myTaskFeed.ts`'s Lead section (section 2) had no status filter at all — every lead owned by or assigned to the user showed up, including ones already at `won` or `lost`. Both are terminal: there's no further status change to make on them, so they sat in "My Tasks" forever as a "Pending" card with an "Update Status" button that led nowhere useful. This is almost certainly what you were actually seeing as "deleted leads still showing" — a Lost lead disappears from the Leads screen's default Active view (easy to read as "gone"), but it was never filtered out of My Tasks.
+- **Changed:** `src/screens/MyTasks/myTaskFeed.ts` — the Lead section now skips `status === 'won'` and `status === 'lost'`.
+- **Added:** a regression test in `src/screens/MyTasks/myTaskFeed.test.ts` covering this.
+
+**What I checked and could NOT find a bug in:** a genuine "permanently deleted record still appears" case. `deleteAppointment()` (`src/services/appointmentService.ts`) and `permanentlyDeleteLead()` are real, immediate `DELETE` statements against Supabase — no soft-delete, no queue. I checked every lead/appointment/site-visit service file and the only in-memory cache anywhere in the app (`src/utils/userStorage.ts`) is for the managed-users directory, unrelated to leads/appointments/tasks — there's no caching layer that could serve a deleted row back after a fresh page load or re-login. If you have a specific record you permanently deleted that's still showing up somewhere, tell me exactly where (which page, which record) and I'll chase that concrete case rather than a general one I can't reproduce from code alone.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (73) and `npm run build` all clean.
+
+### "Update Status" button made visually consistent across Leads, Appointments, Site Visits, Quotations, Design Center
+**Commit:** Uncommitted
+Reported via screenshot: Appointments' card-level "Update Status" button was solid dark navy, inconsistent with the light-blue (`border-blue-200 bg-blue-50 text-blue-700`) button already established on Leads' own cards.
+- **Changed:** `src/screens/Appointments/AppointmentsScreen.tsx`, `src/screens/SiteVisits/SiteVisitsScreen.tsx` — the card-level "Update Status" button (added earlier this session) now uses the exact same classes as the Leads card's button, instead of the dark-navy fill.
+- **Added:** `src/screens/Quotations/QuotationsScreen.tsx`, `src/screens/Design/DesignCenterScreen.tsx` — these two had no card-level "Update Status" button at all (cards were plain clickable rows); added one matching the same light-blue style, wired to the exact same `setSelected(...)` call the card's own `onClick` already uses — no new modal, no new logic, just a second way to trigger the same existing Detail sheet.
+- No database/schema change, no workflow/permission/status-transition logic touched — purely the button's visual style plus two additive buttons reusing existing click handlers.
+- **Verified:** `tsc --noEmit`, unit tests (72) and `npm run build` all clean.
+
+### Color-only pass: reverted the bright-blue header back to dark navy, and gave every "Pending ..." badge a dark-navy fill
+**Commit:** Uncommitted
+Two parts, both pure color changes — no layout, copy, logic, or data touched.
+
+**1. Approve Rescheduled Appointment header reverted to dark navy.** The solid `#2563EB` blue fill from the previous entry was a one-off mistake — it was the only header in the app not matching its two siblings (`ApprovalSection.tsx`'s own "Approve MRF" header and `ApprovalReviewSheets.tsx`'s header both already use `linear-gradient(135deg, #0F2A4A, #16385E)`). Reverted `src/screens/MDTasks/ApprovalSection.tsx` to that same gradient, restoring consistency. Confirmed via a full search that every other header/nav-chrome gradient in the app (`AppHeader.tsx`, `SidebarNavigation.tsx`, `NavigationBar.tsx`, `MobileMenuDrawer.tsx`, `SettingsScreen.tsx`, `LoginScreen.tsx`, and the other detail-sheet headers) already uses the same `#0F2A4A`-based navy family — this was the only outlier.
+
+**2. Every "Pending ..." badge/label with a pale background now reads clearly: dark navy fill, white text.** Found via a full search for every status whose *displayed* label contains the word "Pending" (not just status keys literally named "pending"):
+- `src/components/badges/StatusBadge.tsx` — the shared component used across most of the app. `pending` (was pale amber) and three more keys that were falling through to the unstyled pale-gray default because they weren't in the color map at all — `pending_pc_review`, `internal_review` (both labelled "Pending PC Review"/"Pending MD Approval" by Quotation's and Design's own label overrides), `pending_qs` and `pending_coordinator_approval` (MRF's "Pending QS"/"Pending Approval") — all now `bg-primary-600`/`text-white` (reusing the existing `primary-600` Tailwind theme token, which already equals `#0F2A4A`, instead of inventing a new color value).
+- `src/screens/MyTasks/MyTaskScreen.tsx` — the "Pending" pill on each task card footer (was `bg-slate-100 text-slate-500`).
+- `src/screens/PersonalFinance/PersonalFinanceScreen.tsx` — the "Pending" transaction-status tone (was `text-amber-600 bg-amber-50`), which has its own local color map separate from `StatusBadge`.
+- Left untouched on purpose: every *other* status's color (Approved/Rejected/Completed/Lost/Cleared/Reconciled/etc.), MRF's `pending_procurement` (its visible label is "Sent to Procurement" — doesn't actually say "Pending"), and the unrelated "Pending" stat-count tile on the My Tasks summary row (a KPI tile with its own established 4-color scheme, not a status badge).
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (72) and `npm run build` all clean.
+
 ## 2026-10-08
 
 ### Fixed: Lead page could get permanently stuck on a stale stage despite real Quotation/Design progress

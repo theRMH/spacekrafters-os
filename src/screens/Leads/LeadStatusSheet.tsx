@@ -20,7 +20,8 @@ import { DesignStatusCard } from '../Design/DesignStatusCard'
 import { QUOTATION_STATUS_LABEL, quotationWorkflowInfo } from '../Quotations/QuotationsScreen'
 import { QuotationStatusCard } from '../Quotations/QuotationStatusCard'
 import { getAllAppointments, upsertAppointment } from '../../services/appointmentService'
-import { toProperIso } from '../Appointments/appointmentDate'
+import { decideRescheduleAndAdvanceLead } from '../Appointments/appointmentActions'
+import { toProperIso, fmtDateTime } from '../Appointments/appointmentDate'
 import { sendNotification } from '../../utils/notifications'
 import type { Appointment, DesignPackage, Lead, LeadStatus, ManagedUser, Quotation } from '../../types'
 
@@ -117,15 +118,16 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   const [showRescheduleForm, setShowRescheduleForm] = useState(false)
   const [rescheduleReasonText, setRescheduleReasonText] = useState('')
   const [rescheduledDateInput, setRescheduledDateInput] = useState('')
+  const [mdDecisionNotes, setMdDecisionNotes] = useState('')
   const [hasSiteVisit, setHasSiteVisit] = useState(false)
   const [hasRequirement, setHasRequirement] = useState(false)
   const [quotation, setQuotation] = useState<Quotation | null>(null)
   const [designPackage, setDesignPackage] = useState<DesignPackage | null>(null)
 
-  const [clientOutcome, setClientOutcome] = useState<'client_approved' | 'negotiating' | 'lost'>('client_approved')
+  const [showNegotiatingReason, setShowNegotiatingReason] = useState(false)
+  const [negotiatingReason, setNegotiatingReason] = useState('')
+  const [showLostReason, setShowLostReason] = useState(false)
   const [lostReason, setLostReason] = useState('')
-  const [advanceAmount, setAdvanceAmount] = useState('')
-  const [advanceRef, setAdvanceRef] = useState('')
   const [saving, setSaving] = useState(false)
   const [showReassign, setShowReassign] = useState(false)
   const [reassignTo, setReassignTo] = useState('')
@@ -134,6 +136,8 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     if (!isOpen) return
     setShowReassign(false)
     setReassignTo('')
+    setShowNegotiatingReason(false)
+    setShowLostReason(false)
     getManagedUsersDirectory().then(setUsers)
     getAllAppointments().then(a => {
       const relevant = a.filter(appt => appt.leadId === lead.id && appt.status.trim().toLowerCase() !== 'cancelled')
@@ -242,6 +246,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
         mdUsers.map(u => u.id),
         'Appointment Rescheduled',
         `${lead.name} (${lead.leadNumber ?? lead.id}) — ${lead.phone}. Reason: ${rescheduleReasonText.trim()}.${dateLine}`,
+        '/approval',
       )
       await updateLead(lead.id, {}, `Appointment rescheduled: ${rescheduleReasonText.trim()}`)
       setRescheduleReasonText('')
@@ -252,6 +257,32 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
       onDone(result.error ?? 'Could not save the reschedule request.')
     }
     setSaving(false)
+  }
+
+  // Same decision function the central Approval page uses — one source of
+  // truth, so a decision made here is immediately reflected there and vice
+  // versa. Deliberately does not touch lead.status either way (see
+  // decideRescheduleAndAdvanceLead's own comment) — approval only confirms
+  // the appointment's new date; Complete/Rescheduled stay the explicit
+  // choices on this same lead afterward.
+  async function handleDecideReschedule(approved: boolean) {
+    if (!latestAppointment || saving) return
+    setSaving(true)
+    const result = await decideRescheduleAndAdvanceLead({
+      appt: latestAppointment, approved, notes: mdDecisionNotes, lead,
+      decidedByName: user?.name ?? 'Unknown', decidedByRole: user?.role,
+      updateLead,
+    })
+    setSaving(false)
+    if (!result.ok) { onDone(result.error ?? 'Could not record decision.'); return }
+    setLatestAppointment({
+      ...latestAppointment,
+      rescheduleRequestStatus: approved ? 'accepted' : 'rejected',
+      status: approved ? 'scheduled' : latestAppointment.status,
+      scheduledAt: approved && latestAppointment.rescheduledDate ? toProperIso(latestAppointment.rescheduledDate) : latestAppointment.scheduledAt,
+    })
+    setMdDecisionNotes('')
+    onDone(approved ? 'Reschedule accepted.' : 'Reschedule rejected.')
   }
 
   async function submitSiteVisitScheduled() {
@@ -266,26 +297,25 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     await save('quotation_drafted', 'Quotation drafted, pending internal approval')
   }
 
-  async function submitClientDecision() {
-    if (clientOutcome === 'lost') {
-      await save('lost', `Marked Lost: ${lostReason.trim()}`, { lostReason: lostReason.trim() })
-    } else if (clientOutcome === 'negotiating') {
-      await save('negotiating', 'Client negotiating')
-    } else {
-      await save('client_approved', 'Client approved')
-    }
+  async function submitClientApprove() {
+    await save('client_approved', 'Client approved')
   }
 
-  async function submitAdvancePayment() {
-    const amount = Number(advanceAmount)
-    if (!amount || amount <= 0) {
-      onDone('Enter a valid advance payment amount.')
-      return
-    }
-    await save('won', `Advance payment received: ₹${amount.toLocaleString('en-IN')}`, {
-      advancePaymentAmount: amount,
-      advancePaymentRef: advanceRef.trim() || undefined,
-    })
+  async function submitClientNegotiating() {
+    await save('negotiating', `Client requested changes: ${negotiatingReason.trim()}`)
+  }
+
+  async function submitClientLost() {
+    await save('lost', `Marked Lost: ${lostReason.trim()}`, { lostReason: lostReason.trim() })
+  }
+
+  // The Advance decision itself (Proceed with/without Advance) now lives on
+  // the Quotation, recorded the same way as on the Quotations page — see
+  // QuotationStatusCard. This only fires once that's already been made
+  // (quotation.advanceStatus/advancePaymentReceived set): it's the later,
+  // separate step of actually converting the lead into a project.
+  async function submitMarkWon() {
+    await save('won', 'Marked Won — converting to a project')
     navigate(`/projects?leadId=${lead.id}`)
   }
 
@@ -355,20 +385,41 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
         const pendingReschedule = latestAppointment?.rescheduleRequestStatus === 'requested'
 
         if (pendingReschedule && latestAppointment) {
+          const appt = latestAppointment
           return (
             <div className="space-y-3">
-              <p className="text-sm text-slate-600">Reschedule requested — waiting on MD review.</p>
-              <p className="text-xs text-slate-500">Reason: {latestAppointment.rescheduleReason}</p>
-              {latestAppointment.rescheduledDate && (
-                <p className="text-xs text-slate-500">Requested new date: {new Date(latestAppointment.rescheduledDate).toLocaleString('en-IN')}</p>
-              )}
-              {/* The MD decides this on the Approval page now, not here — one
-                  central approval destination instead of a second copy of
-                  Accept/Reject on the lead itself. */}
-              {user?.role === 'owner' && (
-                <button onClick={() => { onClose(); navigate('/approval') }} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-                  Review in Approval →
-                </button>
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3.5">
+                <p className="text-xs font-bold text-amber-700">Pending MD Approval</p>
+                <p className="text-xs text-amber-600 mt-1">Requested by {appt.rescheduleRequestedBy ?? '—'}</p>
+                <p className="text-xs text-amber-600">Reason: {appt.rescheduleReason}</p>
+                {appt.rescheduledDate && (
+                  <p className="text-xs text-amber-600">Requested new date: {new Date(appt.rescheduledDate).toLocaleString('en-IN')}</p>
+                )}
+              </div>
+              {/* Same decision function the central Approval page uses
+                  (decideRescheduleAndAdvanceLead) — one source of truth, two
+                  entry points into it, always in sync. */}
+              {user?.role === 'owner' ? (
+                <>
+                  <textarea value={mdDecisionNotes} onChange={e => setMdDecisionNotes(e.target.value)} rows={2}
+                    placeholder="Notes (optional)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+                  <div className="flex gap-2.5">
+                    <button disabled={saving} onClick={() => handleDecideReschedule(true)}
+                      className="flex-1 text-center p-2.5 rounded-2xl bg-emerald-600 active:bg-emerald-700 disabled:opacity-50">
+                      <p className="text-base font-bold text-white">Approve</p>
+                    </button>
+                    <button disabled={saving} onClick={() => handleDecideReschedule(false)}
+                      className="flex-1 text-center p-2.5 rounded-2xl bg-red-600 active:bg-red-700 disabled:opacity-50">
+                      <p className="text-base font-bold text-white">Reject</p>
+                    </button>
+                  </div>
+                  <button onClick={() => { onClose(); navigate('/approval') }} className={secondaryBtn}>
+                    Open in Approval →
+                  </button>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500 text-center py-2">Waiting on MD to review.</p>
               )}
             </div>
           )
@@ -430,6 +481,13 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
                   Waiting on {effectiveAssigneeName ?? 'Not Assigned'} to mark the Site Visit done.
                 </p>
               )
+            ) : latestAppointment && new Date(latestAppointment.scheduledAt).getTime() > Date.now() ? (
+              // The appointment hasn't happened yet — logging the Site Visit
+              // (its checklist/photos) only makes sense once the visit itself
+              // has actually taken place, not the moment it's merely scheduled.
+              <p className="text-sm text-slate-500 text-center py-4">
+                Site visit is scheduled for {fmtDateTime(latestAppointment.scheduledAt)} — it can be logged once that time arrives.
+              </p>
             ) : (
               <button onClick={() => { onClose(); navigate('/site-visits', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
                 Go to Site Visits →
@@ -510,21 +568,72 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
           </div>
         )
       }
-      case 'internally_approved':
-        return (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">{designPackage ? 'Design package started.' : 'Start a design package in the Design Center first.'}</p>
-            {designPackage ? (
+      case 'internally_approved': {
+        if (designPackage) {
+          return (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-600">Design package started.</p>
               <button disabled={saving} onClick={() => save('design_in_progress', 'Design started')} className={primaryBtn} style={{ background: '#0F2A4A' }}>
                 Confirm Design Started
               </button>
-            ) : (
+            </div>
+          )
+        }
+        // MD approving internally is only the first of three quotation steps
+        // still ahead of design (Send to Client -> Client Approval -> Proceed
+        // with/without Advance — see DesignCenterScreen.tsx's own gate). This
+        // used to jump straight to "Go to Design Center" right after internal
+        // approval, which just dead-ended there since the New Design Package
+        // form blocks creation until the quotation is actually client-approved
+        // with an advance decision made. Only offer Design Center once that's
+        // genuinely true; otherwise reflect the quotation's real next step.
+        const designReady = quotation?.status === 'client_approved' && !!(quotation.advanceStatus || quotation.advancePaymentReceived)
+        if (designReady) {
+          return (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-600">Quotation complete — start a design package in the Design Center.</p>
               <button onClick={() => { onClose(); navigate('/design', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
                 Go to Design Center →
               </button>
-            )}
+            </div>
+          )
+        }
+        // Same "render the real action inline, else read-only + link" split
+        // as the quotation_drafted case above — Send to Client is a plain
+        // status transition (changeQuotationStatus), so whoever can send it
+        // acts right here instead of being pushed to the full screen.
+        if (quotation && can('send_quotation_client')) {
+          return (
+            <QuotationStatusCard
+              quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead}
+              onChanged={setQuotation}
+              onReview={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation.id } }) }}
+            />
+          )
+        }
+        return (
+          <div className="space-y-3">
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Quotation Status</p>
+                  <p className="text-sm font-bold text-indigo-900">{quotation ? QUOTATION_STATUS_LABEL[quotation.status] : 'Not drafted'}</p>
+                </div>
+                {quotation && (
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Responsible</p>
+                    <p className="text-sm font-bold text-indigo-900">{quotationWorkflowInfo(quotation).responsible}</p>
+                  </div>
+                )}
+              </div>
+              {quotation && <p className="text-xs text-indigo-700 mt-1.5">Next: {quotationWorkflowInfo(quotation).next}</p>}
+            </div>
+            <button onClick={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation?.id } }) }} className={secondaryBtn}>
+              Review in Quotations →
+            </button>
           </div>
         )
+      }
       case 'design_in_progress': {
         // Same reasoning as the quotation_drafted case above — the real
         // transition (changeDesignStatus) renders inline via DesignStatusCard
@@ -576,41 +685,169 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
           </div>
         )
       case 'sent_to_client':
-      case 'negotiating':
+      case 'negotiating': {
+        // Same Approve/Reject card pair and copy as the Approval page's own
+        // Client Approval sheet (ApprovalReviewSheets.tsx's decisionFooter),
+        // so recording the client's decision looks identical whether it's
+        // done from here or from Approval. "Mark as Lost" is a separate,
+        // less common outcome — kept reachable but out of the way as a plain
+        // link rather than a third big card.
+        if (showNegotiatingReason) {
+          return (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-500 block">What does the client want changed?</label>
+              <textarea value={negotiatingReason} onChange={e => setNegotiatingReason(e.target.value)} rows={3} placeholder="What needs to change?"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+              <button disabled={saving || !negotiatingReason.trim()} onClick={submitClientNegotiating}
+                className="w-full py-3 rounded-xl text-sm font-bold text-white bg-red-500 active:bg-red-600 disabled:opacity-40">
+                Confirm — Still Negotiating
+              </button>
+              <button onClick={() => setShowNegotiatingReason(false)} className="w-full py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600">
+                Back
+              </button>
+            </div>
+          )
+        }
+        if (showLostReason) {
+          return (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-500 block">Reason for loss *</label>
+              <textarea value={lostReason} onChange={e => setLostReason(e.target.value)} rows={3} placeholder="Why was this lost?"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+              <button disabled={saving || !lostReason.trim()} onClick={submitClientLost}
+                className="w-full py-3 rounded-xl text-sm font-bold text-white bg-red-500 active:bg-red-600 disabled:opacity-40">
+                Confirm — Mark Lost
+              </button>
+              <button onClick={() => setShowLostReason(false)} className="w-full py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600">
+                Back
+              </button>
+            </div>
+          )
+        }
         return (
           <div className="space-y-3">
-            <SearchableSelect value={clientOutcome} onChange={v => setClientOutcome(v as typeof clientOutcome)} options={[
-              { value: 'client_approved', label: 'Client Approved' },
-              { value: 'negotiating', label: 'Still Negotiating' },
-              { value: 'lost', label: 'Lost' },
-            ]} />
-            {clientOutcome === 'lost' && (
-              <textarea value={lostReason} onChange={e => setLostReason(e.target.value)} placeholder="Reason for loss"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" rows={3} />
-            )}
-            <button disabled={saving || (clientOutcome === 'lost' && !lostReason.trim())} onClick={submitClientDecision} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Confirm
+            <div className="flex gap-2.5">
+              <button disabled={saving} onClick={submitClientApprove}
+                className="flex-1 text-center p-2.5 rounded-2xl bg-emerald-600 active:bg-emerald-700 disabled:opacity-50">
+                <p className="text-base font-bold text-white">Approve</p>
+                <p className="text-sm text-white/90 mt-0.5">Client approved — move the project forward.</p>
+              </button>
+              <button disabled={saving} onClick={() => { setNegotiatingReason(''); setShowNegotiatingReason(true) }}
+                className="flex-1 text-center p-2.5 rounded-2xl bg-red-600 active:bg-red-700 disabled:opacity-50">
+                <p className="text-base font-bold text-white">Reject</p>
+                <p className="text-sm text-white/90 mt-0.5">Client requested changes to this quotation.</p>
+              </button>
+            </div>
+            <button onClick={() => { setLostReason(''); setShowLostReason(true) }} className="block mx-auto text-xs font-semibold text-slate-400 underline">
+              Mark as Lost instead
             </button>
           </div>
         )
-      case 'client_approved':
+      }
+      case 'client_approved': {
+        // Mirrors QuotationsScreen.tsx's own Status Actions at this stage: the
+        // Advance decision (Proceed with/without Advance) happens on the
+        // Quotation first — this used to instead ask for an "Advance Amount
+        // Received" directly on the Lead and jump straight to Won, skipping
+        // that real decision entirely and duplicating the amount capture.
+        const advanceDecided = !!(quotation?.advanceStatus || quotation?.advancePaymentReceived)
+        if (quotation && !advanceDecided && can('send_quotation_client')) {
+          return (
+            <QuotationStatusCard
+              quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead}
+              onChanged={setQuotation}
+              onReview={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation.id } }) }}
+            />
+          )
+        }
+        if (!advanceDecided) {
+          return (
+            <div className="space-y-3">
+              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Quotation Status</p>
+                    <p className="text-sm font-bold text-indigo-900">{quotation ? QUOTATION_STATUS_LABEL[quotation.status] : 'Not drafted'}</p>
+                  </div>
+                  {quotation && (
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Responsible</p>
+                      <p className="text-sm font-bold text-indigo-900">{quotationWorkflowInfo(quotation).responsible}</p>
+                    </div>
+                  )}
+                </div>
+                {quotation && <p className="text-xs text-indigo-700 mt-1.5">Next: {quotationWorkflowInfo(quotation).next}</p>}
+              </div>
+              <button onClick={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation?.id } }) }} className={secondaryBtn}>
+                Review in Quotations →
+              </button>
+            </div>
+          )
+        }
+        // Advance decided — Design is next, same as the 'internally_approved'
+        // case's designReady branch. Lead.status itself never leaves
+        // 'client_approved' once a human sets it (it's outside
+        // LEAD_STATUS_ORDER, so the self-healing resync skips it — see
+        // impliedMinLeadStatus above), so every remaining real-world stage
+        // from here (no design yet / design in progress / design approved by
+        // client) has to be reflected inside this one case, not a separate one.
+        if (!designPackage) {
+          return (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-600">Quotation complete — start a design package in the Design Center.</p>
+              <button onClick={() => { onClose(); navigate('/design', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
+                Go to Design Center →
+              </button>
+            </div>
+          )
+        }
+        if (designPackage.status !== 'client_approved') {
+          const canActOnDesign = can('approve_design_pc') || can('approve_design')
+          if (canActOnDesign) {
+            return (
+              <DesignStatusCard
+                pkg={designPackage} can={can} user={user} lead={lead} updateLead={updateLead}
+                onChanged={setDesignPackage}
+                onReview={() => { onClose(); navigate('/design', { state: { packageId: designPackage.id } }) }}
+              />
+            )
+          }
+          return (
+            <div className="space-y-3">
+              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Design Status</p>
+                    <p className="text-sm font-bold text-indigo-900">{DESIGN_STATUS_LABEL[designPackage.status]}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Responsible</p>
+                    <p className="text-sm font-bold text-indigo-900">{designWorkflowInfo(designPackage.status).responsible}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-indigo-700 mt-1.5">Next: {designWorkflowInfo(designPackage.status).next}</p>
+              </div>
+              {designPackage.rejectionReason && (designPackage.status === 'pc_rejected' || designPackage.status === 'md_rejected') && (
+                <p className="text-xs text-red-600">Revision reason: {designPackage.rejectionReason}</p>
+              )}
+              <button onClick={() => { onClose(); navigate('/design', { state: { packageId: designPackage.id } }) }} className={secondaryBtn}>
+                Review in Design Center →
+              </button>
+            </div>
+          )
+        }
         return (
           <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Advance Amount Received</label>
-              <input type="number" value={advanceAmount} onChange={e => setAdvanceAmount(e.target.value)} placeholder="₹"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3.5">
+              <p className="text-xs font-bold text-emerald-700">Design approved by the client.</p>
+              <p className="text-[12px] text-emerald-600 mt-1">Ready to convert this lead to a project.</p>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Reference (optional)</label>
-              <input value={advanceRef} onChange={e => setAdvanceRef(e.target.value)} placeholder="UTR / cheque no."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-            </div>
-            <button disabled={saving} onClick={submitAdvancePayment} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Confirm Advance Payment → Create Project
+            <button disabled={saving} onClick={submitMarkWon} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+              Mark Won → Create Project
             </button>
           </div>
         )
+      }
       default:
         return <p className="text-sm text-slate-400 py-6 text-center">No action available at this stage.</p>
     }

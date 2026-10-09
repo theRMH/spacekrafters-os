@@ -377,16 +377,16 @@ export function ApprovalSection({ onDecided, range, onPendingCount }: {
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
               </div>
 
-              <div className="space-y-2.5">
+              <div className="flex gap-2.5">
                 <button disabled={rescheduleSaving} onClick={() => handleDecideReschedule(true)}
-                  className="w-full text-left p-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50 active:bg-emerald-100 disabled:opacity-50">
-                  <p className="text-sm font-bold text-emerald-800">Approve</p>
-                  <p className="text-xs text-emerald-600 mt-0.5">Accept the reschedule — moves this lead to Site Visit.</p>
+                  className="flex-1 text-center p-2.5 rounded-2xl bg-emerald-600 active:bg-emerald-700 disabled:opacity-50">
+                  <p className="text-base font-bold text-white">Approve</p>
+                  <p className="text-sm text-white/90 mt-0.5">Confirm the new appointment date — the lead stays at its current stage.</p>
                 </button>
                 <button disabled={rescheduleSaving} onClick={() => handleDecideReschedule(false)}
-                  className="w-full text-left p-4 rounded-2xl border-2 border-red-200 bg-red-50 active:bg-red-100 disabled:opacity-50">
-                  <p className="text-sm font-bold text-red-800">Reject</p>
-                  <p className="text-xs text-red-600 mt-0.5">Reject the reschedule request.</p>
+                  className="flex-1 text-center p-2.5 rounded-2xl bg-red-600 active:bg-red-700 disabled:opacity-50">
+                  <p className="text-base font-bold text-white">Reject</p>
+                  <p className="text-sm text-white/90 mt-0.5">Reject the reschedule request.</p>
                 </button>
               </div>
             </div>

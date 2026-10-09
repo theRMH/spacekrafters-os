@@ -15,6 +15,7 @@ import {
   getAllTaskDependencies, addTaskDependency, deleteTaskDependency,
 } from '../../services/taskService'
 import { addAuditLog } from '../../services/auditLogService'
+import { sendNotification } from '../../utils/notifications'
 import type { Task, TaskStatus, TaskDependency, ManagedUser, AuditLog } from '../../types'
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
@@ -146,6 +147,9 @@ export default function TaskDetailScreen() {
     const result = await upsertTask(sub)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to add subtask.', type: 'error' }); return }
     setTasks(prev => [sub, ...prev])
+    if (subtaskAssigneeId !== user.id) {
+      sendNotification([subtaskAssigneeId], 'New Task Assigned', `${sub.title}. Assigned by ${user.name}.`, `/projects/${sub.projectId}/tasks/${sub.id}`)
+    }
     setSubtaskTitle('')
     setSubtaskAssigneeId('')
     setShowSubtaskSheet(false)
@@ -153,12 +157,15 @@ export default function TaskDetailScreen() {
   }
 
   async function handleReassign() {
-    if (!task || !reassignId) return
+    if (!task || !reassignId || !user) return
     const assignee = users.find(u => u.id === reassignId)
     const updated: Task = { ...task, assigneeId: reassignId, assigneeName: assignee?.fullName, updatedAt: new Date().toISOString() }
     const result = await upsertTask(updated)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to reassign task.', type: 'error' }); return }
     setTasks(prev => prev.map(x => (x.id === updated.id ? updated : x)))
+    if (reassignId !== task.assigneeId && reassignId !== user.id) {
+      sendNotification([reassignId], 'Task Reassigned to You', `${updated.title}. Assigned by ${user.name}.`, `/projects/${updated.projectId}/tasks/${updated.id}`)
+    }
     setShowAssigneeSheet(false)
     setSnack({ open: true, msg: 'Task reassigned.', type: 'success' })
   }

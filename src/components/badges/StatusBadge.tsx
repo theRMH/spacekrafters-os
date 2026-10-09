@@ -46,7 +46,7 @@ const COLORS: Record<string, { bg: string; text: string }> = {
   completed:              { bg: 'bg-emerald-50',  text: 'text-emerald-700' },
   rescheduled:            { bg: 'bg-violet-50',   text: 'text-violet-700'  },
   cancelled:              { bg: 'bg-red-50',      text: 'text-red-700'     },
-  pending:                { bg: 'bg-amber-50',    text: 'text-amber-700'   },
+  pending:                { bg: 'bg-primary-600', text: 'text-white'       },
   done:                   { bg: 'bg-emerald-50',  text: 'text-emerald-700' },
   overdue:                { bg: 'bg-red-50',      text: 'text-red-700'     },
   approved:               { bg: 'bg-emerald-50',  text: 'text-emerald-700' },
@@ -56,6 +56,14 @@ const COLORS: Record<string, { bg: string; text: string }> = {
   client_review:          { bg: 'bg-violet-50',   text: 'text-violet-700'  },
   revision_requested:     { bg: 'bg-amber-50',    text: 'text-amber-700'   },
   paid:                   { bg: 'bg-emerald-50',  text: 'text-emerald-700' },
+  // These four all render a "Pending ..." label (set via each caller's own
+  // label override) and previously fell through to the pale gray default —
+  // same dark-navy treatment as the bare 'pending' status above, for the
+  // same readability reason.
+  pending_pc_review:      { bg: 'bg-primary-600', text: 'text-white'       },
+  internal_review:        { bg: 'bg-primary-600', text: 'text-white'       },
+  pending_qs:             { bg: 'bg-primary-600', text: 'text-white'       },
+  pending_coordinator_approval: { bg: 'bg-primary-600', text: 'text-white' },
 }
 
 interface Props {

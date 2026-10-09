@@ -39,6 +39,12 @@ export function CRMProvider({ children }: { children: ReactNode }) {
     // and refetch if the logged-in user changes.
     if (!isAuthReady) return
     refreshLeads()
+    // Picks up a lead someone else just assigned/reassigned (e.g. MD hands a
+    // lead to a PC from their own session) without the assignee needing to
+    // manually reload — same 30s interval NotificationBell.tsx already polls
+    // notifications at, for consistency.
+    const id = setInterval(refreshLeads, 30000)
+    return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthReady, user?.id])
 

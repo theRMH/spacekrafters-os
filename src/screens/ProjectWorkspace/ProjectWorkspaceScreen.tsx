@@ -17,6 +17,7 @@ import { getAllQuotations } from '../../services/quotationService'
 import { getAllDesignPackages, getAllDesignVersions } from '../../services/designService'
 import { getAllTasks, upsertTask, getAllTaskDependencies } from '../../services/taskService'
 import { getAllDiaryEntries, upsertDiaryEntry } from '../../services/dailyDiaryService'
+import { sendNotification } from '../../utils/notifications'
 import { getAllExpenseRequests } from '../../services/expenseService'
 import { getAllPaymentMilestones, getAllReceipts } from '../../services/financeService'
 import { getAllPunchListItems, upsertPunchListItem } from '../../services/punchListService'
@@ -239,6 +240,9 @@ export default function ProjectWorkspaceScreen() {
     const result = await upsertTask(task)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to add task.', type: 'error' }); return }
     setTasks(prev => [task, ...prev])
+    if (newTaskAssigneeId !== user.id) {
+      sendNotification([newTaskAssigneeId], 'New Task Assigned', `${task.title} — ${project.name}. Assigned by ${user.name}.`, `/projects/${project.id}/tasks/${task.id}`)
+    }
     setNewTaskTitle('')
     setNewTaskAssigneeId('')
     setShowNewTask(false)

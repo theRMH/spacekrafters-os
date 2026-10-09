@@ -16,7 +16,7 @@ import { BUSINESS_DIVISION_LABEL, BUSINESS_CATEGORY_LABEL, BUSINESS_BRAND_LABEL 
 import { getAllRequirements } from '../../services/requirementService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllQuotations, upsertQuotation, deleteQuotation } from '../../services/quotationService'
-import { changeQuotationStatus } from './quotationActions'
+import { changeQuotationStatus, recordQuotationAdvanceDecision } from './quotationActions'
 import { getAllProjects, upsertProject } from '../../services/projectService'
 import { addAuditLog } from '../../services/auditLogService'
 import { downloadQuotationExcel } from '../../utils/quotationExport'
@@ -87,7 +87,7 @@ function fmtDate(val: string): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function fmtCurrency(n: number): string {
+export function fmtCurrency(n: number): string {
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 }
 
@@ -222,13 +222,14 @@ export default function QuotationsScreen() {
   // Best-effort heads-up to the MD(s) that a quotation is waiting on them.
   async function notifyMdPending(q: Quotation, what: string) {
     const mdIds = (await getManagedUsersDirectory()).filter(u => u.role === 'owner' && u.id !== user?.id).map(u => u.id)
-    await sendNotification(mdIds, 'Quotation Pending MD Approval', `${leadName(q.leadId)} — ${fmtCurrency(q.netAmount)}. ${what}`)
+    await sendNotification(mdIds, 'Quotation Pending MD Approval', `${leadName(q.leadId)} — ${fmtCurrency(q.netAmount)}. ${what}`, '/approval')
   }
 
-  // Same, for the new PC review step ahead of MD.
+  // Same, for the new PC review step ahead of MD. PC doesn't have access to
+  // /approval (owner-only) — deep-link straight to this exact quotation.
   async function notifyPcPending(q: Quotation, what: string) {
     const pcIds = (await getManagedUsersDirectory()).filter(u => u.role === 'project_coordinator' && u.id !== user?.id).map(u => u.id)
-    await sendNotification(pcIds, 'Quotation Pending PC Review', `${leadName(q.leadId)} — ${fmtCurrency(q.netAmount)}. ${what}`)
+    await sendNotification(pcIds, 'Quotation Pending PC Review', `${leadName(q.leadId)} — ${fmtCurrency(q.netAmount)}. ${what}`, `/quotations?quotationId=${q.id}`)
   }
 
   async function refresh() {
@@ -255,17 +256,20 @@ export default function QuotationsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routerLocation.state, isLoading])
 
-  // Deep-link from the Approval page's "Review" on a PC-pending quotation —
-  // opens this exact quotation's Detail sheet directly (same pattern as
-  // AppointmentsScreen's appointmentId deep link).
+  // Deep-link from the Approval page's "Review" on a PC-pending quotation, or
+  // from a bell notification's url (?quotationId=... — a plain link can't
+  // carry router state, only a query string) — either way opens this exact
+  // quotation's Detail sheet directly (same pattern as AppointmentsScreen's
+  // appointmentId deep link).
   useEffect(() => {
     const state = routerLocation.state as { quotationId?: string } | null
-    if (!state?.quotationId || isLoading) return
-    const found = quotations.find(q => q.id === state.quotationId)
+    const id = state?.quotationId ?? new URLSearchParams(routerLocation.search).get('quotationId')
+    if (!id || isLoading) return
+    const found = quotations.find(q => q.id === id)
     if (found) setSelected(found)
     navigate(routerLocation.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routerLocation.state, quotations, isLoading])
+  }, [routerLocation.state, routerLocation.search, quotations, isLoading])
 
   function leadName(id: string): string {
     return leads.find(l => l.id === id)?.name ?? id
@@ -497,19 +501,18 @@ export default function QuotationsScreen() {
   // Saves an advance decision on a client-approved quotation, adds it to the
   // quotation's approval history AND the lead's Activity Log (action, date/time
   // and user are stamped on both), and unlocks Design Center for the lead.
+  // Shared with the compact Lead-page card via recordQuotationAdvanceDecision.
   async function saveAdvanceDecision(patch: Partial<Quotation>, label: string, note: string, successMsg: string): Promise<boolean> {
     if (!selected) return false
-    const updated: Quotation = {
-      ...selected, ...patch,
-      statusHistory: [...(selected.statusHistory ?? []), makeHistory(selected.status, label, note)],
-      updatedAt: new Date().toISOString(),
-    }
-    const result = await upsertQuotation(updated)
-    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not save.', type: 'error' }); return false }
-    setQuotations(prev => prev.map(q => (q.id === updated.id ? updated : q)))
-    setSelected(updated)
     const lead = leads.find(l => l.id === selected.leadId)
-    if (lead) await updateLead(lead.id, {}, `${label} — ${note}`)
+    const result = await recordQuotationAdvanceDecision({
+      quotation: selected, patch, label, note,
+      decidedByName: user?.name ?? 'Unknown', decidedByRole: user?.role,
+      lead, updateLead,
+    })
+    if (!result.ok || !result.updated) { setSnack({ open: true, msg: result.error ?? 'Could not save.', type: 'error' }); return false }
+    setQuotations(prev => prev.map(q => (q.id === result.updated!.id ? result.updated! : q)))
+    setSelected(result.updated)
     setSnack({ open: true, msg: successMsg, type: 'success' })
     return true
   }
@@ -575,7 +578,6 @@ export default function QuotationsScreen() {
 
   const filtered = quotations.filter(q => !search || leadName(q.leadId).toLowerCase().includes(search.toLowerCase()))
   const formTotals = computeTotals(sections, discountType, discountValue, transportCost)
-  const formAdvanceTerm = computeAdvanceTerm(formTotals.netAmount, advanceTermOption, advanceTermType, advanceTermValue)
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
@@ -610,6 +612,10 @@ export default function QuotationsScreen() {
               </div>
               <StatusBadge status={q.status} label={QUOTATION_STATUS_LABEL[q.status]} size="xs" />
             </div>
+            <button onClick={e => { e.stopPropagation(); setSelected(q) }}
+              className="w-full mt-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 active:bg-blue-100">
+              Update Status
+            </button>
           </div>
         ))}
 
@@ -696,12 +702,12 @@ export default function QuotationsScreen() {
             </div>
 
             <div className="bg-slate-50 rounded-2xl p-3.5 space-y-1.5">
-              <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.totalAmount)}</span></div>
+              <div className="flex justify-between text-xs"><span className="text-slate-500">Material Cost</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.totalAmount)}</span></div>
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500">Discount{selected.discountType === 'percentage' && selected.discountValue ? ` (${selected.discountValue}%)` : ''}</span>
                 <span className="font-semibold text-slate-700">-{fmtCurrency(selected.discountAmount)}</span>
               </div>
-              <div className="flex justify-between text-xs"><span className="text-slate-500">Taxable Amount</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.taxableAmount ?? selected.totalAmount - selected.discountAmount)}</span></div>
+              <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.taxableAmount ?? selected.totalAmount - selected.discountAmount)}</span></div>
               <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.taxAmount)}</span></div>
               {!!selected.transportCost && (
                 <div className="flex justify-between text-xs"><span className="text-slate-500">Transport Cost</span><span className="font-semibold text-slate-700">{fmtCurrency(selected.transportCost)}</span></div>
@@ -995,9 +1001,9 @@ export default function QuotationsScreen() {
 
               <div className="flex justify-end">
                 <div className="w-56 space-y-1">
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold">{fmtCurrency(selected.totalAmount)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-slate-500">Material Cost</span><span className="font-semibold">{fmtCurrency(selected.totalAmount)}</span></div>
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Discount</span><span className="font-semibold">-{fmtCurrency(selected.discountAmount)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Taxable Amount</span><span className="font-semibold">{fmtCurrency(selected.taxableAmount ?? selected.totalAmount - selected.discountAmount)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold">{fmtCurrency(selected.taxableAmount ?? selected.totalAmount - selected.discountAmount)}</span></div>
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold">{fmtCurrency(selected.taxAmount)}</span></div>
                   {!!selected.transportCost && (
                     <div className="flex justify-between text-xs"><span className="text-slate-500">Transport Cost</span><span className="font-semibold">{fmtCurrency(selected.transportCost)}</span></div>
@@ -1030,12 +1036,12 @@ export default function QuotationsScreen() {
         title={showEdit ? 'Edit Quotation' : 'New Quotation'}
         height="full"
       >
-        <div className="space-y-3">
-          {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
+        <div className="space-y-3.5">
+          {formError && <p className="text-sm text-red-600 font-semibold">{formError}</p>}
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Lead *</label>
+            <label className="text-sm font-semibold text-slate-500 mb-1 block">Lead *</label>
             {showEdit ? (
-              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 opacity-60">
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base text-slate-500 opacity-60">
                 {leadName(leadId)}
               </div>
             ) : (
@@ -1049,31 +1055,31 @@ export default function QuotationsScreen() {
 
           {leadId && (
             <div>
-              <label className="text-xs font-semibold text-slate-500 mb-1 block">Requirement</label>
+              <label className="text-sm font-semibold text-slate-500 mb-1 block">Requirement</label>
               <SearchableSelect
                 value={requirementId} onChange={handleRequirementPick}
                 options={requirementsForLead(leadId).map(r => ({ value: r.id, label: requirementLabel(r) }))}
                 placeholder="None — build sections manually" searchPlaceholder="Search requirements…"
               />
-              <p className="text-[11px] text-slate-400 mt-1">Selecting a requirement pre-fills one section per room with its captured line items (rate defaults to 0).</p>
+              <p className="text-xs text-slate-400 mt-1">Selecting a requirement pre-fills one section per room with its captured line items (rate defaults to 0).</p>
             </div>
           )}
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-slate-500">Sections *</label>
+              <label className="text-sm font-semibold text-slate-500">Sections *</label>
               <button onClick={() => setSections(prev => [...prev, newSection()])}
-                className="text-xs font-semibold text-indigo-600">+ Add Section</button>
+                className="text-sm font-semibold text-indigo-600">+ Add Section</button>
             </div>
             <div className="space-y-3">
               {sections.map(section => {
                 const sectionTotal = section.items.reduce((sum, i) => sum + i.quantity * i.rate, 0)
                 return (
-                  <div key={section.id} className="bg-slate-50 rounded-2xl p-3 space-y-2">
+                  <div key={section.id} className="bg-slate-50 rounded-2xl p-3 space-y-2.5">
                     <div className="flex items-center gap-2">
                       <input value={section.title} onChange={e => updateSectionTitle(section.id, e.target.value)}
                         placeholder="Section title (e.g. Living Room)"
-                        className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:border-indigo-400" />
+                        className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-base font-semibold focus:outline-none focus:border-indigo-400" />
                       {sections.length > 1 && (
                         <button onClick={() => removeSection(section.id)} className="text-red-400 p-1.5">
                           <Trash2 size={15} />
@@ -1087,51 +1093,51 @@ export default function QuotationsScreen() {
                           <div className="flex items-center gap-2">
                             <input value={item.description} onChange={e => updateItem(section.id, item.id, { description: e.target.value })}
                               placeholder="Description"
-                              className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
+                              className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400" />
                             <button onClick={() => removeItem(section.id, item.id)} className="text-red-400 p-1">
                               <Trash2 size={13} />
                             </button>
                           </div>
                           <div className="flex items-end gap-1.5">
                             <div className="w-[18%]">
-                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">Qty</label>
+                              <label className="block text-sm font-semibold text-slate-400 mb-1">Qty</label>
                               <input type="number" min="0" step="0.01" value={item.quantity || ''}
                                 onChange={e => updateItem(section.id, item.id, { quantity: parseFloat(e.target.value) || 0 })}
-                                className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
+                                className="w-full border border-slate-200 rounded-lg px-2 py-2 text-base focus:outline-none focus:border-indigo-400" />
                             </div>
                             <div className="w-[22%]">
-                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">Unit</label>
+                              <label className="block text-sm font-semibold text-slate-400 mb-1">Unit</label>
                               <SearchableSelect compact value={item.unit} onChange={v => updateItem(section.id, item.id, { unit: v })}
                                 options={UNIT_OPTIONS.map(u => ({ value: u, label: u }))} />
                             </div>
                             <div className="w-[20%]">
-                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">Rate</label>
+                              <label className="block text-sm font-semibold text-slate-400 mb-1">Rate</label>
                               <input type="number" min="0" step="0.01" value={item.rate || ''}
                                 onChange={e => updateItem(section.id, item.id, { rate: parseFloat(e.target.value) || 0 })}
-                                className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
+                                className="w-full border border-slate-200 rounded-lg px-2 py-2 text-base focus:outline-none focus:border-indigo-400" />
                             </div>
                             <div className="w-[15%]">
-                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">Tax%</label>
+                              <label className="block text-sm font-semibold text-slate-400 mb-1">Tax%</label>
                               <input type="number" min="0" step="0.01" value={item.taxPercent ?? ''}
                                 onChange={e => updateItem(section.id, item.id, { taxPercent: e.target.value ? parseFloat(e.target.value) : undefined })}
-                                className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400" />
+                                className="w-full border border-slate-200 rounded-lg px-2 py-2 text-base focus:outline-none focus:border-indigo-400" />
                             </div>
                             <div className="w-[25%]">
-                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5 text-right">Amount</label>
-                              <span className="block text-right text-xs font-bold text-slate-700 py-1.5 truncate">{fmtCurrency(item.quantity * item.rate)}</span>
+                              <label className="block text-sm font-semibold text-slate-400 mb-1 text-right">Amount</label>
+                              <span className="block text-right text-base font-bold text-slate-700 py-2 truncate">{fmtCurrency(item.quantity * item.rate)}</span>
                             </div>
                           </div>
                         </div>
                       ))}
                       <button onClick={() => setSections(prev => prev.map(s => (s.id === section.id ? { ...s, items: [...s.items, newLineItem()] } : s)))}
-                        className="text-[11px] font-semibold text-indigo-600">+ Add Line Item</button>
+                        className="text-xs font-semibold text-indigo-600">+ Add Line Item</button>
                     </div>
 
-                    <div className="text-right text-xs font-bold text-slate-700 pt-1">Section total: {fmtCurrency(sectionTotal)}</div>
+                    <div className="text-right text-sm font-bold text-slate-700 pt-1">Section total: {fmtCurrency(sectionTotal)}</div>
 
                     <textarea value={section.notes ?? ''} onChange={e => updateSectionNotes(section.id, e.target.value)}
                       placeholder="Notes for this room/section (optional)" rows={2}
-                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-400 resize-none" />
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
                   </div>
                 )
               })}
@@ -1139,7 +1145,7 @@ export default function QuotationsScreen() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Discount</label>
+            <label className="text-sm font-semibold text-slate-500 mb-1 block">Discount</label>
             <div className="flex gap-2">
               <div className="w-32">
                 <SearchableSelect value={discountType} onChange={v => setDiscountType(v as DiscountType)} options={[
@@ -1150,17 +1156,17 @@ export default function QuotationsScreen() {
               <input type="number" min="0" step="0.01" value={discountValue || ''}
                 onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)}
                 placeholder={discountType === 'percentage' ? 'e.g. 10' : 'e.g. 5000'}
-                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-indigo-400" />
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Applied before tax — tax is calculated on the discounted (taxable) amount.</p>
+            <p className="text-xs text-slate-400 mt-1">Applied before tax — tax is calculated on the discounted (taxable) amount.</p>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Transport Cost</label>
+            <label className="text-sm font-semibold text-slate-500 mb-1 block">Transport Cost</label>
             <input type="number" min="0" step="0.01" value={transportCost || ''}
               onChange={e => setTransportCost(parseFloat(e.target.value) || 0)}
               placeholder="e.g. 5000"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-indigo-400" />
           </div>
 
           <div>
@@ -1169,62 +1175,33 @@ export default function QuotationsScreen() {
           </div>
 
           <div className="bg-slate-50 rounded-2xl p-3.5 space-y-1.5">
-            <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.totalAmount)}</span></div>
-            <div className="flex justify-between text-xs">
+            <div className="flex justify-between text-sm"><span className="text-slate-500">Material Cost</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.totalAmount)}</span></div>
+            <div className="flex justify-between text-sm">
               <span className="text-slate-500">Discount{discountType === 'percentage' && discountValue ? ` (${discountValue}%)` : ''}</span>
               <span className="font-semibold text-slate-700">-{fmtCurrency(formTotals.discountAmount)}</span>
             </div>
-            <div className="flex justify-between text-xs"><span className="text-slate-500">Taxable Amount</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.taxableAmount)}</span></div>
-            <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.taxAmount)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-500">Subtotal</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.taxableAmount)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-500">Tax</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.taxAmount)}</span></div>
             {!!transportCost && (
-              <div className="flex justify-between text-xs"><span className="text-slate-500">Transport Cost</span><span className="font-semibold text-slate-700">{fmtCurrency(transportCost)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-500">Transport Cost</span><span className="font-semibold text-slate-700">{fmtCurrency(transportCost)}</span></div>
             )}
-            <div className="flex justify-between text-sm pt-1.5 border-t border-slate-200"><span className="font-bold text-slate-800">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(formTotals.netAmount)}</span></div>
+            <div className="flex justify-between text-base pt-1.5 border-t border-slate-200"><span className="font-bold text-slate-800">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(formTotals.netAmount)}</span></div>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Advance Payment Option</label>
-            <SearchableSelect value={advanceTermOption} onChange={v => setAdvanceTermOption(v as AdvanceTermOption)} options={[
-              { value: 'with_advance', label: 'With Advance' },
-              { value: 'without_advance', label: 'Without Advance' },
-              { value: 'full_advance', label: 'Full Advance' },
-            ]} placeholder="Not set" />
-            {advanceTermOption === 'with_advance' && (
-              <div className="flex gap-2 mt-2">
-                <div className="w-32">
-                  <SearchableSelect value={advanceTermType} onChange={v => setAdvanceTermType(v as DiscountType)} options={[
-                    { value: 'percentage', label: 'Percentage (%)' },
-                    { value: 'amount', label: 'Amount (₹)' },
-                  ]} />
-                </div>
-                <input type="number" min="0" step="0.01" value={advanceTermValue || ''}
-                  onChange={e => setAdvanceTermValue(parseFloat(e.target.value) || 0)}
-                  placeholder={advanceTermType === 'percentage' ? 'e.g. 50' : 'e.g. 50000'}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-              </div>
-            )}
-            {advanceTermOption && (
-              <div className="flex justify-between text-xs mt-2 bg-slate-50 rounded-xl px-4 py-2.5">
-                <span className="text-slate-500">Advance: <span className="font-semibold text-slate-700">{fmtCurrency(formAdvanceTerm.advanceTermAmount ?? 0)}</span></span>
-                <span className="text-slate-500">Balance: <span className="font-semibold text-slate-700">{fmtCurrency(formAdvanceTerm.advanceTermBalance ?? formTotals.netAmount)}</span></span>
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Terms</label>
+            <label className="text-sm font-semibold text-slate-500 mb-1 block">Terms</label>
             <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={2}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-indigo-400 resize-none" />
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Payment Terms</label>
+            <label className="text-sm font-semibold text-slate-500 mb-1 block">Payment Terms</label>
             <textarea value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} rows={2}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-indigo-400 resize-none" />
           </div>
 
           <button
             onClick={showEdit ? handleUpdateQuotation : handleAddQuotation}
-            className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
+            className="w-full text-white rounded-xl py-3 text-base font-bold active:opacity-90"
             style={{ background: '#C9A24B' }}
           >
             {showEdit ? 'Save Changes' : 'Create Quotation'}

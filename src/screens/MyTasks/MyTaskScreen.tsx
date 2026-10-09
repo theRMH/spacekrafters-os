@@ -169,7 +169,7 @@ export default function MyTaskScreen() {
               {item.note && <p className="text-xs text-slate-500 mt-2 italic break-words">&ldquo;{item.note}&rdquo;</p>}
               {item.person && <p className="text-xs font-semibold text-teal-700 mt-3">Assigned to: {item.person}</p>}
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
-                <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-500">Pending</span>
+                <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-primary-600 text-white">Pending</span>
                 <button onClick={() => (item.leadAction ? setQuickStatusLeadId(item.leadAction.leadId) : navigate(item.linkTo, item.linkToState ? { state: item.linkToState } : undefined))}
                   className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 active:bg-blue-700">
                   Update Status

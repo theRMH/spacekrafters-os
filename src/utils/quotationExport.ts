@@ -19,9 +19,9 @@ export function downloadQuotationExcel(quotation: Quotation, leadName: string) {
   }
 
   rows.push([])
-  rows.push(['', '', '', '', '', 'Subtotal', quotation.totalAmount])
+  rows.push(['', '', '', '', '', 'Material Cost', quotation.totalAmount])
   rows.push(['', '', '', '', '', 'Discount', -quotation.discountAmount])
-  rows.push(['', '', '', '', '', 'Taxable Amount', quotation.taxableAmount ?? quotation.totalAmount - quotation.discountAmount])
+  rows.push(['', '', '', '', '', 'Subtotal', quotation.taxableAmount ?? quotation.totalAmount - quotation.discountAmount])
   rows.push(['', '', '', '', '', 'Tax', quotation.taxAmount])
   if (quotation.transportCost) rows.push(['', '', '', '', '', 'Transport Cost', quotation.transportCost])
   rows.push(['', '', '', '', '', 'Net Amount', quotation.netAmount])

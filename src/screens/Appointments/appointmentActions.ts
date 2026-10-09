@@ -71,18 +71,19 @@ export async function decideAppointmentReschedule(
 }
 
 // The single, centralized reschedule-decision flow — Appointment update
-// (above) + the Lead's own advance-to-Site-Visit side effect + the owner
-// notification, all in one place. This used to be duplicated three ways
-// (LeadStatusSheet.tsx, TasksScreen.tsx's in-page mini-flow, and the old
-// MDTasksScreen.tsx) because the real decision screen kept moving around;
-// now that the Approval page is the single place this decision is made,
-// there's exactly one copy of the field writes to keep correct.
+// (above) + an activity-log entry on the Lead + the owner notification, all
+// in one place. This used to be duplicated three ways (LeadStatusSheet.tsx,
+// TasksScreen.tsx's in-page mini-flow, and the old MDTasksScreen.tsx) because
+// the real decision screen kept moving around; now both the central Approval
+// page and the Lead page's own "Pending MD Approval" section call this same
+// function, so there's exactly one copy of the field writes to keep correct.
 //
-// Deliberately does NOT touch assignedToId/assignedToName/assignedRole —
-// advancing a lead's status never reassigns it to a different person. The
-// lead keeps whoever is currently responsible (its owner, or whoever they
-// explicitly handed it to) until that person — not an automatic stage
-// transition — explicitly hands it to someone else.
+// Deliberately does NOT advance lead.status, approved or not — an accepted
+// reschedule only means the appointment now has a confirmed new date; the
+// lead stays wherever it was (still showing Complete/Rescheduled), and only
+// an explicit "Complete" click ever moves it to Site Visit. Also does not
+// touch assignedToId/assignedToName/assignedRole — the lead keeps whoever is
+// currently responsible until they, or MD, explicitly hand it to someone else.
 export async function decideRescheduleAndAdvanceLead(params: {
   appt: Appointment
   approved: boolean
@@ -96,11 +97,10 @@ export async function decideRescheduleAndAdvanceLead(params: {
   const result = await decideAppointmentReschedule(appt, approved, notes, decidedByName, decidedByRole)
   if (!result.ok || !result.updated) return { ok: false, error: result.error ?? 'Could not record decision.' }
 
-  const advance = approved && lead.status === 'qualified'
   const note = approved
-    ? 'MD accepted the appointment reschedule' + (advance ? ' — site visit scheduled' : '') + (notes.trim() ? `: ${notes.trim()}` : '')
+    ? `MD accepted the appointment reschedule — new date confirmed${notes.trim() ? `: ${notes.trim()}` : ''}`
     : `MD rejected the appointment reschedule${notes.trim() ? `: ${notes.trim()}` : ''}`
-  await updateLead(lead.id, advance ? { status: 'site_visit_scheduled' } : {}, note)
+  await updateLead(lead.id, {}, note)
   if (lead.ownerId) {
     await sendNotification(
       [lead.ownerId],

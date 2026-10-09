@@ -39,4 +39,12 @@ describe('buildMyTaskFeed — Lead bucket', () => {
     const items = buildMyTaskFeed({ user, leads: [lead], ...emptyOpts })
     expect(items.some(i => i.key === 'lead-l1')).toBe(false)
   })
+
+  it('excludes Won/Lost leads even when owned by the user — terminal, nothing left to action', () => {
+    const won = baseLead({ id: 'l2', ownerId: 'u1', status: 'won' })
+    const lost = baseLead({ id: 'l3', ownerId: 'u1', status: 'lost' })
+    const items = buildMyTaskFeed({ user, leads: [won, lost], ...emptyOpts })
+    expect(items.some(i => i.key === 'lead-l2')).toBe(false)
+    expect(items.some(i => i.key === 'lead-l3')).toBe(false)
+  })
 })

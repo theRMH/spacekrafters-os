@@ -320,7 +320,7 @@ export default function SiteVisitsScreen() {
                 </div>
               </div>
               <button onClick={e => { e.stopPropagation(); setQuickStatusLeadId(visit.leadId) }}
-                className="w-full mt-3 py-2 rounded-xl text-xs font-bold text-white active:opacity-90" style={{ background: '#0F2A4A' }}>
+                className="w-full mt-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 active:bg-blue-100">
                 Update Status
               </button>
             </div>
@@ -360,7 +360,7 @@ export default function SiteVisitsScreen() {
                   <div key={room.id} className="bg-slate-50 rounded-2xl p-3.5">
                     <p className="text-sm font-bold text-slate-800 mb-1">{room.name}</p>
                     {room.measurements && <p className="text-xs text-slate-600 mb-1">📏 {room.measurements}</p>}
-                    {room.calculatedTotal && <p className="text-xs font-semibold text-indigo-600 mb-1">Total: {room.calculatedTotal}</p>}
+                    {room.calculatedTotal && <p className="text-xl font-bold text-indigo-600 mb-1">Total: {room.calculatedTotal}</p>}
                     {room.notes && <p className="text-xs text-slate-500">{room.notes}</p>}
                     {room.photos && room.photos.length > 0 && (
                       <MultiFileUploadField label="Room Photos" files={room.photos} onChange={() => {}} accept="image/*" uploadButtonLabel="Upload Photo" readOnly />
@@ -511,7 +511,7 @@ export default function SiteVisitsScreen() {
                       className="w-1/3 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
                   </div>
                   {room.calculatedTotal && (
-                    <p className="text-xs font-semibold text-indigo-600">Total: {room.calculatedTotal}</p>
+                    <p className="text-xl font-bold text-indigo-600">Total: {room.calculatedTotal}</p>
                   )}
                   <input value={room.notes ?? ''} onChange={e => updateRoom(room.id, { notes: e.target.value })}
                     placeholder="Scope of Works (optional)"

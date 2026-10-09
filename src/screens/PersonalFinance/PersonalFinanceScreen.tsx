@@ -62,7 +62,7 @@ const STATUS_OPTIONS: { value: PersonalTransactionStatus; label: string }[] = [
 ]
 const STATUS_LABEL: Record<PersonalTransactionStatus, string> = { pending: 'Pending', cleared: 'Cleared', reconciled: 'Reconciled' }
 const STATUS_TONE: Record<PersonalTransactionStatus, string> = {
-  pending: 'text-amber-600 bg-amber-50', cleared: 'text-slate-500 bg-slate-100', reconciled: 'text-emerald-600 bg-emerald-50',
+  pending: 'text-white bg-primary-600', cleared: 'text-slate-500 bg-slate-100', reconciled: 'text-emerald-600 bg-emerald-50',
 }
 
 // Real cash inflow to the account, vs. an outflow — used for balance math and

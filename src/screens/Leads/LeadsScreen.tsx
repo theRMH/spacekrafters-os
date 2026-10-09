@@ -545,6 +545,28 @@ export default function LeadsScreen() {
     setSnack({ open: true, msg: `${ids.length} lead${ids.length === 1 ? '' : 's'} moved to Lost.`, type: 'success' })
   }
 
+  // Selecting while already viewing the Lost filter means these leads are
+  // already Lost — "Mark Lost" again would be a no-op. The real bulk action
+  // there is permanently removing them, same as the single-lead Permanently
+  // Delete action already on each Lost lead's own detail sheet, just looped.
+  async function confirmBulkPermanentDelete() {
+    if (selectedIds.size === 0) return
+    const ids = [...selectedIds]
+    for (const id of ids) {
+      const result = await permanentlyDeleteLead(id)
+      if (!result.ok) {
+        setShowBulkDeleteConfirm(false)
+        setSnack({ open: true, msg: result.error ?? 'Could not delete all selected leads.', type: 'error' })
+        return
+      }
+    }
+    setShowBulkDeleteConfirm(false)
+    if (selected && ids.includes(selected.id)) setSelected(null)
+    setSelectMode(false)
+    setSelectedIds(new Set())
+    setSnack({ open: true, msg: `${ids.length} lead${ids.length === 1 ? '' : 's'} permanently deleted.`, type: 'success' })
+  }
+
   const liveSelected = selected ? leads.find(l => l.id === selected.id) ?? null : null
 
   const now = useMemo(() => new Date(), [])
@@ -757,7 +779,7 @@ export default function LeadsScreen() {
               <span className="text-sm font-bold text-red-600">{selectedIds.size} selected</span>
               <button onClick={() => setShowBulkDeleteConfirm(true)} disabled={selectedIds.size === 0}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-red-500 active:opacity-90 disabled:opacity-40">
-                <Trash2 size={13} /> Mark Lost
+                <Trash2 size={13} /> {bucketFilter === 'lost' ? 'Delete Permanently' : 'Mark Lost'}
               </button>
             </div>
           </div>
@@ -1064,10 +1086,14 @@ export default function LeadsScreen() {
       <Dialog
         isOpen={showBulkDeleteConfirm}
         onClose={() => setShowBulkDeleteConfirm(false)}
-        title="Mark Selected Leads as Lost"
-        message={`Mark ${selectedIds.size} selected lead${selectedIds.size === 1 ? '' : 's'} as Lost? They move out of the active list into the Lost filter — nothing is deleted, and their history is kept.`}
-        confirmLabel="Mark Lost"
-        onConfirm={confirmBulkDelete}
+        title={bucketFilter === 'lost' ? 'Permanently Delete Selected Leads' : 'Mark Selected Leads as Lost'}
+        message={
+          bucketFilter === 'lost'
+            ? `Permanently delete ${selectedIds.size} selected lead${selectedIds.size === 1 ? '' : 's'}? This removes them and their activity history for good — it cannot be undone and they cannot be recovered.`
+            : `Mark ${selectedIds.size} selected lead${selectedIds.size === 1 ? '' : 's'} as Lost? They move out of the active list into the Lost filter — nothing is deleted, and their history is kept.`
+        }
+        confirmLabel={bucketFilter === 'lost' ? 'Delete Permanently' : 'Mark Lost'}
+        onConfirm={bucketFilter === 'lost' ? confirmBulkPermanentDelete : confirmBulkDelete}
         variant="danger"
       />
 

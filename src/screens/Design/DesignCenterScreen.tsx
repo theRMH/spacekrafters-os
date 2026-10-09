@@ -15,7 +15,7 @@ import { getAllDesignPackages, upsertDesignPackage, getAllDesignVersions, addDes
 import { getAllQuotations } from '../../services/quotationService'
 import { addAuditLog } from '../../services/auditLogService'
 import { approvalHistoryEntry } from '../../utils/approvalHistory'
-import { changeDesignStatus } from './designActions'
+import { changeDesignStatus, buildDesignClientMessage } from './designActions'
 import { ROLE_LABELS } from '../../data/permissions'
 import type { Project, DesignPackage, DesignPackageStatus, DesignVersion, AuditLog, Quotation } from '../../types'
 
@@ -156,15 +156,18 @@ export default function DesignCenterScreen() {
   }, [routerLocation.state, isLoading, canUpload])
 
   // Deep-link from the Approval page's "Review" on a PC-pending design
-  // package — opens this exact package's Detail sheet directly.
+  // package, or from a bell notification's url (?packageId=... — a plain
+  // link can't carry router state, only a query string) — either way opens
+  // this exact package's Detail sheet directly.
   useEffect(() => {
     const state = routerLocation.state as { packageId?: string } | null
-    if (!state?.packageId || isLoading) return
-    const found = packages.find(p => p.id === state.packageId)
+    const id = state?.packageId ?? new URLSearchParams(routerLocation.search).get('packageId')
+    if (!id || isLoading) return
+    const found = packages.find(p => p.id === id)
     if (found) setSelected(found)
     navigate(routerLocation.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routerLocation.state, packages, isLoading])
+  }, [routerLocation.state, routerLocation.search, packages, isLoading])
 
   function projectName(id: string | undefined): string {
     if (!id) return 'Unassigned'
@@ -341,8 +344,7 @@ export default function DesignCenterScreen() {
     const recipientName = lead?.name ?? project?.clientName ?? ''
     const latestVersion = versionsFor(selected.id)[0]
     const docUrls = latestVersion?.files ?? []
-    const message = `Hi ${recipientName}, please review your design "${selected.name}" from SpaceKrafters.`
-      + (docUrls.length > 0 ? ` View here: ${docUrls.join(' ')}` : '')
+    const message = buildDesignClientMessage(selected, recipientName, docUrls)
 
     if (channel === 'whatsapp') {
       const digits = (lead?.phone ?? project?.clientPhone ?? '').replace(/\D/g, '')
@@ -386,6 +388,10 @@ export default function DesignCenterScreen() {
               </div>
               <StatusBadge status={pkg.status} label={DESIGN_STATUS_LABEL[pkg.status]} />
             </div>
+            <button onClick={e => { e.stopPropagation(); setSelected(pkg) }}
+              className="w-full mt-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 active:bg-blue-100">
+              Update Status
+            </button>
           </div>
         ))}
 

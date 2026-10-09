@@ -96,6 +96,10 @@ export function buildMyTaskFeed(opts: {
   // until its first status transition.
   for (const l of leads) {
     if (l.ownerId !== user.id && l.assignedToId !== user.id) continue
+    // Won/Lost are terminal — there is no further status update to make on
+    // them, so they don't belong in an "action needed" feed (they'd sit here
+    // forever as a "Pending" card with nothing to actually do).
+    if (l.status === 'won' || l.status === 'lost') continue
     items.push({
       key: `lead-${l.id}`, at: l.updatedAt,
       title: `Lead: ${LEAD_STATUS_LABEL[l.status]}`, badge: 'Lead', badgeCls: 'bg-sky-50 text-sky-700',
@@ -158,8 +162,15 @@ export function buildMyTaskFeed(opts: {
       title: 'Appointment Today', badge: 'Appointment', badgeCls: 'bg-amber-50 text-amber-700',
       subjectLabel: 'Lead', subject: leadById.get(a.leadId)?.name ?? a.clientName,
       meta: [fmtDateTime(a.scheduledAt), a.location].filter(Boolean),
-      linkTo: '/appointments',
-      linkToState: { appointmentId: a.id },
+      // Completing an appointment is a Lead-level action (LeadStatusSheet's
+      // 'qualified' case Complete/Rescheduled buttons advance the Lead
+      // toward Site Visit) — same reasoning as Site Visits below. A direct
+      // write to sks_appointments here instead hit an RLS wall for any
+      // assignee without INSERT rights on that table (its UPDATE policy is
+      // open, but Supabase's upsert() always evaluates the INSERT policy
+      // too), so route through the Lead the same way Site Visits already do.
+      linkTo: `/leads/${a.leadId}`,
+      leadAction: { leadId: a.leadId },
     })
   }
   for (const v of siteVisits) {

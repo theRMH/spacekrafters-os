@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { decideAppointmentReschedule, updateAppointmentStatus } from './appointmentActions'
+import { decideAppointmentReschedule, decideRescheduleAndAdvanceLead, updateAppointmentStatus } from './appointmentActions'
 import { upsertAppointment } from '../../services/appointmentService'
-import type { Appointment } from '../../types'
+import type { Appointment, Lead } from '../../types'
 
 vi.mock('../../services/appointmentService', () => ({
   upsertAppointment: vi.fn(async () => ({ ok: true })),
@@ -19,6 +19,16 @@ function baseAppointment(overrides: Partial<Appointment> = {}): Appointment {
     scheduledAt: '2026-10-06T09:00:00.000Z', location: 'Chennai',
     coordinatorName: 'Raj Kamal', status: 'scheduled',
     createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function baseLead(overrides: Partial<Lead> = {}): Lead {
+  return {
+    id: 'lead_1', name: 'Test Lead', phone: '9000000000', city: 'Chennai',
+    source: 'walk_in', interest: 'medium', status: 'qualified', ownerName: 'Someone',
+    slaDueAt: '2026-01-01T00:00:00.000Z', activity: [],
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
   }
 }
@@ -58,6 +68,40 @@ describe('decideAppointmentReschedule', () => {
     const appt = baseAppointment({ status: 'rescheduled', rescheduleRequestStatus: 'requested', scheduledAt: '2026-10-06T09:00:00.000Z' })
     const result = await decideAppointmentReschedule(appt, true, '', 'M. Nirmal Kumar', 'owner')
     expect(result.updated?.scheduledAt).toBe('2026-10-06T09:00:00.000Z')
+  })
+})
+
+// Regression coverage for the fix reported via screenshot: approving a
+// reschedule used to also silently push the Lead to 'site_visit_scheduled',
+// removing the Complete/Rescheduled choice. An accepted reschedule only
+// confirms a new appointment date now — lead.status is never written by
+// this function, approved or not.
+describe('decideRescheduleAndAdvanceLead', () => {
+  it('on approve: updates the appointment but never calls updateLead with a status change', async () => {
+    const appt = baseAppointment({
+      status: 'rescheduled', rescheduleRequestStatus: 'requested', rescheduleReason: 'moved',
+      rescheduledDate: '2026-10-10T09:00:00.000Z',
+    })
+    const lead = baseLead({ status: 'qualified' })
+    const updateLead = vi.fn(async (_id: string, _updates: Partial<Lead>, _note?: string) => ({ ok: true }))
+    const result = await decideRescheduleAndAdvanceLead({
+      appt, approved: true, notes: 'Looks fine', lead, decidedByName: 'M. Nirmal Kumar', decidedByRole: 'owner', updateLead,
+    })
+    expect(result.ok).toBe(true)
+    expect(updateLead).toHaveBeenCalledTimes(1)
+    const [, updates] = updateLead.mock.calls[0]
+    expect(updates).not.toHaveProperty('status')
+  })
+
+  it('on reject: still records the decision via updateLead, never touches lead.status', async () => {
+    const appt = baseAppointment({ status: 'rescheduled', rescheduleRequestStatus: 'requested' })
+    const lead = baseLead({ status: 'qualified' })
+    const updateLead = vi.fn(async (_id: string, _updates: Partial<Lead>, _note?: string) => ({ ok: true }))
+    await decideRescheduleAndAdvanceLead({
+      appt, approved: false, notes: '', lead, decidedByName: 'M. Nirmal Kumar', decidedByRole: 'owner', updateLead,
+    })
+    const [, updates] = updateLead.mock.calls[0]
+    expect(updates).not.toHaveProperty('status')
   })
 })
 

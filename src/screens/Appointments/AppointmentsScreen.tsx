@@ -343,7 +343,7 @@ export default function AppointmentsScreen() {
             </div>
             {appt.status === 'scheduled' && canActOnAppointment(appt) && (
               <button onClick={e => { e.stopPropagation(); setSelected(appt) }}
-                className="w-full mt-3 py-2 rounded-xl text-xs font-bold text-white active:opacity-90" style={{ background: '#0F2A4A' }}>
+                className="w-full mt-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 active:bg-blue-100">
                 Update Status
               </button>
             )}

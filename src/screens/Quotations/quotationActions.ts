@@ -67,11 +67,43 @@ export async function changeQuotationStatus(params: {
   return { ok: true, updated }
 }
 
+// Records an advance decision on an already-client-approved quotation
+// ('Proceed with Advance' / 'Proceed without Advance' / recording a payment
+// that arrives later) — a field patch, not a status transition, so it's a
+// separate function from changeQuotationStatus above. Single implementation
+// shared by QuotationsScreen.tsx's own Advance Payment sheet and the
+// compact Lead-page card (QuotationStatusCard.tsx).
+export async function recordQuotationAdvanceDecision(params: {
+  quotation: Quotation
+  patch: Partial<Quotation>
+  label: string
+  note: string
+  decidedByName: string
+  decidedByRole?: UserRole
+  lead?: Lead
+  updateLead?: (id: string, updates: Partial<Lead>, activityNote?: string) => Promise<{ ok: boolean; error?: string }>
+}): Promise<ActionResult> {
+  const { quotation: q, patch, label, note, decidedByName, decidedByRole, lead, updateLead } = params
+  const entry: QuotationStatusHistoryItem = { status: q.status, label, note: note || undefined, by: decidedByName, byRole: decidedByRole, at: new Date().toISOString() }
+  const updated: Quotation = {
+    ...q, ...patch,
+    statusHistory: [...(q.statusHistory ?? []), entry],
+    updatedAt: new Date().toISOString(),
+  }
+  const result = await upsertQuotation(updated)
+  if (!result.ok) return { ok: false, error: result.error }
+  if (lead && updateLead) await updateLead(lead.id, {}, `${label} — ${note}`)
+  return { ok: true, updated }
+}
+
 async function notifyMdPending(q: Quotation, leadLabel?: string) {
   const mdIds = (await getManagedUsersDirectory()).filter(u => u.role === 'owner').map(u => u.id)
-  await sendNotification(mdIds, 'Quotation Pending MD Approval', `${leadLabel ?? q.leadId} — sent to MD for approval.`)
+  await sendNotification(mdIds, 'Quotation Pending MD Approval', `${leadLabel ?? q.leadId} — sent to MD for approval.`, '/approval')
 }
 async function notifyPcPending(q: Quotation, leadLabel?: string) {
   const pcIds = (await getManagedUsersDirectory()).filter(u => u.role === 'project_coordinator').map(u => u.id)
-  await sendNotification(pcIds, 'Quotation Pending PC Review', `${leadLabel ?? q.leadId} — waiting for PC review.`)
+  // PC doesn't have access to /approval (owner-only) — deep-link straight to
+  // this exact quotation instead, via QuotationsScreen's own ?quotationId=
+  // query-param effect.
+  await sendNotification(pcIds, 'Quotation Pending PC Review', `${leadLabel ?? q.leadId} — waiting for PC review.`, `/quotations?quotationId=${q.id}`)
 }

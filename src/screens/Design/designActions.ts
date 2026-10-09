@@ -2,7 +2,7 @@
 // by both DesignCenterScreen.tsx's own Detail sheet and the compact
 // Lead-page status card (DesignStatusCard.tsx), so there is exactly one
 // implementation of the transition + history + notify + Lead-advance logic.
-import { upsertDesignPackage } from '../../services/designService'
+import { updateDesignPackage } from '../../services/designService'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { sendNotification } from '../../utils/notifications'
 import { approvalHistoryEntry } from '../../utils/approvalHistory'
@@ -19,6 +19,14 @@ const DESIGN_HISTORY_LABEL: Partial<Record<DesignPackageStatus, string>> = {
 }
 
 interface ActionResult { ok: boolean; error?: string; updated?: DesignPackage }
+
+// Same message DesignCenterScreen.tsx's own "Send Design to Client" sheet
+// builds — shared so the compact Lead-page card (DesignStatusCard.tsx) sends
+// the exact same text instead of re-deriving it.
+export function buildDesignClientMessage(pkg: DesignPackage, recipientName: string, fileUrls: string[]): string {
+  return `Hi ${recipientName}, please review your design "${pkg.name}" from SpaceKrafters.`
+    + (fileUrls.length > 0 ? ` View here: ${fileUrls.join(' ')}` : '')
+}
 
 export async function changeDesignStatus(params: {
   pkg: DesignPackage
@@ -41,7 +49,7 @@ export async function changeDesignStatus(params: {
     statusHistory: [...(pkg.statusHistory ?? []), approvalHistoryEntry(status, label, user, note)],
     updatedAt: new Date().toISOString(),
   }
-  const result = await upsertDesignPackage(updated)
+  const result = await updateDesignPackage(updated)
   if (!result.ok) return { ok: false, error: result.error }
 
   if (status === 'pending_pc_review') await notifyPcPending(updated, packageLabel, user?.id)
@@ -61,14 +69,16 @@ export async function changeDesignStatus(params: {
 
 async function notifyMdPending(pkg: DesignPackage, packageLabel: string | undefined, excludeId: string | undefined) {
   const mdIds = (await getManagedUsersDirectory()).filter(u => u.role === 'owner' && u.id !== excludeId).map(u => u.id)
-  await sendNotification(mdIds, 'Design Pending MD Approval', `"${pkg.name}" (${packageLabel ?? pkg.leadId ?? pkg.projectId}) is waiting for your approval.`)
+  await sendNotification(mdIds, 'Design Pending MD Approval', `"${pkg.name}" (${packageLabel ?? pkg.leadId ?? pkg.projectId}) is waiting for your approval.`, '/approval')
 }
+// PC doesn't have access to /approval (owner-only) — deep-link straight to
+// this exact package via DesignCenterScreen's own ?packageId= query-param effect.
 async function notifyPcPending(pkg: DesignPackage, packageLabel: string | undefined, excludeId: string | undefined) {
   const pcIds = (await getManagedUsersDirectory()).filter(u => u.role === 'project_coordinator' && u.id !== excludeId).map(u => u.id)
-  await sendNotification(pcIds, 'Design Pending PC Review', `"${pkg.name}" (${packageLabel ?? pkg.leadId ?? pkg.projectId}) is waiting for PC review.`)
+  await sendNotification(pcIds, 'Design Pending PC Review', `"${pkg.name}" (${packageLabel ?? pkg.leadId ?? pkg.projectId}) is waiting for PC review.`, `/design?packageId=${pkg.id}`)
 }
 async function notifyDesignerRevision(pkg: DesignPackage, reason: string, packageLabel: string | undefined, excludeId: string | undefined) {
   const creatorId = (await getManagedUsersDirectory()).find(u => u.fullName === pkg.createdBy)?.id
   if (!creatorId || creatorId === excludeId) return
-  await sendNotification([creatorId], 'Design Sent Back for Revision', `"${pkg.name}" (${packageLabel ?? pkg.leadId ?? pkg.projectId}) needs revision: ${reason}`)
+  await sendNotification([creatorId], 'Design Sent Back for Revision', `"${pkg.name}" (${packageLabel ?? pkg.leadId ?? pkg.projectId}) needs revision: ${reason}`, `/design?packageId=${pkg.id}`)
 }

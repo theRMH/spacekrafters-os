@@ -67,14 +67,14 @@ export function Dialog({ isOpen, onClose, title, message, variant = 'default', c
         </div>
 
         <div className="flex gap-2 px-5 pb-5">
-          <button onClick={onClose} disabled={isConfirming} className="flex-1 bg-slate-100 text-slate-700 rounded-xl py-3 text-sm font-semibold active:bg-slate-200 disabled:opacity-40 disabled:pointer-events-none">
+          <button onClick={onClose} disabled={isConfirming} className="flex-1 flex items-center justify-center bg-slate-100 text-slate-700 rounded-xl py-3 text-xs font-semibold text-center active:bg-slate-200 disabled:opacity-40 disabled:pointer-events-none">
             {cancelLabel}
           </button>
           {onConfirm && (
             <button
               onClick={handleConfirm}
               disabled={confirmDisabled || isConfirming}
-              className={`flex-1 flex items-center justify-center gap-2 text-white rounded-xl py-3 text-sm font-semibold ${cfg.confirmBtn} ${confirmDisabled || isConfirming ? 'opacity-40 pointer-events-none' : ''}`}>
+              className={`flex-1 flex items-center justify-center gap-2 text-white rounded-xl py-3 text-xs font-semibold text-center ${cfg.confirmBtn} ${confirmDisabled || isConfirming ? 'opacity-40 pointer-events-none' : ''}`}>
               {isConfirming && <Loader size={14} className="animate-spin" />}
               {confirmLabel}
             </button>

@@ -18,10 +18,11 @@ interface Props {
   // A pinned extra row at the bottom of the list (e.g. "+ New Client") — kept
   // separate from `options` so it's never filtered out by the search box.
   extraOption?: { value: string; label: string }
-  // Shrinks the trigger to match compact `px-2 py-1.5 text-xs` sibling inputs
-  // in a dense multi-column row (e.g. a line-item's Qty/Unit/Rate/Amount grid)
-  // — the default padding is sized for a full-width field and overflows a
-  // narrow column, truncating the label behind the chevron.
+  // Narrows the trigger's horizontal padding/rounding to fit a dense
+  // multi-column row (e.g. a line-item's Qty/Unit/Rate/Amount grid) — the
+  // default padding is sized for a full-width field and overflows a narrow
+  // column, truncating the label behind the chevron. Height/text size match
+  // the row's sibling inputs (`px-2 py-2 text-base`), not the default field.
   compact?: boolean
 }
 
@@ -142,10 +143,10 @@ export function SearchableSelect({ value, onChange, options, placeholder = '— 
     <>
       <button ref={triggerRef} type="button" onClick={() => setOpen(o => !o)}
         className={`w-full bg-slate-50 border border-slate-200 text-left flex items-center justify-between focus:outline-none focus:border-indigo-400 ${
-          compact ? 'rounded-lg px-2 py-1.5 text-xs gap-1' : 'rounded-xl px-4 py-3 text-sm gap-2'
+          compact ? 'rounded-lg px-2 py-2 text-base gap-1' : 'rounded-xl px-4 py-3 text-sm gap-2'
         }`}>
         <span className={`truncate ${selected ? 'text-slate-800' : 'text-slate-400'}`}>{selected ? selected.label : placeholder}</span>
-        <ChevronDown size={compact ? 13 : 15} className={`text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={15} className={`text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && rect && createPortal(

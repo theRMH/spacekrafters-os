@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell } from 'lucide-react'
+import { Bell, Check } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
-import { getMyNotifications, markNotificationRead } from '../../services/notificationService'
+import { getMyNotifications, markAllNotificationsRead, markNotificationRead } from '../../services/notificationService'
 import type { AppNotification } from '../../types'
 
 const POLL_MS = 30000
@@ -56,6 +56,17 @@ export function NotificationBell() {
     if (n.url) navigate(n.url)
   }
 
+  function handleMarkRead(e: ReactMouseEvent, n: AppNotification) {
+    e.stopPropagation()
+    setItems(prev => prev.map(x => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)))
+    markNotificationRead(n.id)
+  }
+
+  function handleMarkAllRead() {
+    setItems(prev => prev.map(x => (x.readAt ? x : { ...x, readAt: new Date().toISOString() })))
+    markAllNotificationsRead()
+  }
+
   if (!user) return null
   const unreadCount = items.filter(n => !n.readAt).length
 
@@ -76,27 +87,42 @@ export function NotificationBell() {
 
       {open && (
         <div className="absolute right-0 top-11 w-80 max-w-[90vw] max-h-96 overflow-y-auto bg-white rounded-2xl shadow-card border border-slate-200 z-40">
-          <div className="px-4 py-3 border-b border-slate-100">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
             <h3 className="text-sm font-extrabold text-slate-800">Notifications</h3>
+            {unreadCount > 0 && (
+              <button onClick={handleMarkAllRead} className="text-[11px] font-bold text-indigo-600 active:opacity-70 shrink-0">
+                Mark all read
+              </button>
+            )}
           </div>
           {items.length === 0 && (
             <p className="text-sm text-slate-400 text-center py-8">No notifications yet.</p>
           )}
           {items.map(n => (
-            <button
+            <div
               key={n.id}
+              role="button" tabIndex={0}
               onClick={() => handleOpen(n)}
-              className={`w-full text-left px-4 py-3 border-b border-slate-50 last:border-b-0 active:bg-slate-50 ${!n.readAt ? 'bg-blue-50/50' : ''}`}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleOpen(n) }}
+              className={`w-full text-left px-4 py-3 border-b border-slate-50 last:border-b-0 active:bg-slate-50 cursor-pointer ${!n.readAt ? 'bg-blue-50/50' : ''}`}
             >
               <div className="flex items-start gap-2">
                 {!n.readAt && <span className="w-2 h-2 rounded-full bg-blue-600 mt-1.5 shrink-0" />}
                 <div className={`flex-1 min-w-0 ${n.readAt ? 'pl-4' : ''}`}>
-                  <p className={`text-sm break-words ${!n.readAt ? 'font-bold text-slate-800' : 'font-semibold text-slate-600'}`}>{n.title}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className={`text-sm break-words ${!n.readAt ? 'font-bold text-slate-800' : 'font-semibold text-slate-600'}`}>{n.title}</p>
+                    {!n.readAt && (
+                      <button onClick={e => handleMarkRead(e, n)} aria-label="Mark as read"
+                        className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-slate-400 active:bg-slate-100">
+                        <Check size={13} />
+                      </button>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-500 mt-0.5 break-words">{n.body}</p>
                   <p className="text-[12px] text-slate-400 mt-1">{timeAgo(n.createdAt)}</p>
                 </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}

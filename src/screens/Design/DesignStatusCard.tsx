@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DESIGN_STATUS_LABEL, designWorkflowInfo } from './DesignCenterScreen'
-import { changeDesignStatus } from './designActions'
+import { changeDesignStatus, buildDesignClientMessage } from './designActions'
+import { getAllDesignVersions } from '../../services/designService'
 import type { AuthUser, DesignPackage, Lead } from '../../types'
 
 // The compact, Lead-page version of DesignCenterScreen.tsx's own Status
@@ -8,7 +9,7 @@ import type { AuthUser, DesignPackage, Lead } from '../../types'
 // smaller renderer so "Update Status" works without leaving the Lead page.
 export function DesignStatusCard({ pkg, can, user, lead, updateLead, onChanged, onReview }: {
   pkg: DesignPackage
-  can: (p: 'approve_design_pc' | 'approve_design') => boolean
+  can: (p: 'approve_design_pc' | 'approve_design' | 'request_revision') => boolean
   user: AuthUser | null
   lead: Lead
   updateLead: (id: string, updates: Partial<Lead>, activityNote?: string) => Promise<{ ok: boolean; error?: string }>
@@ -19,6 +20,21 @@ export function DesignStatusCard({ pkg, can, user, lead, updateLead, onChanged, 
   const [rejectReason, setRejectReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // Only needed for "Send Design to Client" (the latest version's file links
+  // go in the WhatsApp/email message) — fetched once rather than threading
+  // DesignCenterScreen.tsx's already-loaded `versions` state all the way
+  // down through LeadStatusSheet.tsx just for this one card.
+  const [latestFileUrls, setLatestFileUrls] = useState<string[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    getAllDesignVersions().then(versions => {
+      if (cancelled) return
+      const latest = versions.filter(v => v.designPackageId === pkg.id).sort((a, b) => b.versionNumber - a.versionNumber)[0]
+      setLatestFileUrls(latest?.files ?? [])
+    })
+    return () => { cancelled = true }
+  }, [pkg.id])
 
   async function act(status: DesignPackage['status'], note?: string, labelOverride?: string) {
     setSaving(true)
@@ -32,8 +48,26 @@ export function DesignStatusCard({ pkg, can, user, lead, updateLead, onChanged, 
     onChanged(result.updated)
   }
 
+  // Same behaviour as DesignCenterScreen.tsx's "Send Design to Client" sheet:
+  // opens a real WhatsApp/email draft (nothing auto-sent), then records the
+  // transition to Sent to Client.
+  function handleSendToClient(channel: 'whatsapp' | 'email') {
+    const message = buildDesignClientMessage(pkg, lead.name, latestFileUrls)
+    if (channel === 'whatsapp') {
+      const digits = (lead.phone ?? '').replace(/\D/g, '')
+      if (!digits) { setError('No phone number on file for this client.'); return }
+      const intlPhone = digits.length === 10 ? `91${digits}` : digits
+      window.open(`https://wa.me/${intlPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+    } else {
+      if (!lead.email) { setError('No email on file for this client.'); return }
+      window.location.href = `mailto:${lead.email}?subject=${encodeURIComponent('Your Design from SpaceKrafters')}&body=${encodeURIComponent(message)}`
+    }
+    act('sent_to_client')
+  }
+
   const canPc = can('approve_design_pc')
   const canMd = can('approve_design')
+  const canRequestRevision = can('request_revision')
 
   return (
     <div className="space-y-3">
@@ -87,6 +121,46 @@ export function DesignStatusCard({ pkg, can, user, lead, updateLead, onChanged, 
           className="w-full py-3 rounded-xl text-sm font-bold border border-blue-200 bg-blue-50 text-blue-700 active:bg-blue-100 disabled:opacity-50">
           Resubmit to MD
         </button>
+      )}
+
+      {pkg.status === 'internally_approved' && canMd && (
+        <div className="grid grid-cols-2 gap-2">
+          <button disabled={saving} onClick={() => handleSendToClient('whatsapp')}
+            className="py-3 rounded-xl text-sm font-bold border border-blue-200 bg-blue-50 text-blue-700 active:bg-blue-100 disabled:opacity-50">
+            Send via WhatsApp
+          </button>
+          <button disabled={saving} onClick={() => handleSendToClient('email')}
+            className="py-3 rounded-xl text-sm font-bold border border-blue-200 bg-blue-50 text-blue-700 active:bg-blue-100 disabled:opacity-50">
+            Send via Email
+          </button>
+        </div>
+      )}
+
+      {/* The client's real-world decision, recorded here the same as
+          DesignCenterScreen.tsx's own Status Actions — no reason capture for
+          these three (matches the full screen exactly; Revision Requested
+          vs. Client Rejected is itself the detail). */}
+      {pkg.status === 'sent_to_client' && (canMd || canRequestRevision) && (
+        <div className="flex flex-wrap gap-2">
+          {canMd && (
+            <button disabled={saving} onClick={() => act('client_approved')}
+              className="flex-1 py-3 rounded-xl text-sm font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 active:bg-emerald-100 disabled:opacity-50">
+              Client Approved
+            </button>
+          )}
+          {canRequestRevision && (
+            <button disabled={saving} onClick={() => act('revision_requested')}
+              className="flex-1 py-3 rounded-xl text-sm font-bold border border-amber-200 bg-amber-50 text-amber-700 active:bg-amber-100 disabled:opacity-50">
+              Revision Requested
+            </button>
+          )}
+          {canMd && (
+            <button disabled={saving} onClick={() => act('rejected')}
+              className="flex-1 py-3 rounded-xl text-sm font-bold border border-red-200 bg-red-50 text-red-700 active:bg-red-100 disabled:opacity-50">
+              Client Rejected
+            </button>
+          )}
+        </div>
       )}
 
       {showReject && (

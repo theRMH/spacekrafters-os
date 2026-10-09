@@ -161,6 +161,24 @@ export default function SiteVisitReportScreen() {
                 </div>
               </div>
 
+              {selected.siteChecklist && selected.siteChecklist.length > 0 && (
+                <div>
+                  <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Site Checklist</p>
+                  <div className="bg-white border border-slate-100 rounded-2xl p-3.5 space-y-2">
+                    {selected.siteChecklist.map(item => (
+                      <div key={item.id} className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-slate-600">{item.label}</span>
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                          item.answer === 'yes' ? 'bg-emerald-50 text-emerald-700' : item.answer === 'no' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-400'
+                        }`}>
+                          {item.answer === 'yes' ? 'Yes' : item.answer === 'no' ? 'No' : 'Not answered'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {selected.notes && (
                 <div>
                   <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Notes</p>

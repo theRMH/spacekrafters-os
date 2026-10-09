@@ -29,6 +29,13 @@ export async function markNotificationRead(id: string): Promise<void> {
   await supabase.from(TABLE).update({ read_at: new Date().toISOString() }).eq('id', id)
 }
 
+// RLS already scopes every row to the signed-in user (user_id = sks_my_id()),
+// so this can only ever touch the caller's own unread notifications.
+export async function markAllNotificationsRead(): Promise<void> {
+  if (!supabase) return
+  await supabase.from(TABLE).update({ read_at: new Date().toISOString() }).is('read_at', null)
+}
+
 // One row per recipient — persists what sendNotification() already sends as a
 // push/SMS/WhatsApp alert, so it also survives refresh/logout and is there
 // when the recipient logs in later, not just delivered in the moment.
