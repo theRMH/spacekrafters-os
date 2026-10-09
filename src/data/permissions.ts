@@ -75,6 +75,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_home', 'view_my_tasks',
     'view_leads',
     'view_design', 'upload_design', 'request_revision',
+    // A Designer can be the one personally assigned to attend a site-visit
+    // appointment (Appointment.assignedToIds, independent of the Lead's own
+    // PC/MD assignee) — without these they could reach "Go to Site Visits"
+    // from the Lead page but the /site-visits route itself would reject them.
+    'view_site_visits', 'add_site_visit', 'edit_site_visit',
     'view_tasks', 'complete_task',
     'view_mrf', 'approve_mrf',
     'view_vendors_labour',

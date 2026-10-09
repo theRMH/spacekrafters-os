@@ -1,11 +1,11 @@
 // Shared appointment-mutation helper — the exact same field semantics as
 // MDTasksScreen.tsx's handleDecision(), so the Tasks screen's in-page
 // reschedule-approval mini-flow writes identical data through the identical
-// persistence call (upsertAppointment) rather than inventing any new status
+// persistence call (updateAppointment) rather than inventing any new status
 // or field. Kept as a standalone function rather than refactoring that
 // already-working, already-tested file to import from here — lower risk,
 // same semantics, verified field-by-field against its current code.
-import { upsertAppointment } from '../../services/appointmentService'
+import { updateAppointment } from '../../services/appointmentService'
 import { toProperIso } from './appointmentDate'
 import { sendNotification } from '../../utils/notifications'
 import type { Appointment, AppointmentStatus, Lead, UserRole } from '../../types'
@@ -36,7 +36,7 @@ export async function updateAppointmentStatus(
     }],
     updatedAt: now,
   }
-  const result = await upsertAppointment(updated)
+  const result = await updateAppointment(updated)
   return { ...result, updated: result.ok ? updated : undefined }
 }
 
@@ -66,7 +66,7 @@ export async function decideAppointmentReschedule(
     }],
     updatedAt: now,
   }
-  const result = await upsertAppointment(updated)
+  const result = await updateAppointment(updated)
   return { ...result, updated: result.ok ? updated : undefined }
 }
 

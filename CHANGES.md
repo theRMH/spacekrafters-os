@@ -1,3 +1,54 @@
+## 2026-10-09 (later)
+
+### Fixed: Designer got "You cannot open this page" clicking "Go to Site Visits" from the Lead page
+**Commit:** Uncommitted
+Immediate follow-up to the `'qualified'`-stage appointment-assignee fix — once Fazil could reach the Complete/Reschedule buttons and advance the lead to `site_visit_scheduled`, "Go to Site Visits →" sent him to `/site-visits`, which rejected him: the `designer` role doesn't have the `view_site_visits` permission that route requires.
+- Checked `sks_site_visits`' RLS first — it's fully open (`USING (true)` for select/insert/update), so this was a pure application-permission gap, not a database one (no approval needed, unlike the two still-pending `sks_leads` issues).
+- **Changed:** `src/data/permissions.ts` — added `view_site_visits`, `add_site_visit`, `edit_site_visit` to the `designer` role, matching what `site_engineer` already has. A Designer can be personally assigned to attend a site-visit appointment independent of who owns the Lead, so they need to actually reach the screen and log it.
+- Also widened, in `src/screens/Leads/LeadStatusSheet.tsx`: the earlier `'qualified'`-only appointment-assignee override now also covers `'site_visit_scheduled'` (renamed to `canActViaAppointment`), and `canCompleteSiteVisit` now also accepts the appointment's own assignee — so Fazil doesn't hit "Waiting on Raj Kamal" at this stage either. **Note:** the "Mark Site Visit Done" button itself will still hit the same `sks_leads` RLS gap already reported (designer isn't covered for `status = 'site_visit_scheduled'` there) — covered by the same pending proposed SQL, not yet approved.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### My Tasks now shows upcoming (not just today's) appointments
+**Commit:** Uncommitted
+Reported: after Fazil requested a reschedule and MD approved it (new date: next day), the appointment disappeared from his My Tasks entirely instead of staying visible until that new date arrived. Confirmed with the user: My Tasks should list an assigned appointment from today through its actual scheduled date, not only on the exact day.
+- **Changed:** `src/screens/MyTasks/myTaskFeed.ts` — added `isUpcoming()` (today or later) and swapped it in for the appointment feed item's previous `isToday()`-only check. Title reads "Appointment Today" when it's actually today, "Upcoming Appointment" otherwise, so a future-dated item isn't mislabeled.
+- Confirmed with the user as correct and unchanged: after "Complete" is clicked, the Lead stays with its existing owner/assignee (e.g. the PC) — no automatic reassignment to whoever completed the appointment.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed: "Submit Reschedule" silently did nothing for Mohammed Fazil — same upsert/RLS gap, now closed at the source
+**Commit:** Uncommitted
+Reported live: a Designer assigned to an appointment clicked "Submit Reschedule" on the Lead page and nothing happened. Same root cause flagged (but not yet fixed) two commits ago — `appointmentService.ts`'s only write function, `upsertAppointment()`, requires `sks_appointments`' INSERT policy (owner/admin/project_coordinator only) because Supabase's `.upsert()` is an INSERT…ON CONFLICT DO UPDATE under the hood. `LeadStatusSheet.tsx`'s `submitReschedule()` and both functions in `appointmentActions.ts` (`updateAppointmentStatus`, `decideAppointmentReschedule`) all write through it directly, so any of them could silently no-op (0 rows matched, no error) for a non-owner/admin/PC user — this time it was the reschedule-request flow specifically, after the "Complete" button's own gating was fixed.
+- **Changed:** `src/services/appointmentService.ts` — added `updateAppointment()`, a true `.update().eq('id', ...)` call (no INSERT policy involved), same fix as `designService.ts`'s `updateDesignPackage()` from two commits ago. `upsertAppointment()` kept as-is for genuine appointment creation (`AppointmentsScreen.tsx`'s "New Appointment", still owner/PC-only by design).
+- **Changed:** `src/screens/Appointments/appointmentActions.ts` and `src/screens/Leads/LeadStatusSheet.tsx` — all three status/reschedule-write call sites now use `updateAppointment()` instead of `upsertAppointment()`. `AppointmentsScreen.tsx`'s own "Edit" form (a genuine existing-row update too, but only ever reached by `edit_appointment` holders who already have INSERT rights) was left on `upsertAppointment()` — not reported broken, out of scope for this fix.
+- **Changed:** `src/screens/Appointments/appointmentActions.test.ts` — mock updated to match (`updateAppointment` instead of `upsertAppointment`).
+- No database/schema/RLS change — pure application-layer fix, same pattern as the Design Package one.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Removed: "Go to Site Visits" gate that blocked logging a site visit until its scheduled time arrived
+**Commit:** Uncommitted
+Per explicit request ("unlock this timing") — this was a deliberately-added gate from earlier in the session (confirmed via AskUserQuestion at the time: don't let a site visit be logged before its appointment's actual scheduled date/time). The user has now asked for it removed; "Go to Site Visits →" shows again as soon as no site visit is on record yet, with no date/time check.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — removed the `latestAppointment.scheduledAt > now` branch from `case 'site_visit_scheduled'`; removed the now-unused `fmtDateTime` import (the only remaining appointment-date import, `toProperIso`, is still used elsewhere in the file).
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### DB issue reported, awaiting approval — not yet changed: "Complete" on a Qualified lead silently does nothing for an appointment-assigned Designer
+Mohammed Fazil (role `designer`) can now reach the Complete/Rescheduled buttons (previous fix), but clicking "Complete" has no effect: `sks_leads`' UPDATE RLS policy only allows `designer` to update a lead when `status IN ('internally_approved', 'design_in_progress')` — `'qualified'` isn't covered, so the UPDATE matches 0 rows under RLS and silently no-ops (no error surfaces, which is why it looked like "the button doesn't work"). This is a genuine database-policy gap, not fixable from application code, so per the standing DB-safety rule I've reported the exact proposed SQL to the user and am waiting for explicit approval before touching `supabase/rls-policies.sql` or the live policy:
+```sql
+OR (status = 'qualified' AND EXISTS (
+  SELECT 1 FROM sks_appointments a
+  WHERE a.lead_id = sks_leads.id
+  AND a.data->'assignedToIds' ? sks_my_id()::text
+))
+```
+(added to both `USING` and `WITH CHECK` of `"authenticated update leads"`, scoped to the specific appointment assignee rather than a blanket role grant).
+
+### Fixed: appointment assignee (not the Lead's own assignee) hit "Waiting on {lead owner}" with no way to act
+**Commit:** Uncommitted
+Follow-up to the appointments RLS fix earlier today — routing "Update Status" through the Lead page's `'qualified'` stage avoided the RLS error, but exposed a second problem: Mohammed Fazil was assigned to the *appointment* (`Appointment.assignedToIds`, set independently in `AppointmentsScreen.tsx`), not to the *Lead* (`Lead.assignedToId`/`ownerId`, still Raj Kamal). The Lead sheet's top-level gate only ever checked Lead-level assignment, so he landed on "Waiting on Raj Kamal." with no Complete/Reschedule buttons at all — a dead end, not a fix.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — added `canActOnAppointment` (checks the lead's `latestAppointment.assignedToIds`, the same field `AppointmentsScreen.tsx`'s own `canActOnAppointment` checks). The sheet's outer gate now also lets someone through when `lead.status === 'qualified'` and they're personally assigned to that appointment, even if they're not the Lead's own assignee — scoped to just that one stage, not a blanket widening of `canAct`.
+- No database/schema/RLS change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
 ### Added: Design client-decision actions (Client Approved / Revision Requested / Client Rejected) on the Lead page
 **Commit:** Uncommitted
 Same ask as the previous two — once a design is Sent to Client, the Lead page only showed a read-only reflection; recording the client's real-world decision required opening the full Design Package.

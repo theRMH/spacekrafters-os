@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { decideAppointmentReschedule, decideRescheduleAndAdvanceLead, updateAppointmentStatus } from './appointmentActions'
-import { upsertAppointment } from '../../services/appointmentService'
 import type { Appointment, Lead } from '../../types'
 
 vi.mock('../../services/appointmentService', () => ({
-  upsertAppointment: vi.fn(async () => ({ ok: true })),
+  updateAppointment: vi.fn(async () => ({ ok: true })),
 }))
 // decideRescheduleAndAdvanceLead (added alongside decideAppointmentReschedule
 // in this file) pulls in sendNotification, which transitively imports the

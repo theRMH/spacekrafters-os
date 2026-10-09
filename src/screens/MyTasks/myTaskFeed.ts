@@ -32,6 +32,13 @@ export interface MyTaskItem {
 function isToday(iso: string): boolean {
   return new Date(iso).toDateString() === new Date().toDateString()
 }
+// Today or later — used where a not-yet-happened item should stay visible
+// ahead of its actual date, not just on the day itself (e.g. a rescheduled
+// appointment, so the new date doesn't vanish from My Tasks until it arrives).
+function isUpcoming(iso: string): boolean {
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0)
+  return new Date(iso).getTime() >= startOfToday.getTime()
+}
 function fmtDateTime(iso: string): string {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return '—'
@@ -153,13 +160,16 @@ export function buildMyTaskFeed(opts: {
     })
   }
 
-  // 5. Today's appointments/site visits I'm assigned to.
+  // 5. Today's and upcoming appointments/site visits I'm assigned to — a
+  // rescheduled appointment moved to a future date must stay visible here
+  // (not just reappear once that date becomes "today"), so the assignee
+  // doesn't lose track of it in the meantime.
   for (const a of appointments) {
-    if (a.status === 'cancelled' || !isToday(a.scheduledAt)) continue
+    if (a.status === 'cancelled' || !isUpcoming(a.scheduledAt)) continue
     if (!(a.assignedToIds ?? (a.coordinatorId ? [a.coordinatorId] : [])).includes(user.id)) continue
     items.push({
       key: `appt-${a.id}`, at: a.scheduledAt,
-      title: 'Appointment Today', badge: 'Appointment', badgeCls: 'bg-amber-50 text-amber-700',
+      title: isToday(a.scheduledAt) ? 'Appointment Today' : 'Upcoming Appointment', badge: 'Appointment', badgeCls: 'bg-amber-50 text-amber-700',
       subjectLabel: 'Lead', subject: leadById.get(a.leadId)?.name ?? a.clientName,
       meta: [fmtDateTime(a.scheduledAt), a.location].filter(Boolean),
       // Completing an appointment is a Lead-level action (LeadStatusSheet's

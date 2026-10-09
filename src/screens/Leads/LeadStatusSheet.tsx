@@ -19,9 +19,9 @@ import { DESIGN_STATUS_LABEL, designWorkflowInfo } from '../Design/DesignCenterS
 import { DesignStatusCard } from '../Design/DesignStatusCard'
 import { QUOTATION_STATUS_LABEL, quotationWorkflowInfo } from '../Quotations/QuotationsScreen'
 import { QuotationStatusCard } from '../Quotations/QuotationStatusCard'
-import { getAllAppointments, upsertAppointment } from '../../services/appointmentService'
+import { getAllAppointments, updateAppointment } from '../../services/appointmentService'
 import { decideRescheduleAndAdvanceLead } from '../Appointments/appointmentActions'
-import { toProperIso, fmtDateTime } from '../Appointments/appointmentDate'
+import { toProperIso } from '../Appointments/appointmentDate'
 import { sendNotification } from '../../utils/notifications'
 import type { Appointment, DesignPackage, Lead, LeadStatus, ManagedUser, Quotation } from '../../types'
 
@@ -236,7 +236,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
       rescheduleRequestedAt: now,
       updatedAt: now,
     }
-    const result = await upsertAppointment(updated)
+    const result = await updateAppointment(updated)
     if (result.ok) {
       setLatestAppointment(updated)
       setShowRescheduleForm(false)
@@ -331,19 +331,30 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   // fair game for just anyone — it stays gated to managers until someone
   // explicitly assigns it.
   const canAct = can('edit_lead') || user?.id === effectiveAssigneeId
+  // Wider than canAct, for the 'qualified'/'site_visit_scheduled' stages only
+  // — the appointment's own attendee list (Appointment.assignedToIds, set
+  // independently in AppointmentsScreen.tsx) is who's actually supposed to
+  // confirm/reschedule the appointment and then go log the Site Visit, and
+  // that's frequently NOT the Lead's own assignee (e.g. the PC owns the lead
+  // but assigns a Designer to attend). Without this, that attendee hits
+  // "Waiting on {lead owner}" at both stages with no way to act, even though
+  // My Tasks routes them to this exact sheet for exactly that.
+  const canActOnAppointment = !!(user && latestAppointment && (latestAppointment.assignedToIds ?? []).includes(user.id))
+  const canActViaAppointment = canActOnAppointment && (lead.status === 'qualified' || lead.status === 'site_visit_scheduled')
   // Tighter than canAct — completing the Site Visit step specifically is
-  // reserved for the actual assignee (or the MD), not any edit_lead manager.
-  // A SiteVisit record existing (hasSiteVisit) only means someone logged a
-  // visit; it must never by itself let the wrong person mark the lead's
-  // stage done on the real assignee's behalf.
-  const canCompleteSiteVisit = user?.id === effectiveAssigneeId || user?.role === 'owner'
+  // reserved for the actual assignee (or the MD), not any edit_lead manager —
+  // but also open to the appointment's own attendee (same reasoning as
+  // canActViaAppointment above): a SiteVisit record existing only means
+  // someone logged a visit, so this must never by itself let the wrong
+  // person mark the stage done on the real assignee's behalf.
+  const canCompleteSiteVisit = user?.id === effectiveAssigneeId || user?.role === 'owner' || canActOnAppointment
 
   const btn = 'w-full py-3 rounded-xl text-sm font-bold active:opacity-90 disabled:opacity-50'
   const primaryBtn = `${btn} text-white`
   const secondaryBtn = `${btn} border border-slate-200 bg-white text-slate-600`
 
   function renderBody() {
-    if (!canAct) {
+    if (!canAct && !canActViaAppointment) {
       return (
         <p className="text-sm text-slate-500 py-6 text-center">
           Waiting on {effectiveAssigneeName ?? 'Not Assigned'}.
@@ -481,13 +492,6 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
                   Waiting on {effectiveAssigneeName ?? 'Not Assigned'} to mark the Site Visit done.
                 </p>
               )
-            ) : latestAppointment && new Date(latestAppointment.scheduledAt).getTime() > Date.now() ? (
-              // The appointment hasn't happened yet — logging the Site Visit
-              // (its checklist/photos) only makes sense once the visit itself
-              // has actually taken place, not the moment it's merely scheduled.
-              <p className="text-sm text-slate-500 text-center py-4">
-                Site visit is scheduled for {fmtDateTime(latestAppointment.scheduledAt)} — it can be logged once that time arrives.
-              </p>
             ) : (
               <button onClick={() => { onClose(); navigate('/site-visits', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
                 Go to Site Visits →
