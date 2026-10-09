@@ -59,8 +59,8 @@ export default function MyTaskScreen() {
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   useEffect(() => {
-    (async () => {
-      setIsLoading(true)
+    async function load(showSpinner: boolean) {
+      if (showSpinner) setIsLoading(true)
       const [p, t, m, a, sv, dr, la, er, pr, po, q, dp] = await Promise.all([
         getAllProjects(), getAllTasks(), getAllMRFs(), getAllAppointments(), getAllSiteVisits(),
         getAllDailyReports(), getAllLeaveApplications(), getAllExpenseRequests(),
@@ -69,8 +69,15 @@ export default function MyTaskScreen() {
       setProjects(p); setTasks(t); setMrfs(m); setAppointments(a); setSiteVisits(sv)
       setDailyReports(dr); setLeaveApplications(la); setExpenseRequests(er)
       setPurchaseRequests(pr); setPurchaseOrders(po); setQuotations(q); setDesignPackages(dp)
-      setIsLoading(false)
-    })()
+      if (showSpinner) setIsLoading(false)
+    }
+    load(true)
+    // Picks up a task someone else just assigned (e.g. MD hands a lead/
+    // appointment to a PC) without needing to leave and re-open this page —
+    // same 30s interval CRMContext.tsx already polls `leads` at, for the
+    // sources (appointments, MRFs, quotations, ...) this screen loads itself.
+    const id = setInterval(() => load(false), 30000)
+    return () => clearInterval(id)
   }, [])
 
   const feed = useMemo(() => {

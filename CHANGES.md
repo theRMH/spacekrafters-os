@@ -1,5 +1,41 @@
 ## 2026-10-09 (later)
 
+### ⚠ DEPLOYED: `sks_leads` UPDATE policy extended so an appointment's assignee can complete it — applied directly to Supabase
+**Commit:** Uncommitted (DB change already live)
+The long-pending fix for "Complete"/"Mark Site Visit Done" silently no-op'ing for Mohammed Fazil (role `designer`, personally assigned to the lead's appointment but not the lead itself). Confirmed explicitly by the user ("Yes, apply the SQL now") after being asked twice; applied directly against the live Supabase project via `npx supabase db query --db-url ... --file ...` (verified connectivity and the pre-change policy text matched the repo first, then applied, then re-verified).
+- **DB change (already applied, not a pending migration):** `"authenticated update leads"` policy on `sks_leads` — both `USING` and `WITH CHECK` gained: `OR (status IN ('qualified', 'site_visit_scheduled') AND EXISTS (SELECT 1 FROM sks_appointments a WHERE a.lead_id = id AND a.data->'assignedToIds' ? sks_my_id()))`. Lets whoever is personally assigned to a lead's own appointment advance it through those two stages, regardless of their role — previously only owner/project_coordinator/site_engineer(at site_visit_scheduled)/designer(at internally_approved/design_in_progress)/accounts(at client_approved) could write to a lead at all.
+- **Changed:** `supabase/rls-policies.sql` — updated to match what's now live, so the repo doesn't silently drift from the deployed policy.
+- **Deliberately not changed:** `canCompleteSiteVisit` in `src/screens/Leads/LeadStatusSheet.tsx` stays Lead-assignee/MD-only (reverted two commits ago) — "Mark Site Visit Done" is a separate, already-confirmed product decision (the Lead stays with its owner/PC for that step), not a technical limitation anymore now that the DB permits it too.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean (no app code needed to change for this fix — it was purely a database policy gap).
+
+### Fixed: newly-assigned appointments/tasks didn't appear in My Tasks until the page was left and reopened
+**Commit:** Uncommitted
+Reported: MD assigned a lead/task to Raj Kamal, and it didn't show up in his My Tasks until he navigated away and back. Root cause: `MyTaskScreen.tsx` loads `leads` from `CRMContext` (which already polls every 30s, fixed earlier this session), but loads everything else it needs — projects, tasks, MRFs, appointments, site visits, quotations, design packages — itself, in a `useEffect(() => {...}, [])` that only ever ran once on mount. Any assignment reflected in one of those other sources just sat stale until the component remounted.
+- **Changed:** `src/screens/MyTasks/MyTaskScreen.tsx` — the same data load now also re-runs every 30s in the background (no loading spinner on the background refreshes, only the first load), matching the exact interval `CRMContext.tsx` already uses for leads.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed: Won/Lost leads' old Appointment/Site Visit records kept showing up in "Ready for Next Step"
+**Commit:** Uncommitted
+Reported: Raj Kamal's My Tasks list still showed "Site Visit Today"/"Appointment Today" cards for leads that were already converted (Won). The Lead item (section 2 of the feed) already excludes Won/Lost leads, but the Appointment and Site Visit sections never checked the lead's current status — just the appointment/visit record's own date and assignment — so a stale record from early in an already-finished lead's lifecycle sat in the active list forever.
+- **Changed:** `src/screens/MyTasks/myTaskFeed.ts` — both loops now skip the item when the associated lead's status is `'won'` or `'lost'`, same exclusion the Lead item already has. Scoped to exactly this, per the user's request — nothing else touched.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### My Tasks now sorts by the associated Lead's own recency, not just each item's own timestamp
+**Commit:** Uncommitted
+Per "actually recently used lead order wise first" — items about a Lead someone just worked on should surface together near the top of My Tasks, not get scattered based on each item type's own unrelated timestamp (e.g. an old quotation sitting above a fresh appointment just because the quotation's `updatedAt` was numerically larger).
+- **Changed:** `src/screens/MyTasks/myTaskFeed.ts` — added `MyTaskItem.leadId?: string`, populated on every item that's actually about a Lead (Lead status cards, Appointments, Site Visits, the PC's Quotation/Design review queue, the Designer's revision queue). The final sort now keys lead-tied items by that Lead's own `updatedAt` (most recently touched Lead first); items with no Lead (MRF, project tasks, procurement, leave, daily reports, ...) keep sorting on their own timestamp exactly as before.
+- No database/schema change.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
+### Fixed without a database change: "Mark Site Visit Done" silently did nothing for Fazil
+**Commit:** Uncommitted
+This was the same `sks_leads` RLS gap reported repeatedly — `designer` can't update a lead at `status = 'site_visit_scheduled'`. The user declined the proposed database policy change, so this fixes it a different way: by correcting the gating to match what was already agreed two messages earlier ("the Lead stays with its existing owner/PC, no auto-reassignment to whoever attended the appointment").
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — reverted the previous commit's widening of `canCompleteSiteVisit` to include the appointment's own attendee. "Mark Site Visit Done" goes back to Lead-assignee/MD only — which also happens to be exactly who `sks_leads`' RLS already permits at this status, so there's nothing left to silently fail. Fazil's role stops at "Go to Site Visits" (logging the visit record itself, which only touches `sks_site_visits` — no RLS issue there); once logged, he now correctly sees "Waiting on Raj Kamal to mark the Site Visit done" instead of a button that didn't work. The `'qualified'`/`'site_visit_scheduled'` appointment-assignee override added two commits ago for reaching "Go to Site Visits" in the first place is unaffected and stays as-is.
+- No database/schema/RLS change — the two previously-proposed `sks_leads` policy changes remain unapplied, per the user's answer.
+- **Verified:** `tsc --noEmit`, unit tests (75) and `npm run build` all clean.
+
 ### Fixed: Designer got "You cannot open this page" clicking "Go to Site Visits" from the Lead page
 **Commit:** Uncommitted
 Immediate follow-up to the `'qualified'`-stage appointment-assignee fix — once Fazil could reach the Complete/Reschedule buttons and advance the lead to `site_visit_scheduled`, "Go to Site Visits →" sent him to `/site-visits`, which rejected him: the `designer` role doesn't have the `view_site_visits` permission that route requires.

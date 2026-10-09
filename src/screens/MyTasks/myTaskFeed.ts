@@ -27,6 +27,11 @@ export interface MyTaskItem {
   // on SiteVisitsScreen) — the UI opens LeadStatusSheet inline for this lead
   // instead of navigating anywhere.
   leadAction?: { leadId: string }
+  // The Lead this item is about, when there is one — lets the list sort by
+  // how recently that Lead itself was touched (see the final sort below)
+  // instead of just this item's own timestamp, so everything about a Lead
+  // someone just worked on surfaces together near the top.
+  leadId?: string
 }
 
 function isToday(iso: string): boolean {
@@ -117,6 +122,7 @@ export function buildMyTaskFeed(opts: {
       // reassigned to someone else mid-pipeline.
       person: l.assignedToName ?? l.ownerName,
       linkTo: `/leads/${l.id}`,
+      leadId: l.id,
     })
   }
 
@@ -167,6 +173,11 @@ export function buildMyTaskFeed(opts: {
   for (const a of appointments) {
     if (a.status === 'cancelled' || !isUpcoming(a.scheduledAt)) continue
     if (!(a.assignedToIds ?? (a.coordinatorId ? [a.coordinatorId] : [])).includes(user.id)) continue
+    // Same Won/Lost exclusion the Lead item (section 2) already applies —
+    // an old appointment record on a lead that's since been fully converted
+    // or lost has nothing left to act on; without this it sat here forever.
+    const apptLead = leadById.get(a.leadId)
+    if (apptLead?.status === 'won' || apptLead?.status === 'lost') continue
     items.push({
       key: `appt-${a.id}`, at: a.scheduledAt,
       title: isToday(a.scheduledAt) ? 'Appointment Today' : 'Upcoming Appointment', badge: 'Appointment', badgeCls: 'bg-amber-50 text-amber-700',
@@ -181,11 +192,14 @@ export function buildMyTaskFeed(opts: {
       // too), so route through the Lead the same way Site Visits already do.
       linkTo: `/leads/${a.leadId}`,
       leadAction: { leadId: a.leadId },
+      leadId: a.leadId,
     })
   }
   for (const v of siteVisits) {
     if (!isToday(v.visitDate)) continue
     if (!(v.teamMemberIds ?? []).includes(user.id)) continue
+    const visitLead = leadById.get(v.leadId)
+    if (visitLead?.status === 'won' || visitLead?.status === 'lost') continue
     items.push({
       key: `sv-${v.id}`, at: v.visitDate,
       title: 'Site Visit Today', badge: 'Site Visit', badgeCls: 'bg-purple-50 text-purple-700',
@@ -195,6 +209,7 @@ export function buildMyTaskFeed(opts: {
       // canCompleteSiteVisit), not anything on SiteVisitsScreen itself.
       linkTo: `/leads/${v.leadId}`,
       leadAction: { leadId: v.leadId },
+      leadId: v.leadId,
     })
   }
 
@@ -282,6 +297,7 @@ export function buildMyTaskFeed(opts: {
         meta: [lead?.leadNumber ? `ID: ${lead.leadNumber}` : '', `v${q.version}`, fmtCurrency(q.netAmount)].filter(Boolean),
         note: q.status === 'md_rejected' ? q.rejectionReason : undefined,
         linkTo: '/quotations',
+        leadId: q.leadId,
       })
     }
     for (const p of designPackages ?? []) {
@@ -295,6 +311,7 @@ export function buildMyTaskFeed(opts: {
         meta: [`Package: ${p.name}`],
         note: p.status === 'md_rejected' ? p.rejectionReason : undefined,
         linkTo: '/design',
+        leadId: p.leadId,
       })
     }
   }
@@ -316,9 +333,21 @@ export function buildMyTaskFeed(opts: {
         meta: [`Package: ${p.name}`],
         note: p.rejectionReason,
         linkTo: '/design',
+        leadId: p.leadId,
       })
     }
   }
 
-  return items.sort((a, b) => b.at.localeCompare(a.at))
+  // Lead-tied items sort by how recently that Lead itself was last touched
+  // (its updatedAt), not just this item's own timestamp — so every open
+  // action on a Lead someone just worked surfaces together near the top,
+  // instead of e.g. an old quotation sitting above today's fresh appointment
+  // just because the quotation's own updatedAt happens to be larger. Items
+  // with no Lead (MRF, project tasks, procurement, leave, ...) keep sorting
+  // on their own `at` as before.
+  function sortKey(item: MyTaskItem): string {
+    if (!item.leadId) return item.at
+    return leadById.get(item.leadId)?.updatedAt ?? item.at
+  }
+  return items.sort((a, b) => sortKey(b).localeCompare(sortKey(a)))
 }

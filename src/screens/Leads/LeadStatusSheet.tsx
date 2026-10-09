@@ -342,12 +342,13 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   const canActOnAppointment = !!(user && latestAppointment && (latestAppointment.assignedToIds ?? []).includes(user.id))
   const canActViaAppointment = canActOnAppointment && (lead.status === 'qualified' || lead.status === 'site_visit_scheduled')
   // Tighter than canAct — completing the Site Visit step specifically is
-  // reserved for the actual assignee (or the MD), not any edit_lead manager —
-  // but also open to the appointment's own attendee (same reasoning as
-  // canActViaAppointment above): a SiteVisit record existing only means
-  // someone logged a visit, so this must never by itself let the wrong
-  // person mark the stage done on the real assignee's behalf.
-  const canCompleteSiteVisit = user?.id === effectiveAssigneeId || user?.role === 'owner' || canActOnAppointment
+  // reserved for the actual Lead assignee (or the MD), deliberately NOT the
+  // appointment's own attendee: the user confirmed the Lead stays with its
+  // existing owner/PC for this step rather than auto-handing it to whoever
+  // attended, and sks_leads' RLS only grants a designer write access at
+  // 'internally_approved'/'design_in_progress' anyway — not here — so this
+  // also avoids a write that would silently fail for that attendee.
+  const canCompleteSiteVisit = user?.id === effectiveAssigneeId || user?.role === 'owner'
 
   const btn = 'w-full py-3 rounded-xl text-sm font-bold active:opacity-90 disabled:opacity-50'
   const primaryBtn = `${btn} text-white`

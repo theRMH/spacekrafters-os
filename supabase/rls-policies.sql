@@ -155,6 +155,12 @@ CREATE POLICY "authenticated insert leads" ON sks_leads
   FOR INSERT TO authenticated
   WITH CHECK (sks_has_role('owner') OR sks_has_role('admin') OR sks_has_role('project_coordinator'));
 
+-- The last OR clause (added later) additionally lets whoever is personally
+-- assigned to a lead's own appointment (Appointment.assignedToIds, set
+-- independently of the lead's PC/MD owner in AppointmentsScreen.tsx) advance
+-- it through the 'qualified'/'site_visit_scheduled' stages they're actually
+-- responsible for — e.g. a Designer attending a site-visit appointment, who
+-- otherwise has no role-based write access to the lead at all at that status.
 CREATE POLICY "authenticated update leads" ON sks_leads
   FOR UPDATE TO authenticated
   USING (
@@ -163,11 +169,21 @@ CREATE POLICY "authenticated update leads" ON sks_leads
     OR (sks_has_role('site_engineer') AND status = 'site_visit_scheduled')
     OR (sks_has_role('designer') AND status IN ('internally_approved', 'design_in_progress'))
     OR (sks_has_role('accounts') AND status = 'client_approved')
+    OR (status IN ('qualified', 'site_visit_scheduled') AND EXISTS (
+      SELECT 1 FROM sks_appointments a
+      WHERE a.lead_id = id
+      AND a.data->'assignedToIds' ? sks_my_id()
+    ))
   )
   WITH CHECK (
     sks_has_role('owner')
     OR (sks_has_role('project_coordinator') AND (owner_id = sks_my_id() OR owner_id IS NULL))
     OR sks_has_role('site_engineer') OR sks_has_role('designer') OR sks_has_role('accounts')
+    OR (status IN ('qualified', 'site_visit_scheduled') AND EXISTS (
+      SELECT 1 FROM sks_appointments a
+      WHERE a.lead_id = id
+      AND a.data->'assignedToIds' ? sks_my_id()
+    ))
   );
 
 CREATE POLICY "authenticated delete leads owner only" ON sks_leads
