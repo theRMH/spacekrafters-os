@@ -1,5 +1,14 @@
 ## 2026-10-15
 
+### Added: MD edit for Daily Diary, Daily Tasks and Task details
+**Commit:** Uncommitted  ·  **⚠ DEPLOY** only for Daily Diary delete (needs `supabase/owner-edit-policies.sql`); everything else works without it
+- **Changed:** `DailyDiaryScreen.tsx` + `dailyDiaryService.ts` — owner can edit an entry (reuses the New Entry form) and delete it. `deleteDiaryEntry()` checks a row was really removed, since without the owner DELETE policy Postgres returns success with 0 rows. Both write to the audit log.
+- **Changed:** `DailyTasksScreen.tsx` — owner gets Edit next to Remove on each assigned task (title, notes, date; past dates allowed when editing).
+- **Changed:** `TaskDetailScreen.tsx` — owner can edit a task's title, description and deadline (status and assignee were already changeable).
+- **Changed:** `AuditLogScreen.tsx` — labels for `diary_entry_edited`, `diary_entry_deleted`, `task_edited`.
+- **Already covered, no change needed:** Leads, Appointments, Follow-ups, Site Visits, Requirements, Quotations, Projects, Clients (existing owner edit/delete), Attendance (existing edit), Daily Reports.
+- **Verified:** `tsc --noEmit` and unit tests (75) pass.
+
 ### Added: MD edit across Procurement, Finance, MRF and Product Sales
 **Commit:** Uncommitted  ·  no DB changes needed (the owner already has INSERT/UPDATE rights on these tables)
 - **Changed:** `ExpenseRequestScreen.tsx`, `PayablesScreen.tsx`, `ReceivablesScreen.tsx` — owner sees "Edit … (MD)" in the detail sheet; it reopens the create form with the record filled in. The amount locks once a payment/receipt is recorded, because it is tied to the cashflow entries already posted. Each edit writes an audit-log entry.

@@ -68,12 +68,41 @@ export default function DailyTasksScreen() {
   const [notes, setNotes] = useState('')
   const [date, setDate] = useState(todayKey)
   const [deleteTarget, setDeleteTarget] = useState<DailyTask | null>(null)
+  // Set while the MD is editing an already-assigned task in the same form.
+  const [editingTask, setEditingTask] = useState<DailyTask | null>(null)
 
   function openAssign(member: ManagedUser) {
     setAssignTarget(member)
+    setEditingTask(null)
     setTitle('')
     setNotes('')
     setDate(todayKey)
+  }
+
+  function startEdit(task: DailyTask) {
+    setEditingTask(task)
+    setTitle(task.title); setNotes(task.notes ?? ''); setDate(task.date)
+  }
+
+  function cancelEdit() {
+    setEditingTask(null)
+    setTitle(''); setNotes(''); setDate(todayKey)
+  }
+
+  async function handleSaveEdit() {
+    if (!editingTask) return
+    if (!title.trim()) { setSnack({ open: true, msg: 'Enter what to assign.', type: 'error' }); return }
+    const original = editingTask
+    const updated: DailyTask = { ...original, title: title.trim(), notes: notes.trim() || undefined, date, updatedAt: new Date().toISOString() }
+    setTasks(prev => prev.map(t => (t.id === updated.id ? updated : t)))
+    cancelEdit()
+    const result = await upsertDailyTask(updated)
+    if (!result.ok) {
+      setTasks(prev => prev.map(t => (t.id === original.id ? original : t)))
+      setSnack({ open: true, msg: result.error ?? 'Could not update task.', type: 'error' })
+      return
+    }
+    setSnack({ open: true, msg: 'Task updated.', type: 'success' })
   }
 
   async function handleAssign() {
@@ -152,6 +181,12 @@ export default function DailyTasksScreen() {
             </button>
           )}
           {opts.canManage && (
+            <button onClick={() => startEdit(task)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 active:opacity-70">
+              Edit
+            </button>
+          )}
+          {opts.canManage && (
             <button onClick={() => setDeleteTarget(task)}
               className="flex items-center gap-1.5 text-xs font-semibold text-red-500 active:opacity-70">
               <Trash2 size={13} /> Remove
@@ -222,7 +257,7 @@ export default function DailyTasksScreen() {
       <BottomSheet isOpen={!!assignTarget} onClose={() => setAssignTarget(null)} title={assignTarget?.fullName ?? ''} height="full">
         <div className="space-y-4 pb-4">
           <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-            <p className="text-xs font-bold text-slate-700">Assign a new task</p>
+            <p className="text-xs font-bold text-slate-700">{editingTask ? 'Edit task' : 'Assign a new task'}</p>
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Task *</label>
               <input value={title} onChange={e => setTitle(e.target.value)}
@@ -236,12 +271,15 @@ export default function DailyTasksScreen() {
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Date</label>
-              <DateField value={date} min={todayKey}
-                onChange={v => setDate(v < todayKey ? todayKey : v)} />
+              <DateField value={date} min={editingTask ? undefined : todayKey}
+                onChange={v => setDate(!editingTask && v < todayKey ? todayKey : v)} />
             </div>
-            <button onClick={handleAssign} className="w-full py-3 rounded-xl text-white text-sm font-bold active:opacity-90" style={{ background: '#0F2A4A' }}>
-              Assign Task
+            <button onClick={editingTask ? handleSaveEdit : handleAssign} className="w-full py-3 rounded-xl text-white text-sm font-bold active:opacity-90" style={{ background: '#0F2A4A' }}>
+              {editingTask ? 'Save Changes' : 'Assign Task'}
             </button>
+            {editingTask && (
+              <button onClick={cancelEdit} className="w-full py-2 text-xs font-semibold text-slate-500">Cancel edit</button>
+            )}
           </div>
 
           <div className="space-y-2.5">

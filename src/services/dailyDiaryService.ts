@@ -10,6 +10,16 @@ export async function getAllDiaryEntries(): Promise<DailyDiaryEntry[]> {
   return data.map(r => r.data as DailyDiaryEntry)
 }
 
+// Needs the owner DELETE policy in supabase/owner-edit-policies.sql — without it
+// Postgres silently deletes 0 rows and returns no error, so confirm a row went.
+export async function deleteDiaryEntry(id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Not configured.' }
+  const { data, error } = await supabase.from(TABLE).delete().eq('id', id).select('id')
+  if (error) return { ok: false, error: error.message }
+  if (!data || data.length === 0) return { ok: false, error: 'Delete was blocked by the database (owner delete policy not applied yet).' }
+  return { ok: true }
+}
+
 export async function upsertDiaryEntry(entry: DailyDiaryEntry): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: 'Not configured.' }
   const { error } = await supabase.from(TABLE).upsert({

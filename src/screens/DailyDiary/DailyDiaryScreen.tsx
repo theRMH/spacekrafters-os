@@ -9,8 +9,10 @@ import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { Snackbar } from '../../components/feedback/Snackbar'
+import { Dialog } from '../../components/feedback/Dialog'
 import { getAllProjects } from '../../services/projectService'
-import { getAllDiaryEntries, upsertDiaryEntry } from '../../services/dailyDiaryService'
+import { getAllDiaryEntries, upsertDiaryEntry, deleteDiaryEntry } from '../../services/dailyDiaryService'
+import { addAuditLog } from '../../services/auditLogService'
 import type { Project, DailyDiaryEntry } from '../../types'
 
 function fmtDate(val: string): string {
@@ -41,6 +43,9 @@ export default function DailyDiaryScreen() {
   const [blockers, setBlockers] = useState('')
   const [photos, setPhotos] = useState<string[]>([])
   const [formError, setFormError] = useState('')
+  // MD-only: editing an existing entry reuses the New Entry form; delete asks first.
+  const [editingEntry, setEditingEntry] = useState<DailyDiaryEntry | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   async function refresh() {
     setIsLoading(true)
@@ -67,7 +72,35 @@ export default function DailyDiaryScreen() {
 
   function openNew() {
     resetForm()
+    setEditingEntry(null)
     setShowNew(true)
+  }
+
+  function openEdit(entry: DailyDiaryEntry) {
+    setEditingEntry(entry)
+    setProjectId(entry.projectId); setDate(entry.date); setWorkDone(entry.workDone)
+    setBlockers(entry.blockers ?? ''); setPhotos(entry.photos); setFormError('')
+    setShowNew(true)
+  }
+
+  function mdAudit(action: string, description: string, projectIdForLog: string) {
+    if (!user) return
+    addAuditLog({
+      id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      projectId: projectIdForLog, action, description,
+      createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+    })
+  }
+
+  async function confirmDelete() {
+    if (!selected) return
+    setShowDeleteDialog(false)
+    const result = await deleteDiaryEntry(selected.id)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete diary entry.', type: 'error' }); return }
+    mdAudit('diary_entry_deleted', `Daily diary entry for "${projectName(selected.projectId)}" on ${fmtDate(selected.date)} deleted by MD.`, selected.projectId)
+    setEntries(prev => prev.filter(e => e.id !== selected.id))
+    setSelected(null)
+    setSnack({ open: true, msg: 'Diary entry deleted.', type: 'success' })
   }
 
   async function handleAddEntry() {
@@ -77,22 +110,28 @@ export default function DailyDiaryScreen() {
     }
     const now = new Date().toISOString()
     const entry: DailyDiaryEntry = {
-      id: `diary_${Date.now()}`,
+      id: editingEntry?.id ?? `diary_${Date.now()}`,
       projectId,
       date,
       workDone: workDone.trim(),
       blockers: blockers.trim() || undefined,
       photos,
-      createdBy: user?.id ?? '',
-      createdByName: user?.name ?? '',
-      createdAt: now,
+      createdBy: editingEntry?.createdBy ?? user?.id ?? '',
+      createdByName: editingEntry?.createdByName ?? user?.name ?? '',
+      createdAt: editingEntry?.createdAt ?? now,
       updatedAt: now,
     }
     const result = await upsertDiaryEntry(entry)
     if (!result.ok) { setFormError(result.error ?? 'Could not save diary entry.'); return }
-    setEntries(prev => [entry, ...prev])
+    if (editingEntry) {
+      setEntries(prev => prev.map(e => (e.id === entry.id ? entry : e)))
+      setSelected(prev => (prev?.id === entry.id ? entry : prev))
+      mdAudit('diary_entry_edited', `Daily diary entry for "${projectName(entry.projectId)}" on ${fmtDate(entry.date)} edited by MD.`, entry.projectId)
+    } else {
+      setEntries(prev => [entry, ...prev])
+    }
     setShowNew(false)
-    setSnack({ open: true, msg: 'Diary entry saved!', type: 'success' })
+    setSnack({ open: true, msg: editingEntry ? 'Diary entry updated.' : 'Diary entry saved!', type: 'success' })
   }
 
   const filtered = entries.filter(e => !search || projectName(e.projectId).toLowerCase().includes(search.toLowerCase()))
@@ -137,7 +176,7 @@ export default function DailyDiaryScreen() {
       </div>
 
       {/* Entry Detail Sheet */}
-      <BottomSheet isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `${projectName(selected.projectId)} — ${fmtDate(selected.date)}` : ''} height="full">
+      <BottomSheet isOpen={!!selected && !showNew} onClose={() => setSelected(null)} title={selected ? `${projectName(selected.projectId)} — ${fmtDate(selected.date)}` : ''} height="full">
         {selected && (
           <div className="space-y-4">
             <div>
@@ -157,12 +196,24 @@ export default function DailyDiaryScreen() {
               </div>
             )}
             <p className="text-[12px] text-slate-400">Logged by {selected.createdByName}</p>
+            {user?.role === 'owner' && (
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => openEdit(selected)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 active:bg-slate-50">
+                  Edit Entry (MD)
+                </button>
+                <button onClick={() => setShowDeleteDialog(true)}
+                  className="flex-1 py-2.5 rounded-xl border border-red-200 bg-red-50 text-xs font-bold text-red-600 active:bg-red-100">
+                  Delete Entry
+                </button>
+              </div>
+            )}
           </div>
         )}
       </BottomSheet>
 
       {/* New Entry Sheet */}
-      <BottomSheet isOpen={showNew} onClose={() => setShowNew(false)} title="New Diary Entry" height="full">
+      <BottomSheet isOpen={showNew} onClose={() => setShowNew(false)} title={editingEntry ? 'Edit Diary Entry' : 'New Diary Entry'} height="full">
         <div className="space-y-3">
           {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
           <div>
@@ -193,10 +244,20 @@ export default function DailyDiaryScreen() {
             className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
             style={{ background: '#C9A24B' }}
           >
-            Save Entry
+            {editingEntry ? 'Save Changes' : 'Save Entry'}
           </button>
         </div>
       </BottomSheet>
+
+      <Dialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        title="Delete Diary Entry"
+        message="Delete this diary entry? This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        variant="danger"
+      />
 
       <Snackbar
         isOpen={snack.open}

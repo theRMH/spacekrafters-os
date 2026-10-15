@@ -9,6 +9,7 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { DateField } from '../../components/forms/DateField'
 import { getManagedUsersDirectory } from '../../services/userService'
 import {
   getAllTasks, upsertTask,
@@ -61,6 +62,11 @@ export default function TaskDetailScreen() {
   const [showAssigneeSheet, setShowAssigneeSheet] = useState(false)
   const [reassignId, setReassignId] = useState('')
   const [showDepSheet, setShowDepSheet] = useState(false)
+  // MD-only: edit title / description / deadline.
+  const [showEditSheet, setShowEditSheet] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editDeadline, setEditDeadline] = useState('')
   const [depTaskId, setDepTaskId] = useState('')
 
   async function refresh() {
@@ -135,6 +141,33 @@ export default function TaskDetailScreen() {
     setTasks(prev => prev.map(x => (x.id === updated.id ? updated : x)))
     setShowLateReasonDialog(false)
     setSnack({ open: true, msg: 'Task marked completed.', type: 'success' })
+  }
+
+  function openEditDetails() {
+    if (!task) return
+    setEditTitle(task.title); setEditDescription(task.description ?? ''); setEditDeadline(task.deadline?.slice(0, 10) ?? '')
+    setShowEditSheet(true)
+  }
+
+  async function handleSaveDetails() {
+    if (!task || !user) return
+    if (!editTitle.trim()) { setSnack({ open: true, msg: 'Title is required.', type: 'error' }); return }
+    const updated: Task = {
+      ...task, title: editTitle.trim(), description: editDescription.trim() || undefined,
+      deadline: editDeadline || undefined, updatedAt: new Date().toISOString(),
+    }
+    const result = await upsertTask(updated)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to update task.', type: 'error' }); return }
+    addAuditLog({
+      id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      projectId: updated.projectId,
+      action: 'task_edited',
+      description: `Task "${task.title}" edited by MD.`,
+      createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+    })
+    setTasks(prev => prev.map(x => (x.id === updated.id ? updated : x)))
+    setShowEditSheet(false)
+    setSnack({ open: true, msg: 'Task updated.', type: 'success' })
   }
 
   async function handleAddSubtask() {
@@ -222,6 +255,11 @@ export default function TaskDetailScreen() {
           <StatusBadge status={task.status} />
         </div>
         {task.description && <p className="text-xs text-slate-500">{task.description}</p>}
+        {user?.role === 'owner' && (
+          <button onClick={openEditDetails} className="mt-2 text-xs font-semibold text-indigo-600 active:opacity-70">
+            Edit task details (MD)
+          </button>
+        )}
       </div>
 
       <div className="px-4 pt-4 space-y-4">
@@ -368,6 +406,28 @@ export default function TaskDetailScreen() {
       </BottomSheet>
 
       {/* Mandatory late-reason dialog */}
+      <BottomSheet isOpen={showEditSheet} onClose={() => setShowEditSheet(false)} title="Edit Task">
+        <div className="space-y-3 pb-4">
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Title *</label>
+            <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Description</label>
+            <textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={3}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Deadline</label>
+            <DateField value={editDeadline} onChange={setEditDeadline} />
+          </div>
+          <button onClick={handleSaveDetails} className="w-full py-3 rounded-xl text-white text-sm font-bold active:opacity-90" style={{ background: '#0F2A4A' }}>
+            Save Changes
+          </button>
+        </div>
+      </BottomSheet>
+
       <Dialog
         isOpen={showLateReasonDialog}
         onClose={() => setShowLateReasonDialog(false)}
