@@ -921,6 +921,8 @@ export default function LeadsScreen() {
           onClose={() => setShowStatusSheet(false)}
           lead={liveSelected}
           onDone={(msg) => setSnack({ open: true, msg, type: 'success' })}
+          // Follow the lead: switch the sort (chips + sidebar Lead Sort) to the bucket it just moved into.
+          onStatusChanged={status => navigate(`/leads?bucket=${leadBucket({ ...liveSelected, status }, appointments)}`, { replace: true })}
         />
       )}
 
@@ -932,6 +934,7 @@ export default function LeadsScreen() {
             onClose={() => setQuickStatusLeadId(null)}
             lead={quickStatusLead}
             onDone={(msg) => setSnack({ open: true, msg, type: 'success' })}
+            onStatusChanged={status => navigate(`/leads?bucket=${leadBucket({ ...quickStatusLead, status }, appointments)}`, { replace: true })}
           />
         ) : null
       })()}

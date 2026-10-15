@@ -65,6 +65,9 @@ interface Props {
   onClose: () => void
   lead: Lead
   onDone: (msg: string) => void
+  // Fired after a status change was saved, with the new status — lets the host
+  // (the Leads list) follow the lead to its new sort bucket.
+  onStatusChanged?: (status: LeadStatus) => void
 }
 
 // The mechanical portion of the Lead pipeline — everything up to "sent to
@@ -108,7 +111,7 @@ export function impliedMinLeadStatus(quotation: Quotation | null, designPackage:
   return min
 }
 
-export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
+export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged }: Props) {
   const { user, can } = useAuth()
   const { updateLead } = useCRM()
   const navigate = useNavigate()
@@ -179,6 +182,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     const result = await updateLead(lead.id, { status, mdStatusOverride: false, ...extra }, note)
     setSaving(false)
     if (result.ok) {
+      onStatusChanged?.(status)
       onDone(note)
       onClose()
     } else {

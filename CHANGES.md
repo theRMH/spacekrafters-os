@@ -1,5 +1,11 @@
 ## 2026-10-15
 
+### Changed: Leads list follows a lead to its new sort after Update Status
+**Commit:** Uncommitted
+- **Changed:** `LeadStatusSheet.tsx` — new optional `onStatusChanged(status)` prop, fired after a status change is saved.
+- **Changed:** `LeadsScreen.tsx` — both status sheets (list-card Update Status and the lead detail one) use it to navigate to `/leads?bucket=<new bucket>`, so the chips and the sidebar Lead Sort switch to where the lead went (e.g. Mark Contacted → Contacted). Other screens that open the sheet are unchanged.
+- **Verified:** `tsc --noEmit` and unit tests (75) pass.
+
 ### Changed: MD override reason is now optional
 **Commit:** Uncommitted
 - **Changed:** `MdOverrideCard.tsx` — reason box is optional (placeholder "Reason (optional)"); new `withReason()` helper keeps history notes free of a dangling dash. Callers updated: lead, project, product sale, MRF, quotation, design. `tsc` and unit tests (75) pass.
