@@ -17,7 +17,6 @@ import { getAllRequirements } from '../../services/requirementService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllQuotations, upsertQuotation, deleteQuotation } from '../../services/quotationService'
 import { changeQuotationStatus, recordQuotationAdvanceDecision } from './quotationActions'
-import { MdOverrideCard } from '../../components/forms/MdOverrideCard'
 import { getAllProjects, upsertProject } from '../../services/projectService'
 import { addAuditLog } from '../../services/auditLogService'
 import { downloadQuotationExcel } from '../../utils/quotationExport'
@@ -746,12 +745,6 @@ export default function QuotationsScreen() {
                   <div><p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p><p className="text-xs text-slate-600">{selected.paymentTerms}</p></div>
                 )}
               </div>
-            )}
-
-            {user?.role === 'owner' && (
-              <MdOverrideCard noun="status" title="quotation status"
-                options={(Object.keys(QUOTATION_STATUS_LABEL) as Quotation['status'][]).filter(s => s !== selected.status).map(s => ({ value: s, label: QUOTATION_STATUS_LABEL[s] }))}
-                onApply={async (v, reason) => { await handleStatusChange(selected, v as Quotation['status'], reason || undefined, `MD override: ${QUOTATION_STATUS_LABEL[selected.status]} → ${QUOTATION_STATUS_LABEL[v as Quotation['status']]}`) }} />
             )}
 
             <div className="space-y-2">

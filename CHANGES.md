@@ -1,5 +1,9 @@
 ## 2026-10-15
 
+### Changed: MD override now only at the top of Update Status
+**Commit:** Uncommitted
+- **Changed:** `QuotationStatusCard.tsx`, `DesignStatusCard.tsx`, `QuotationsScreen.tsx`, `DesignCenterScreen.tsx` — removed the quotation and design "MD override" cards. The single lead-status override at the top of the lead Update Status sheet stays; project, product sale and MRF overrides are unchanged. `tsc` and unit tests (75) pass.
+
 ### Fixed: a New lead no longer shows under the Contacted sort
 **Commit:** Uncommitted
 - **Changed:** `src/screens/Leads/LeadsScreen.tsx` — `leadBucket()` used to put both `new` and `contacted` leads in the Contacted bucket, so a lead nobody had contacted yet already appeared there. Now `new` has no bucket of its own: it shows only under Active until "Mark Contacted" moves it to Contacted. After a status change the list jumps to Active (not Contacted) if the lead is still New. No "New" chip was added. `tsc` and unit tests (75) pass.
