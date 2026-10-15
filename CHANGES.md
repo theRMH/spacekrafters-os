@@ -1,5 +1,10 @@
 ## 2026-10-15
 
+### Changed: Site Visit form — one single Checklist
+**Commit:** Uncommitted
+- **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — the separate "Site Checklist" block is merged into the "Checklist" list on the form (13 tick boxes in one box). Data model unchanged: the two arrays (`checklist`, `siteChecklist`) are still stored separately, so old visits are unaffected. The visit detail and report pages still show them as two sections.
+- **Verified:** `tsc --noEmit` passes. No DB changes.
+
 ### Changed: Site Visit form — Site Checklist is now tick boxes
 **Commit:** Uncommitted
 - **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — the Yes/No buttons on the Site Checklist are now checkboxes, matching the Checklist above them. Ticked = `yes`, unticked = `null` (not answered); the form no longer writes `no`. Records already saved with `no` still display No in the visit detail and report; editing one shows an unticked box.

@@ -534,12 +534,6 @@ export default function SiteVisitsScreen() {
                   <span className="text-xs text-slate-700">{item.label}</span>
                 </label>
               ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-500 mb-2 block">Site Checklist</label>
-            <div className="bg-slate-50 rounded-2xl p-3.5 space-y-2.5">
               {siteChecklist.map(item => (
                 <label key={item.id} className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={item.answer === 'yes'} onChange={() => toggleSiteChecklistItem(item.id)}
