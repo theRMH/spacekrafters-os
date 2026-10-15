@@ -7,7 +7,8 @@ import { getMainItems, NAV_SECTIONS } from './navItems'
 export function SidebarNavigation() {
   const navigate = useNavigate()
   const { pathname, search } = useLocation()
-  const fullPath = pathname + search
+  // /leads with no ?bucket= is the Active view, so light up that sort item.
+  const fullPath = pathname === '/leads' && !search ? '/leads?bucket=active' : pathname + search
   const { user, can, logout } = useAuth()
   const sections = [{ label: 'Main', items: getMainItems() }, ...NAV_SECTIONS]
 

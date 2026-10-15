@@ -205,7 +205,17 @@ export default function LeadsScreen() {
   const assignedOnly = !can('edit_lead')
   const canSeeAppointments = can('view_appointments')
 
-  const [bucketFilter, setBucketFilter] = useState<BucketFilter>(() => loadPersistedFilters().bucketFilter)
+  const bucketFromUrl = (): BucketFilter | null => {
+    const b = new URLSearchParams(routerLocation.search).get('bucket')
+    return b === 'active' || BUCKET_ORDER.includes(b as LeadBucket) ? (b as BucketFilter) : null
+  }
+  const [bucketFilter, setBucketFilter] = useState<BucketFilter>(() => bucketFromUrl() ?? loadPersistedFilters().bucketFilter)
+  // Sidebar "Lead Sort" links change ?bucket= while this screen stays mounted.
+  useEffect(() => {
+    const b = bucketFromUrl()
+    if (b) setBucketFilter(b)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerLocation.search])
   const [dateFilter, setDateFilter] = useState<FilterKey>(() => loadPersistedFilters().dateFilter)
   const [customFrom, setCustomFrom] = useState(() => loadPersistedFilters().customFrom)
   const [customTo, setCustomTo] = useState(() => loadPersistedFilters().customTo)
@@ -672,7 +682,7 @@ export default function LeadsScreen() {
             </button>
           </PermissionGate>
         </div>
-        <FilterChips chips={bucketChips} active={bucketFilter} onChange={setBucketFilter} className="mb-2" />
+        <FilterChips chips={bucketChips} active={bucketFilter} onChange={b => navigate(`/leads?bucket=${b}`, { replace: true })} className="mb-2" />
         <div className="flex items-center gap-1.5 flex-wrap">
           {FILTERS.map(f => (
             <button key={f.key} onClick={() => setDateFilter(f.key)}

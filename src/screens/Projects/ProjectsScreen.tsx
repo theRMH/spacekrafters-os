@@ -6,6 +6,7 @@ import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { FilterChips } from '../../components/forms/FilterChips'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { DateField } from '../../components/forms/DateField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
@@ -351,8 +352,19 @@ export default function ProjectsScreen() {
     setSnack({ open: true, msg: 'Project deleted.', type: 'success' })
   }
 
+  // Sidebar "Project Sort": ?stage=<ProjectStage> or ?stage=active (not closed).
+  const stageParam = searchParams.get('stage')
+  const stageFilter = stageParam === 'active' || STAGE_OPTIONS.some(o => o.value === stageParam) ? stageParam : null
+  const stageChips = [
+    { value: 'all', label: 'All' },
+    { value: 'active', label: 'Active' },
+    ...STAGE_OPTIONS,
+  ]
+
   const filtered = projects.filter(p => {
     if (p.type === 'product_sale') return false
+    if (stageFilter === 'active' && p.stage === 'closed') return false
+    if (stageFilter && stageFilter !== 'active' && p.stage !== stageFilter) return false
     if (!search) return true
     const q = search.toLowerCase()
     return p.name.toLowerCase().includes(q) || p.clientName.toLowerCase().includes(q)
@@ -376,6 +388,12 @@ export default function ProjectsScreen() {
             </button>
           </PermissionGate>
         </div>
+        <FilterChips
+          chips={stageChips}
+          active={stageFilter ?? 'all'}
+          onChange={v => setSearchParams(v === 'all' ? {} : { stage: v }, { replace: true })}
+          className="mt-3"
+        />
       </div>
 
       <div className="px-4 pt-4 space-y-3">

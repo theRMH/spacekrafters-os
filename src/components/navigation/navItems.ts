@@ -7,7 +7,7 @@ import {
   CalendarOff, UserCog, File, Settings, UploadCloud, History,
   PiggyBank, Tags, BellRing, TrendingUp, PieChart, CalendarDays, Scale, LineChart,
   CalendarClock, LocateFixed, ListChecks, FileSearch, Hammer, FileEdit, Wrench, ShieldCheck,
-  LayoutDashboard, Package,
+  LayoutDashboard, Package, Circle,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -27,7 +27,29 @@ export function getMainItems(): NavItem[] {
   ]
 }
 
+// Lead Sort / Project Sort: each entry opens the Leads / Projects list
+// pre-filtered. Lead keys match the bucket chips in LeadsScreen; project keys
+// are ProjectStage values (plus 'active' = every stage except closed).
+const LEAD_SORT: [string, string][] = [
+  ['active', 'Active'], ['contacted', 'Contacted'], ['qualified', 'Qualified'],
+  ['appointment', 'Appointment'], ['site_visit', 'Site Visit'], ['requirements', 'Requirements'],
+  ['quotation', 'Quotation'], ['negotiation', 'Negotiation'], ['won', 'Won'], ['lost', 'Lost'],
+]
+const PROJECT_SORT: [string, string][] = [
+  ['active', 'Active'], ['advance_payment', 'Advance Payment'], ['designing', 'Designing'],
+  ['execution', 'Execution'], ['procurement', 'Procurement'], ['handover_prep', 'Handover Prep'],
+  ['final_payment', 'Final Payment'], ['reconciliation', 'Reconciliation'], ['closed', 'Closed'],
+]
+
 export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'Lead Sort',
+    items: LEAD_SORT.map(([key, label]) => ({ icon: Circle, label, path: `/leads?bucket=${key}`, permission: 'view_leads' as Permission })),
+  },
+  {
+    label: 'Project Sort',
+    items: PROJECT_SORT.map(([key, label]) => ({ icon: Circle, label, path: `/projects?stage=${key}`, permission: 'view_projects' as Permission })),
+  },
   {
     label: 'CRM',
     items: [
