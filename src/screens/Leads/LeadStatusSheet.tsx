@@ -20,6 +20,7 @@ import { DESIGN_STATUS_LABEL, designWorkflowInfo } from '../Design/DesignCenterS
 import { DesignStatusCard } from '../Design/DesignStatusCard'
 import { QUOTATION_STATUS_LABEL, quotationWorkflowInfo } from '../Quotations/QuotationsScreen'
 import { QuotationStatusCard } from '../Quotations/QuotationStatusCard'
+import { changeQuotationStatus } from '../Quotations/quotationActions'
 import { getAllAppointments, updateAppointment } from '../../services/appointmentService'
 import { decideRescheduleAndAdvanceLead } from '../Appointments/appointmentActions'
 import { toProperIso } from '../Appointments/appointmentDate'
@@ -313,11 +314,34 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     await save('quotation_drafted', 'Quotation drafted, pending internal approval')
   }
 
+  // The quotation is the source of truth for the client's decision, so keep it in
+  // step with the lead — before this, Approve here moved only the lead and left the
+  // quotation at "Awaiting Client Approval", which dead-ended the next step.
   async function submitClientApprove() {
+    if (quotation?.status === 'sent_to_client') {
+      setSaving(true)
+      const r = await changeQuotationStatus({
+        quotation, status: 'client_approved', labelOverride: 'Client approved',
+        decidedByName: user?.name ?? 'Unknown', decidedByRole: user?.role, leadLabel: lead.name,
+      })
+      setSaving(false)
+      if (!r.ok || !r.updated) { onDone(r.error ?? 'Could not record the client approval.'); return }
+      setQuotation(r.updated)
+    }
     await save('client_approved', 'Client approved')
   }
 
   async function submitClientNegotiating() {
+    if (quotation?.status === 'sent_to_client') {
+      setSaving(true)
+      const r = await changeQuotationStatus({
+        quotation, status: 'revision_requested', note: negotiatingReason.trim(), labelOverride: 'Client rejected the quotation',
+        decidedByName: user?.name ?? 'Unknown', decidedByRole: user?.role, leadLabel: lead.name,
+      })
+      setSaving(false)
+      if (!r.ok || !r.updated) { onDone(r.error ?? 'Could not record the client\'s rejection.'); return }
+      setQuotation(r.updated)
+    }
     await save('negotiating', `Client requested changes: ${negotiatingReason.trim()}`)
   }
 
@@ -707,6 +731,16 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
         )
       case 'sent_to_client':
       case 'negotiating': {
+        // Client rejected the quotation: the MD now chooses Resend / Drop (same card as on the Quotation).
+        if (quotation?.status === 'revision_requested') {
+          return (
+            <QuotationStatusCard
+              quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead}
+              onChanged={setQuotation}
+              onReview={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation.id } }) }}
+            />
+          )
+        }
         // Same Approve/Reject card pair and copy as the Approval page's own
         // Client Approval sheet (ApprovalReviewSheets.tsx's decisionFooter),
         // so recording the client's decision looks identical whether it's

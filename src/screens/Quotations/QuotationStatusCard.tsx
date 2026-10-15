@@ -20,6 +20,8 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
   onReview: () => void
 }) {
   const [showReject, setShowReject] = useState(false)
+  // true while the reject box is for the CLIENT rejecting a sent quotation (vs PC/MD rejecting internally)
+  const [clientReject, setClientReject] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [showAdvanceForm, setShowAdvanceForm] = useState(false)
   const [advanceAmount, setAdvanceAmount] = useState('')
@@ -36,7 +38,7 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
     })
     setSaving(false)
     if (!result.ok || !result.updated) { setError(result.error ?? 'Could not update status.'); return }
-    setShowReject(false); setRejectReason(''); setError('')
+    setShowReject(false); setClientReject(false); setRejectReason(''); setError('')
     onChanged(result.updated)
   }
 
@@ -92,8 +94,8 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
         <p className="text-xs text-indigo-700 mt-1.5">Next: {quotationWorkflowInfo(quotation).next}</p>
       </div>
 
-      {quotation.rejectionReason && (quotation.status === 'pc_rejected' || quotation.status === 'md_rejected') && (
-        <p className="text-xs text-red-600">Revision reason: {quotation.rejectionReason}</p>
+      {quotation.rejectionReason && (quotation.status === 'pc_rejected' || quotation.status === 'md_rejected' || quotation.status === 'revision_requested') && (
+        <p className="text-xs text-red-600">{quotation.status === 'revision_requested' ? "Client's reason" : 'Revision reason'}: {quotation.rejectionReason}</p>
       )}
       {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
 
@@ -146,6 +148,36 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
           </button>
         </div>
       )}
+
+      {/* Sent to the client: record their decision. Rejected needs a reason (below). */}
+      {quotation.status === 'sent_to_client' && (canSendClient || canMd) && !showReject && (
+        <div className="flex gap-2">
+          <button disabled={saving} onClick={() => act('client_approved', undefined, 'Client approved')}
+            className="flex-1 py-3 rounded-xl text-sm font-bold text-white bg-emerald-600 active:bg-emerald-700 disabled:opacity-50">
+            Client Approved
+          </button>
+          <button disabled={saving} onClick={() => { setClientReject(true); setShowReject(true) }}
+            className="flex-1 py-3 rounded-xl text-sm font-bold text-white bg-red-600 active:bg-red-700 disabled:opacity-50">
+            Client Rejected
+          </button>
+        </div>
+      )}
+
+      {/* Client rejected: the MD chooses — redo it through PC again, or drop the lead. */}
+      {quotation.status === 'revision_requested' && (canMd ? (
+        <div className="flex gap-2">
+          <button disabled={saving} onClick={() => act('md_rejected', undefined, 'MD sent back to PC to redo — client rejected')}
+            className="flex-1 py-3 rounded-xl text-sm font-bold text-white bg-blue-600 active:bg-blue-700 disabled:opacity-50">
+            Resend Quotation
+          </button>
+          <button disabled={saving} onClick={() => act('rejected', undefined, 'MD dropped the lead')}
+            className="flex-1 py-3 rounded-xl text-sm font-bold border border-red-300 bg-white text-red-600 active:bg-red-50 disabled:opacity-50">
+            Drop Lead
+          </button>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">Waiting for the MD to resend or drop.</p>
+      ))}
 
       {/* Advance decision — a field patch (recordQuotationAdvanceDecision),
           not a status transition; quotation.status stays 'client_approved'
@@ -206,13 +238,19 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
 
       {showReject && (
         <div className="space-y-2">
-          <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={3} placeholder="Reason for rejection"
+          <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={3} placeholder={clientReject ? "Why did the client reject it?" : "Reason for rejection"}
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           <button disabled={!rejectReason.trim() || saving}
-            onClick={() => act(quotation.status === 'pending_pc_review' ? 'pc_rejected' : 'md_rejected', rejectReason.trim(),
-              quotation.status === 'pending_pc_review' ? 'PC rejected' : 'MD rejected')}
+            onClick={() => clientReject
+              ? act('revision_requested', rejectReason.trim(), 'Client rejected the quotation')
+              : act(quotation.status === 'pending_pc_review' ? 'pc_rejected' : 'md_rejected', rejectReason.trim(),
+                  quotation.status === 'pending_pc_review' ? 'PC rejected' : 'MD rejected')}
             className="w-full py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
-            Confirm Reject
+            {clientReject ? 'Confirm — Client Rejected' : 'Confirm Reject'}
+          </button>
+          <button onClick={() => { setShowReject(false); setClientReject(false); setRejectReason('') }}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600">
+            Back
           </button>
         </div>
       )}

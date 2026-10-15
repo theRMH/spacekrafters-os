@@ -52,8 +52,8 @@ export const QUOTATION_STATUS_LABEL: Record<QuotationStatus, string> = {
   internal_review:     'Pending MD Approval',
   md_rejected:         'MD Rejected — Back to PC',
   internally_approved: 'MD Approved',
-  sent_to_client:      'Awaiting Client Approval',
-  revision_requested:  'Revision Requested',
+  sent_to_client:      'Waiting for Client Approval',
+  revision_requested:  'Client Rejected',
   client_approved:     'Client Approved',
   rejected:            'Rejected',
 }
@@ -72,8 +72,8 @@ export function quotationWorkflowInfo(q: Pick<Quotation, 'status' | 'advanceStat
     case 'internal_review':     return { responsible: 'MD',      next: 'MD approves or rejects' }
     case 'md_rejected':         return { responsible: 'PC',      next: 'Resubmit to MD, or revise first' }
     case 'internally_approved': return { responsible: 'PC / MD', next: 'Send to client' }
-    case 'sent_to_client':      return { responsible: 'Client',  next: 'Awaiting client decision (Approval page)' }
-    case 'revision_requested':  return { responsible: 'QS',      next: 'Revise and resend to client' }
+    case 'sent_to_client':      return { responsible: 'Client',  next: 'Record the client\'s decision: Approved or Rejected' }
+    case 'revision_requested':  return { responsible: 'MD',      next: 'MD decides: resend to PC to redo it, or drop the lead' }
     case 'client_approved':
       if (q.advanceStatus || q.advancePaymentReceived) return { responsible: '—', next: 'Quotation complete — proceed in Design Center' }
       return { responsible: 'PC / MD', next: 'Choose an advance payment option' }
@@ -814,7 +814,35 @@ export default function QuotationsScreen() {
                   </button>
                 )}
                 {selected.status === 'sent_to_client' && (
-                  <p className="w-full text-xs text-slate-500">Sent to the client — their decision is recorded on the Approval page.</p>
+                  <div className="w-full flex justify-center gap-3">
+                    <button onClick={() => handleStatusChange(selected, 'client_approved', undefined, 'Client approved')}
+                      className="px-8 py-3.5 rounded-xl bg-emerald-600 text-sm font-bold text-white active:bg-emerald-700">
+                      Client Approved
+                    </button>
+                    <button onClick={() => { setRejectReason(''); setRejectTarget({ status: 'revision_requested', label: 'Client rejected the quotation' }); setShowReject(true) }}
+                      className="px-8 py-3.5 rounded-xl border border-red-300 bg-white text-sm font-bold text-red-600 active:bg-red-50">
+                      Client Rejected
+                    </button>
+                  </div>
+                )}
+                {selected.status === 'revision_requested' && (
+                  <div className="w-full space-y-2">
+                    {selected.rejectionReason && <p className="text-xs text-red-600">Client's reason: {selected.rejectionReason}</p>}
+                    {can('approve_quotation_internal') ? (
+                      <div className="flex justify-center gap-3">
+                        <button onClick={() => handleStatusChange(selected, 'md_rejected', undefined, 'MD sent back to PC to redo — client rejected')}
+                          className="px-8 py-3.5 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700">
+                          Resend Quotation
+                        </button>
+                        <button onClick={() => handleStatusChange(selected, 'rejected', undefined, 'MD dropped the lead')}
+                          className="px-8 py-3.5 rounded-xl border border-red-300 bg-white text-sm font-bold text-red-600 active:bg-red-50">
+                          Drop Lead
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500">Waiting for the MD to resend or drop.</p>
+                    )}
+                  </div>
                 )}
                 {selected.status === 'client_approved' && !selected.advanceStatus && !selected.advancePaymentReceived && can('send_quotation_client') && (
                   <>

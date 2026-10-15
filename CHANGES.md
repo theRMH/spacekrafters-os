@@ -1,5 +1,13 @@
 ## 2026-10-15
 
+### Changed: quotation → client decision flow (approved / rejected → resend or drop)
+**Commit:** Uncommitted  ·  no DB changes
+- **Flow:** MD approves → Send to Client → "Waiting for Client Approval" with **Client Approved / Client Rejected** buttons. Rejected needs a reason (status `revision_requested`, relabelled **Client Rejected**). The MD sees the reason and chooses **Resend Quotation** (→ `md_rejected`, back to PC; lead returns to `quotation_drafted`; PC edits/resubmits → MD approves → send to client again) or **Drop Lead** (quotation `rejected`, lead → Lost with the reason, shows under the Lost sort).
+- **Fixed:** the lead sheet's Approve/Reject on a sent quotation only changed the lead, leaving the quotation at "Awaiting Client Approval" — which left the lead at Client Approved with no next button. It now updates the quotation too.
+- **Changed:** `quotationActions.ts` — keeps the client's reason, syncs the lead (client_approved / quotation_drafted / lost), notifies MD on client rejection and PC on resend.
+- **Changed:** `QuotationStatusCard.tsx`, `QuotationsScreen.tsx`, `LeadStatusSheet.tsx` — the buttons above; label tweaks ("Waiting for Client Approval", "Client Rejected").
+- **Not changed:** the Approval page's own client-decision sheet (it already records approve / reject-with-reason). `tsc` and unit tests (75) pass.
+
 ### Changed: MD override now only at the top of Update Status
 **Commit:** Uncommitted
 - **Changed:** `QuotationStatusCard.tsx`, `DesignStatusCard.tsx`, `QuotationsScreen.tsx`, `DesignCenterScreen.tsx` — removed the quotation and design "MD override" cards. The single lead-status override at the top of the lead Update Status sheet stays; project, product sale and MRF overrides are unchanged. `tsc` and unit tests (75) pass.
