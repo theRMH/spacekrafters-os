@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
+import { MdOverrideCard } from '../../components/forms/MdOverrideCard'
 import { useAuth } from '../../context/AuthContext'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getAllPurchaseOrders, getAllGoodsReceipts } from '../../services/procurementService'
@@ -142,6 +143,24 @@ export function ProductSaleStatusSheet({ isOpen, onClose, project, onDone }: Pro
       await sendNotification([req.requestedById], 'Product Sale Stage Approved',
         `${updated.name} — MD approved moving to ${PRODUCT_SALE_STAGE_LABEL[req.toStage]}.`, `/product-sales/${updated.leadId}`)
     }
+  }
+
+  // MD-only: move the sale to any stage this sheet governs (forward or back),
+  // skipping the approval flow. Clears a pending request, reassigns to the
+  // stage's role, and reopens a closed sale. Reason is mandatory.
+  async function submitMdOverride(value: string, reason: string) {
+    const toStage = value as ProductSaleStage
+    const { role, id, name } = nextResponsible(toStage)
+    await persist(
+      {
+        productSaleStage: toStage,
+        assignedRole: role, assignedToId: id, assignedToName: name,
+        pendingProductSaleStageRequest: undefined,
+        status: toStage === 'completed' ? 'closed' as const : project.status === 'closed' ? 'active' as const : project.status,
+      },
+      `MD override: ${PRODUCT_SALE_STAGE_LABEL[stage]} → ${PRODUCT_SALE_STAGE_LABEL[toStage]} — ${reason}`,
+      toStage,
+    )
   }
 
   async function handleReject() {
@@ -307,6 +326,10 @@ export function ProductSaleStatusSheet({ isOpen, onClose, project, onDone }: Pro
           <p className="text-xs text-slate-400 -mt-2">Moving to the next stage needs MD approval before it takes effect.</p>
         )}
         {renderBody()}
+        {user?.role === 'owner' && (
+          <MdOverrideCard noun="stage" title="product sale stage" saving={saving} onApply={submitMdOverride}
+            options={PRODUCT_SALE_STAGE_ORDER.slice(PRODUCT_SALE_STAGE_ORDER.indexOf('payment')).filter(s => s !== stage).map(s => ({ value: s, label: PRODUCT_SALE_STAGE_LABEL[s] }))} />
+        )}
         <button onClick={onClose} className={secondaryBtn}>Cancel</button>
       </div>
     </BottomSheet>

@@ -21,7 +21,7 @@ import {
   getAllGoodsReceipts, addGoodsReceipt,
   getAllVendorBills, upsertVendorBill,
 } from '../../services/procurementService'
-import { upsertPayable } from '../../services/financeService'
+import { upsertPayable, getAllPayables } from '../../services/financeService'
 import { addAuditLog } from '../../services/auditLogService'
 import type {
   Project, Vendor, PurchaseRequest, VendorQuote, PurchaseOrder, GoodsReceipt, VendorBill, Payable, AuditLog,
@@ -85,6 +85,9 @@ export default function ProcurementScreen() {
   const [quoteForm, setQuoteForm] = useState({ vendorId: '', amount: '', notes: '' })
   const [poVendorId, setPoVendorId] = useState('')
   const [billForm, setBillForm] = useState({ billNumber: '', amount: '', documentFiles: [] as string[] })
+  // MD-only inline edits of an existing PO (before it is billed) / vendor bill (before any payment).
+  const [editPo, setEditPo] = useState<{ id: string; vendorId: string; amount: string } | null>(null)
+  const [editBill, setEditBill] = useState<{ id: string; billNumber: string; amount: string } | null>(null)
 
   async function reload() {
     setIsLoading(true)
@@ -119,6 +122,13 @@ export default function ProcurementScreen() {
     setShowForm(true)
   }
 
+  const isEditingPR = prs.some(p => p.id === form.id)
+  function openEditPR() {
+    if (!selected) return
+    setForm(selected)
+    setShowForm(true)
+  }
+
   async function handleSavePR() {
     if (!form.description.trim() || !form.unit.trim()) {
       setSnack({ open: true, msg: 'Description and unit are required.', type: 'error' })
@@ -147,6 +157,18 @@ export default function ProcurementScreen() {
       const exists = prev.some(p => p.id === toSave.id)
       return exists ? prev.map(p => (p.id === toSave.id ? toSave : p)) : [toSave, ...prev]
     })
+    if (!isNew) {
+      setSelected(prev => (prev?.id === toSave.id ? toSave : prev))
+      if (user) {
+        addAuditLog({
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          projectId: toSave.projectId,
+          action: 'purchase_request_edited',
+          description: `Purchase request "${toSave.description}" edited by MD.`,
+          createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+        })
+      }
+    }
     setShowForm(false)
     setSnack({ open: true, msg: 'Purchase request saved.', type: 'success' })
   }
@@ -249,6 +271,48 @@ export default function ProcurementScreen() {
       addAuditLog(log)
     }
     setSnack({ open: true, msg: 'Purchase order raised.', type: 'success' })
+  }
+
+  async function handleSaveEditPo(po: PurchaseOrder) {
+    if (!editPo || !user) return
+    const amount = Number(editPo.amount)
+    if (!editPo.vendorId || !amount || amount <= 0) { setSnack({ open: true, msg: 'Vendor and a valid amount are required.', type: 'error' }); return }
+    const updated: PurchaseOrder = { ...po, vendorId: editPo.vendorId, amount, updatedAt: new Date().toISOString() }
+    const result = await upsertPurchaseOrder(updated)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update the purchase order.', type: 'error' }); return }
+    setPos(prev => prev.map(p => (p.id === updated.id ? updated : p)))
+    addAuditLog({
+      id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      projectId: updated.projectId,
+      action: 'po_edited',
+      description: `Purchase order edited by MD: ${vendorName(po.vendorId)} ${fmtCurrency(po.amount)} → ${vendorName(updated.vendorId)} ${fmtCurrency(updated.amount)}.`,
+      createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+    })
+    setEditPo(null)
+    setSnack({ open: true, msg: 'Purchase order updated.', type: 'success' })
+  }
+
+  async function handleSaveEditBill(bill: VendorBill) {
+    if (!editBill || !user) return
+    const amount = Number(editBill.amount)
+    if (!editBill.billNumber.trim() || !amount || amount <= 0) { setSnack({ open: true, msg: 'Bill number and a valid amount are required.', type: 'error' }); return }
+    const updated: VendorBill = { ...bill, billNumber: editBill.billNumber.trim(), amount, updatedAt: new Date().toISOString() }
+    const result = await upsertVendorBill(updated)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not update the vendor bill.', type: 'error' }); return }
+    setBills(prev => prev.map(b => (b.id === updated.id ? updated : b)))
+    // Keep the payable created from this bill in step (only possible while nothing has been paid).
+    const linked = (await getAllPayables()).find(p => p.vendorBillId === bill.id)
+    if (linked && linked.paidAmount === 0) {
+      await upsertPayable({ ...linked, amount, description: `Vendor bill ${updated.billNumber}`, updatedAt: new Date().toISOString() })
+    }
+    addAuditLog({
+      id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      action: 'vendor_bill_edited',
+      description: `Vendor bill edited by MD: ${bill.billNumber} ${fmtCurrency(bill.amount)} → ${updated.billNumber} ${fmtCurrency(updated.amount)}.`,
+      createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+    })
+    setEditBill(null)
+    setSnack({ open: true, msg: 'Vendor bill updated.', type: 'success' })
   }
 
   async function handleReceiveGoods(po: PurchaseOrder) {
@@ -392,7 +456,7 @@ export default function ProcurementScreen() {
       </div>
 
       {/* Create PR */}
-      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title="New Purchase Request">
+      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title={isEditingPR ? 'Edit Purchase Request' : 'New Purchase Request'}>
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Project</label>
@@ -428,7 +492,7 @@ export default function ProcurementScreen() {
       </BottomSheet>
 
       {/* PR Flow-sheet Detail */}
-      <BottomSheet isOpen={!!selected} onClose={() => setSelected(null)} title={selected?.description ?? ''} height="full">
+      <BottomSheet isOpen={!!selected && !showForm} onClose={() => { setSelected(null); setEditPo(null); setEditBill(null) }} title={selected?.description ?? ''} height="full">
         {selected && (
           <div className="space-y-5 pb-4">
             <div className="flex items-center justify-between bg-slate-50 rounded-xl p-4">
@@ -440,10 +504,16 @@ export default function ProcurementScreen() {
             </div>
 
             {user?.role === 'owner' && (
-              <button onClick={() => setShowDeleteDialog(true)}
-                className="w-full text-center text-xs font-semibold text-red-500 py-2">
-                Delete Purchase Request
-              </button>
+              <div className="flex gap-2">
+                <button onClick={openEditPR}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 active:bg-slate-50">
+                  Edit Request (MD)
+                </button>
+                <button onClick={() => setShowDeleteDialog(true)}
+                  className="flex-1 py-2.5 rounded-xl border border-red-200 bg-red-50 text-xs font-bold text-red-600 active:bg-red-100">
+                  Delete Purchase Request
+                </button>
+              </div>
             )}
 
             {/* Stage: Approval */}
@@ -511,6 +581,23 @@ export default function ProcurementScreen() {
                         </div>
                         <p className="text-xs text-slate-500">{fmtCurrency(po.amount)} · Issued {fmtDate(po.issuedAt)}</p>
 
+                        {user?.role === 'owner' && po.status === 'issued' && (
+                          editPo?.id === po.id ? (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-2">
+                              <SearchableSelect value={editPo.vendorId} onChange={v => setEditPo(e => e && { ...e, vendorId: v })}
+                                options={vendors.map(v => ({ value: v.id, label: v.name }))} placeholder="Select vendor…" />
+                              <input type="number" className={inp} value={editPo.amount} onChange={e => setEditPo(x => x && { ...x, amount: e.target.value })} />
+                              <div className="flex gap-2">
+                                <button onClick={() => handleSaveEditPo(po)} className="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold active:bg-indigo-700">Save PO</button>
+                                <button onClick={() => setEditPo(null)} className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold">Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={() => setEditPo({ id: po.id, vendorId: po.vendorId, amount: String(po.amount) })}
+                              className="text-xs font-semibold text-indigo-600">Edit PO (MD)</button>
+                          )
+                        )}
+
                         {po.status === 'issued' && (
                           <PermissionGate permission="receive_goods">
                             <button onClick={() => handleReceiveGoods(po)} className="w-full py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold active:bg-slate-200">
@@ -538,9 +625,27 @@ export default function ProcurementScreen() {
 
                         {bill && (
                           <div className="flex items-center justify-between bg-slate-50 rounded-lg p-2.5">
-                            <span className="text-xs font-semibold text-slate-700">{bill.billNumber}</span>
+                            <span className="text-xs font-semibold text-slate-700">{bill.billNumber} · {fmtCurrency(bill.amount)}</span>
                             <StatusBadge status={bill.status} />
                           </div>
+                        )}
+
+                        {bill && user?.role === 'owner' && (
+                          bill.paidAmount > 0 ? (
+                            <p className="text-[11px] text-slate-400">Payment recorded — the bill is locked.</p>
+                          ) : editBill?.id === bill.id ? (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-2">
+                              <input className={inp} value={editBill.billNumber} onChange={e => setEditBill(x => x && { ...x, billNumber: e.target.value })} />
+                              <input type="number" className={inp} value={editBill.amount} onChange={e => setEditBill(x => x && { ...x, amount: e.target.value })} />
+                              <div className="flex gap-2">
+                                <button onClick={() => handleSaveEditBill(bill)} className="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold active:bg-indigo-700">Save Bill</button>
+                                <button onClick={() => setEditBill(null)} className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold">Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={() => setEditBill({ id: bill.id, billNumber: bill.billNumber, amount: String(bill.amount) })}
+                              className="text-xs font-semibold text-indigo-600">Edit Bill (MD)</button>
+                          )
                         )}
                       </div>
                     )

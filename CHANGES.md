@@ -1,5 +1,15 @@
 ## 2026-10-15
 
+### Added: MD edit across Procurement, Finance, MRF and Product Sales
+**Commit:** Uncommitted  ·  no DB changes needed (the owner already has INSERT/UPDATE rights on these tables)
+- **Changed:** `ExpenseRequestScreen.tsx`, `PayablesScreen.tsx`, `ReceivablesScreen.tsx` — owner sees "Edit … (MD)" in the detail sheet; it reopens the create form with the record filled in. The amount locks once a payment/receipt is recorded, because it is tied to the cashflow entries already posted. Each edit writes an audit-log entry.
+- **Changed:** `ProcurementScreen.tsx` — owner can edit a Purchase Request, a PO (vendor + amount, only while status is "issued") and a Vendor Bill (number + amount, only before any payment; the linked payable is updated in step).
+- **Changed:** `MRFPanel.tsx` — owner can edit MRF details at any stage and override the MRF status (reason required, recorded in the MRF history).
+- **Changed:** `ProductSaleStatusSheet.tsx` — owner can move a product sale to any stage from Payment onward (MD override card).
+- **Changed:** `AuditLogScreen.tsx` — labels for the new audit actions.
+- **Deliberately not done:** no status override on expense requests, payables or receivables — their status is driven by recorded payments, so forcing it would break the books. Financial records still cannot be deleted.
+- **Verified:** `tsc --noEmit` and unit tests (75) pass.
+
 ### Added: MD can edit and delete a Design package
 **Commit:** Uncommitted  ·  **⚠ DEPLOY** (optional SQL — Edit works without it; Delete needs it)
 - **Changed:** `src/screens/Design/DesignCenterScreen.tsx` — owner sees Edit Package (name, notes) and Delete Package (with confirm) at the bottom of the package detail. Both write to the audit log (`design_package_edited` / `design_package_deleted`).

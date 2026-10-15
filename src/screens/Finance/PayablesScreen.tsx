@@ -103,6 +103,16 @@ export default function PayablesScreen() {
     setShowForm(true)
   }
 
+  // MD-only: edit an existing payable in the same form. The amount locks once a
+  // payment has been recorded against it.
+  const isEditing = payables.some(p => p.id === form.id)
+  function openEdit() {
+    if (!selected) return
+    setForm(selected)
+    setIsVendorPayable(!!selected.vendorId || !selected.payeeName)
+    setShowForm(true)
+  }
+
   async function handleSave() {
     if (!form.description.trim() || !form.amount) {
       setSnack({ open: true, msg: 'Description and amount are required.', type: 'error' })
@@ -124,6 +134,17 @@ export default function PayablesScreen() {
       const exists = prev.some(p => p.id === toSave.id)
       return exists ? prev.map(p => (p.id === toSave.id ? toSave : p)) : [toSave, ...prev]
     })
+    if (isEditing) {
+      setSelected(prev => (prev?.id === toSave.id ? toSave : prev))
+      if (user) {
+        addAuditLog({
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          action: 'payable_edited',
+          description: `Payable "${toSave.description}" (${fmtCurrency(toSave.amount)}) edited by MD.`,
+          createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+        })
+      }
+    }
     setShowForm(false)
     setSnack({ open: true, msg: 'Payable saved.', type: 'success' })
   }
@@ -305,7 +326,7 @@ export default function PayablesScreen() {
       </div>
 
       {/* Create payable */}
-      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title="New Payable">
+      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title={isEditing ? 'Edit Payable' : 'New Payable'}>
         <div className="space-y-4 pb-4">
           <div className="flex gap-2">
             <button onClick={() => setIsVendorPayable(true)}
@@ -339,7 +360,9 @@ export default function PayablesScreen() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>Amount *</label>
-              <input type="number" className={inp} value={form.amount || ''} onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} />
+              <input type="number" className={inp} value={form.amount || ''} disabled={form.paidAmount > 0}
+                onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} />
+              {form.paidAmount > 0 && <p className="text-[11px] text-slate-400 mt-1">Locked — a payment is already recorded.</p>}
             </div>
             <div>
               <label className={label}>Due Date</label>
@@ -353,7 +376,7 @@ export default function PayablesScreen() {
       </BottomSheet>
 
       {/* Payable detail: payments */}
-      <BottomSheet isOpen={!!selected} onClose={() => setSelected(null)} title={selected?.description ?? ''} height="full">
+      <BottomSheet isOpen={!!selected && !showForm} onClose={() => setSelected(null)} title={selected?.description ?? ''} height="full">
         {selected && (
           <div className="space-y-4 pb-4">
             <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
@@ -362,6 +385,12 @@ export default function PayablesScreen() {
               <div className="flex justify-between"><span className="text-slate-500">Due Date</span><span className="font-semibold text-slate-800">{fmtDate(selected.dueDate)}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Paid</span><span className="font-bold text-slate-800">{fmtCurrency(selected.paidAmount)} / {fmtCurrency(selected.amount)}</span></div>
             </div>
+
+            {user?.role === 'owner' && (
+              <button onClick={openEdit} className="w-full py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold active:bg-slate-50">
+                Edit Payable (MD)
+              </button>
+            )}
 
             {selected.status !== 'paid' && (
               <PermissionGate permission="reconcile">

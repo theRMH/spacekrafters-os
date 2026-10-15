@@ -100,6 +100,16 @@ export default function ExpenseRequestScreen() {
     setShowForm(true)
   }
 
+  // MD-only: edit an existing request in the same form. Once any payment has
+  // been recorded the amount is locked — it is tied to the cashflow entries
+  // already posted by handlePay().
+  const isEditing = requests.some(r => r.id === form.id)
+  function openEdit() {
+    if (!selected) return
+    setForm(selected)
+    setShowForm(true)
+  }
+
   async function handleSave() {
     if (!form.category.trim() || !form.purpose.trim() || !form.amount) {
       setSnack({ open: true, msg: 'Category, purpose, and amount are required.', type: 'error' })
@@ -115,8 +125,20 @@ export default function ExpenseRequestScreen() {
       const exists = prev.some(r => r.id === toSave.id)
       return exists ? prev.map(r => (r.id === toSave.id ? toSave : r)) : [toSave, ...prev]
     })
+    if (isEditing) {
+      setSelected(prev => (prev?.id === toSave.id ? toSave : prev))
+      if (user) {
+        addAuditLog({
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          projectId: toSave.projectId,
+          action: 'expense_request_edited',
+          description: `Expense request "${toSave.purpose}" (${fmtCurrency(toSave.amount)}) edited by MD.`,
+          createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+        })
+      }
+    }
     setShowForm(false)
-    setSnack({ open: true, msg: 'Expense request submitted.', type: 'success' })
+    setSnack({ open: true, msg: isEditing ? 'Expense request updated.' : 'Expense request submitted.', type: 'success' })
   }
 
   // Approval ≠ Payment: this only moves the request to "approved" (a commitment).
@@ -301,7 +323,7 @@ export default function ExpenseRequestScreen() {
       </div>
 
       {/* Create request */}
-      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title="New Expense Request">
+      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title={isEditing ? 'Edit Expense Request' : 'New Expense Request'}>
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Project</label>
@@ -322,7 +344,9 @@ export default function ExpenseRequestScreen() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>Amount *</label>
-              <input type="number" className={inp} value={form.amount || ''} onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} />
+              <input type="number" className={inp} value={form.amount || ''} disabled={(form.paidAmount ?? 0) > 0}
+                onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} />
+              {(form.paidAmount ?? 0) > 0 && <p className="text-[11px] text-slate-400 mt-1">Locked — a payment is already recorded.</p>}
             </div>
             <div>
               <label className={label}>Needed By</label>
@@ -336,13 +360,13 @@ export default function ExpenseRequestScreen() {
           </div>
           <MultiFileUploadField label="Receipts" files={form.receiptFiles ?? []} onChange={files => setForm(f => ({ ...f, receiptFiles: files }))} uploadButtonLabel="Upload Receipt" />
           <button onClick={handleSave} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
-            Submit Request
+            {isEditing ? 'Save Changes' : 'Submit Request'}
           </button>
         </div>
       </BottomSheet>
 
       {/* Detail / lifecycle actions */}
-      <BottomSheet isOpen={!!selected} onClose={() => setSelected(null)} title={selected?.purpose ?? ''}>
+      <BottomSheet isOpen={!!selected && !showForm} onClose={() => setSelected(null)} title={selected?.purpose ?? ''}>
         {selected && (
           <div className="space-y-4 pb-4">
             <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
@@ -368,6 +392,12 @@ export default function ExpenseRequestScreen() {
 
             {(selected.paymentProofFiles?.length ?? 0) > 0 && (
               <MultiFileUploadField label="Proof of Payment" files={selected.paymentProofFiles ?? []} onChange={() => {}} readOnly />
+            )}
+
+            {user?.role === 'owner' && (
+              <button onClick={openEdit} className="w-full py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold active:bg-slate-50">
+                Edit Request (MD)
+              </button>
             )}
 
             {selected.status === 'requested' && (

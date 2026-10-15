@@ -11,6 +11,7 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
+import { MdOverrideCard } from '../../components/forms/MdOverrideCard'
 import { getAllMRFs, upsertMRF } from '../../services/mrfService'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { PROCUREMENT_STATUS_OPTIONS } from '../../data/procurementStatuses'
@@ -169,6 +170,7 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
   const [paymentReference, setPaymentReference] = useState(mrf.paymentReference ?? '')
   const [accountsNotes, setAccountsNotes] = useState(mrf.accountsNotes ?? '')
   const [isSaving, setIsSaving] = useState(false)
+  const [showMdEdit, setShowMdEdit] = useState(false)
   // A ref, not state: state updates aren't visible to a second click handler
   // that fires before React re-renders (e.g. a fast double-click), so the
   // actual guard has to be synchronous. isSaving above only drives the
@@ -545,6 +547,50 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
             Release Payment
           </button>
         </div>
+      )}
+
+      {/* MD: edit the request details at any stage (before approval the form above already covers this), and override the status. */}
+      {user?.role === 'owner' && mrf.status !== 'pending_qs' && mrf.status !== 'rejected' && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-3.5 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-bold text-slate-600">Edit MRF details (MD)</p>
+            <button type="button" onClick={() => setShowMdEdit(s => !s)} className="text-xs font-bold text-indigo-600 shrink-0">
+              {showMdEdit ? 'Cancel' : 'Edit'}
+            </button>
+          </div>
+          {showMdEdit && (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-500 block">Material / Request Details</label>
+              <textarea value={materialDetails} onChange={e => setMaterialDetails(e.target.value)} rows={4}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+              <label className="text-xs font-semibold text-slate-500 block">Notes</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+              <label className="text-xs font-semibold text-slate-500 block">Requesting Date</label>
+              <DateField value={requestingDate} onChange={setRequestingDate} />
+              <label className="text-xs font-semibold text-slate-500 block">Expected Delivery Date</label>
+              <DateField value={expectedDeliveryDate} onChange={setExpectedDeliveryDate} />
+              <label className="text-xs font-semibold text-slate-500 block">Additional Notes</label>
+              <textarea value={additionalNotes} onChange={e => setAdditionalNotes(e.target.value)} rows={2}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+              <button disabled={isSaving || !materialDetails.trim()} onClick={async () => {
+                const saved = await saveTransition(mrf.status, 'MD edited MRF details', {
+                  materialDetails: materialDetails.trim(), notes: notes.trim() || undefined, additionalNotes: additionalNotes.trim() || undefined,
+                  requestingDate: requestingDate || undefined, expectedDeliveryDate: expectedDeliveryDate || undefined,
+                })
+                if (saved) setShowMdEdit(false)
+              }} className="w-full py-2.5 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
+                Save changes
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {user?.role === 'owner' && (
+        <MdOverrideCard noun="status" title="MRF status" saving={isSaving}
+          options={(Object.keys(MRF_STATUS_LABEL) as MRFStatus[]).filter(s => s !== mrf.status).map(s => ({ value: s, label: MRF_STATUS_LABEL[s] }))}
+          onApply={async (v, reason) => { await saveTransition(v as MRFStatus, `MD override: ${MRF_STATUS_LABEL[mrf.status]} → ${MRF_STATUS_LABEL[v as MRFStatus]} — ${reason}`) }} />
       )}
 
       <div>

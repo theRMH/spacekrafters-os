@@ -103,6 +103,15 @@ export default function ReceivablesScreen() {
     setShowForm(true)
   }
 
+  // MD-only: edit an existing milestone in the same form. The amount locks once
+  // a receipt has been recorded against it.
+  const isEditing = milestones.some(m => m.id === form.id)
+  function openEdit() {
+    if (!selected) return
+    setForm(selected)
+    setShowForm(true)
+  }
+
   async function handleSave() {
     if (!form.projectId || !form.title.trim() || !form.amount) {
       setSnack({ open: true, msg: 'Project, title, and amount are required.', type: 'error' })
@@ -115,6 +124,18 @@ export default function ReceivablesScreen() {
       const exists = prev.some(m => m.id === toSave.id)
       return exists ? prev.map(m => (m.id === toSave.id ? toSave : m)) : [toSave, ...prev]
     })
+    if (isEditing) {
+      setSelected(prev => (prev?.id === toSave.id ? toSave : prev))
+      if (user) {
+        addAuditLog({
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          projectId: toSave.projectId,
+          action: 'payment_milestone_edited',
+          description: `Payment milestone "${toSave.title}" (${fmtCurrency(toSave.amount)}) edited by MD.`,
+          createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+        })
+      }
+    }
     setShowForm(false)
     setSnack({ open: true, msg: 'Payment milestone saved.', type: 'success' })
   }
@@ -250,7 +271,7 @@ export default function ReceivablesScreen() {
       </div>
 
       {/* Create milestone */}
-      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title="New Payment Milestone">
+      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title={isEditing ? 'Edit Payment Milestone' : 'New Payment Milestone'}>
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Project *</label>
@@ -267,7 +288,9 @@ export default function ReceivablesScreen() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>Amount *</label>
-              <input type="number" className={inp} value={form.amount || ''} onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} />
+              <input type="number" className={inp} value={form.amount || ''} disabled={form.receivedAmount > 0}
+                onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} />
+              {form.receivedAmount > 0 && <p className="text-[11px] text-slate-400 mt-1">Locked — a receipt is already recorded.</p>}
             </div>
             <div>
               <label className={label}>Due Date</label>
@@ -285,7 +308,7 @@ export default function ReceivablesScreen() {
       </BottomSheet>
 
       {/* Milestone detail: receipts */}
-      <BottomSheet isOpen={!!selected} onClose={() => setSelected(null)} title={selected?.title ?? ''} height="full">
+      <BottomSheet isOpen={!!selected && !showForm} onClose={() => setSelected(null)} title={selected?.title ?? ''} height="full">
         {selected && (
           <div className="space-y-4 pb-4">
             <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
@@ -294,6 +317,12 @@ export default function ReceivablesScreen() {
               <div className="flex justify-between"><span className="text-slate-500">Due Date</span><span className="font-semibold text-slate-800">{fmtDate(selected.dueDate)}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Received</span><span className="font-bold text-slate-800">{fmtCurrency(selected.receivedAmount)} / {fmtCurrency(selected.amount)}</span></div>
             </div>
+
+            {user?.role === 'owner' && (
+              <button onClick={openEdit} className="w-full py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold active:bg-slate-50">
+                Edit Milestone (MD)
+              </button>
+            )}
 
             {selected.status !== 'received' && (
               <PermissionGate permission="record_receipt">
