@@ -1,5 +1,13 @@
 ## 2026-10-15
 
+### Added: MD can edit and delete a Design package
+**Commit:** Uncommitted  ·  **⚠ DEPLOY** (optional SQL — Edit works without it; Delete needs it)
+- **Changed:** `src/screens/Design/DesignCenterScreen.tsx` — owner sees Edit Package (name, notes) and Delete Package (with confirm) at the bottom of the package detail. Both write to the audit log (`design_package_edited` / `design_package_deleted`).
+- **Added:** `deleteDesignPackage()` in `src/services/designService.ts` — checks a row was actually removed, because Postgres RLS otherwise returns success with 0 rows.
+- **Added:** `supabase/owner-edit-policies.sql` — **proposed, NOT applied**. Owner UPDATE on tables with no UPDATE policy (project stages, design versions, vendor quotes, goods receipts, company transactions, allocations, receipts, payments, document versions) and owner DELETE on non-financial tables (design packages, daily diary, BOQ, punch list, documents). ⚠ DEPLOY: review, then run in the Supabase SQL editor. Until then, Delete Package shows "blocked by the database".
+- **Changed:** `src/screens/Settings/AuditLogScreen.tsx` — labels for the two new audit actions.
+- **Verified:** `tsc --noEmit` and unit tests (75) pass.
+
 ### Added: MD override — change any lead / project / quotation / design status
 **Commit:** Uncommitted
 - **Added:** `src/components/forms/MdOverrideCard.tsx` — shared owner-only card: pick any status/stage (forward or back) plus a mandatory reason.

@@ -7,11 +7,12 @@ import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
+import { Dialog } from '../../components/feedback/Dialog'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { getAllProjects } from '../../services/projectService'
-import { getAllDesignPackages, upsertDesignPackage, getAllDesignVersions, addDesignVersion } from '../../services/designService'
+import { getAllDesignPackages, upsertDesignPackage, updateDesignPackage, deleteDesignPackage, getAllDesignVersions, addDesignVersion } from '../../services/designService'
 import { getAllQuotations } from '../../services/quotationService'
 import { addAuditLog } from '../../services/auditLogService'
 import { approvalHistoryEntry } from '../../utils/approvalHistory'
@@ -99,6 +100,11 @@ export default function DesignCenterScreen() {
   const [showSendChoice, setShowSendChoice] = useState(false)
   const [showReject, setShowReject] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  // MD-only edit (name/notes) and delete of an existing package.
+  const [showEdit, setShowEdit] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   // Target of the shared "Reject Design" sheet — which status a rejection
   // from the currently open stage writes, and who it's then waiting on.
   const [rejectTarget, setRejectTarget] = useState<{ status: DesignPackageStatus; label: string }>({ status: 'md_rejected', label: 'MD rejected' })
@@ -277,6 +283,49 @@ export default function DesignCenterScreen() {
     if (firstVersion) setVersions(prev => [firstVersion!, ...prev])
     dismiss(() => setShowNew(false))
     setSnack({ open: true, msg: newPackageFiles.length > 0 ? `Design package created with ${newPackageFiles.length} file${newPackageFiles.length > 1 ? 's' : ''}.` : 'Design package created.', type: 'success' })
+  }
+
+  function openEdit() {
+    if (!selected) return
+    setEditName(selected.name); setEditNotes(selected.notes ?? ''); setFormError('')
+    setShowEdit(true)
+  }
+
+  async function handleSaveEdit() {
+    if (!selected || !user) return
+    if (!editName.trim()) { setFormError('Package name is required.'); return }
+    const updated: DesignPackage = { ...selected, name: editName.trim(), notes: editNotes.trim() || undefined, updatedAt: new Date().toISOString() }
+    const result = await updateDesignPackage(updated)
+    if (!result.ok) { setFormError(result.error ?? 'Could not save changes.'); return }
+    addAuditLog({
+      id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      projectId: updated.projectId,
+      action: 'design_package_edited',
+      description: `Design package "${selected.name}" edited by MD.`,
+      createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+    })
+    setPackages(prev => prev.map(p => (p.id === updated.id ? updated : p)))
+    setSelected(updated)
+    setShowEdit(false)
+    setSnack({ open: true, msg: 'Design package updated.', type: 'success' })
+  }
+
+  async function confirmDelete() {
+    if (!selected || !user) return
+    setShowDeleteDialog(false)
+    const result = await deleteDesignPackage(selected.id)
+    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete design package.', type: 'error' }); return }
+    addAuditLog({
+      id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      projectId: selected.projectId,
+      action: 'design_package_deleted',
+      description: `Design package "${selected.name}" deleted by MD.`,
+      createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+    })
+    setPackages(prev => prev.filter(p => p.id !== selected.id))
+    setVersions(prev => prev.filter(v => v.designPackageId !== selected.id))
+    setSelected(null)
+    setSnack({ open: true, msg: 'Design package deleted.', type: 'success' })
   }
 
   async function handleAddVersion() {
@@ -603,9 +652,54 @@ export default function DesignCenterScreen() {
                 )}
               </div>
             </div>
+
+            {user?.role === 'owner' && (
+              <div className="flex gap-2 pt-1">
+                <button onClick={openEdit}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 active:bg-slate-50">
+                  Edit Package
+                </button>
+                <button onClick={() => setShowDeleteDialog(true)}
+                  className="flex-1 py-2.5 rounded-xl border border-red-200 bg-red-50 text-xs font-bold text-red-600 active:bg-red-100">
+                  Delete Package
+                </button>
+              </div>
+            )}
           </div>
         )}
       </BottomSheet>
+
+      {/* Edit Design Package Sheet (MD) */}
+      <BottomSheet isOpen={showEdit} onClose={() => setShowEdit(false)} title="Edit Design Package">
+        <div className="space-y-3">
+          {formError && <p className="text-xs text-red-600 font-semibold">{formError}</p>}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Package Name *</label>
+            <input value={editName} onChange={e => setEditName(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Notes</label>
+            <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={3}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+          </div>
+          <button onClick={handleSaveEdit}
+            className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
+            style={{ background: '#C9A24B' }}>
+            Save Changes
+          </button>
+        </div>
+      </BottomSheet>
+
+      <Dialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        title="Delete Design Package"
+        message="Delete this design package and all its versions? This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        variant="danger"
+      />
 
       {/* New Design Package Sheet */}
       <BottomSheet isOpen={showNew} onClose={() => dismiss(() => setShowNew(false))} title="New Design Package" height="full">

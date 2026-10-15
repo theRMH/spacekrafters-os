@@ -25,6 +25,8 @@ const ACTION_LABEL: Record<string, string> = {
   project_closed: 'Project Closed',
   project_deleted: 'Project Deleted',
   design_status_changed: 'Design Status Changed',
+  design_package_edited: 'Design Package Edited',
+  design_package_deleted: 'Design Package Deleted',
   task_completed: 'Task Completed',
   task_completed_late: 'Task Completed Late',
   user_deleted: 'User Deleted',

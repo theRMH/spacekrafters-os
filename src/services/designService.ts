@@ -47,6 +47,17 @@ export async function updateDesignPackage(pkg: DesignPackage): Promise<{ ok: boo
   return { ok: true }
 }
 
+// Deletes a package (its versions go with it via ON DELETE CASCADE). Needs the
+// owner DELETE policy in supabase/owner-edit-policies.sql — without it Postgres
+// silently deletes 0 rows and returns no error, so confirm a row really went.
+export async function deleteDesignPackage(id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Not configured.' }
+  const { data, error } = await supabase.from(PACKAGES_TABLE).delete().eq('id', id).select('id')
+  if (error) return { ok: false, error: error.message }
+  if (!data || data.length === 0) return { ok: false, error: 'Delete was blocked by the database (owner delete policy not applied yet).' }
+  return { ok: true }
+}
+
 export async function getAllDesignVersions(): Promise<DesignVersion[]> {
   if (!supabase) return []
   const { data, error } = await supabase.from(VERSIONS_TABLE).select('data').order('created_at', { ascending: false })
