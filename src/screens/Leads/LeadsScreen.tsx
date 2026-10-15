@@ -54,9 +54,12 @@ const BUCKET_LABEL: Record<LeadBucket, string> = {
   lost:         'Lost',
 }
 
-function leadBucket(lead: Lead, appointments: Appointment[]): LeadBucket {
+// A brand-new lead has not been contacted yet, so it has no bucket of its own —
+// it only shows under Active until "Mark Contacted" moves it to Contacted.
+function leadBucket(lead: Lead, appointments: Appointment[]): LeadBucket | 'new' {
   switch (lead.status) {
-    case 'new': case 'contacted': return 'contacted'
+    case 'new': return 'new'
+    case 'contacted': return 'contacted'
     case 'qualified':
       return appointments.some(a => a.leadId === lead.id && a.status !== 'cancelled') ? 'appointment' : 'qualified'
     case 'site_visit_scheduled': case 'site_visit_done': return 'site_visit'
@@ -607,6 +610,12 @@ export default function LeadsScreen() {
     return b !== 'won' && b !== 'lost'
   }).length
 
+  // Sort to show after a status change: the lead's new bucket, or Active when it has none (New).
+  const bucketAfterChange = (l: Lead): BucketFilter => {
+    const b = leadBucket(l, appointments)
+    return b === 'new' ? 'active' : b
+  }
+
   const bucketChips: { value: BucketFilter; label: string; count: number }[] = [
     { value: 'active', label: 'Active', count: activeCount },
     ...BUCKET_ORDER.map(b => ({ value: b, label: BUCKET_LABEL[b], count: dateScoped.filter(l => leadBucket(l, appointments) === b).length })),
@@ -922,7 +931,7 @@ export default function LeadsScreen() {
           lead={liveSelected}
           onDone={(msg) => setSnack({ open: true, msg, type: 'success' })}
           // Follow the lead: switch the sort (chips + sidebar Lead Sort) to the bucket it just moved into.
-          onStatusChanged={status => navigate(`/leads?bucket=${leadBucket({ ...liveSelected, status }, appointments)}`, { replace: true })}
+          onStatusChanged={status => navigate(`/leads?bucket=${bucketAfterChange({ ...liveSelected, status })}`, { replace: true })}
         />
       )}
 
@@ -934,7 +943,7 @@ export default function LeadsScreen() {
             onClose={() => setQuickStatusLeadId(null)}
             lead={quickStatusLead}
             onDone={(msg) => setSnack({ open: true, msg, type: 'success' })}
-            onStatusChanged={status => navigate(`/leads?bucket=${leadBucket({ ...quickStatusLead, status }, appointments)}`, { replace: true })}
+            onStatusChanged={status => navigate(`/leads?bucket=${bucketAfterChange({ ...quickStatusLead, status })}`, { replace: true })}
           />
         ) : null
       })()}
