@@ -494,7 +494,7 @@ export default function DesignCenterScreen() {
             {user?.role === 'owner' && (
               <MdOverrideCard noun="status" title="design status"
                 options={(Object.keys(DESIGN_STATUS_LABEL) as DesignPackageStatus[]).filter(s => s !== selected.status).map(s => ({ value: s, label: DESIGN_STATUS_LABEL[s] }))}
-                onApply={async (v, reason) => { await handleStatusChange(v as DesignPackageStatus, reason, `MD override: ${DESIGN_STATUS_LABEL[selected.status]} → ${DESIGN_STATUS_LABEL[v as DesignPackageStatus]}`) }} />
+                onApply={async (v, reason) => { await handleStatusChange(v as DesignPackageStatus, reason || undefined, `MD override: ${DESIGN_STATUS_LABEL[selected.status]} → ${DESIGN_STATUS_LABEL[v as DesignPackageStatus]}`) }} />
             )}
 
             <div className="space-y-2">

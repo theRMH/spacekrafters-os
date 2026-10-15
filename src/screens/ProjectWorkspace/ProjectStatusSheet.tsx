@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
-import { MdOverrideCard } from '../../components/forms/MdOverrideCard'
+import { MdOverrideCard, withReason } from '../../components/forms/MdOverrideCard'
 import { useAuth } from '../../context/AuthContext'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getAllPurchaseOrders, getAllVendorBills } from '../../services/procurementService'
@@ -172,7 +172,7 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
         pendingStageRequest: undefined,
         status: stage === 'closed' ? 'closed' as const : project.status === 'closed' ? 'active' as const : project.status,
       },
-      `MD override: ${PROJECT_STAGE_LABEL[project.stage]} → ${PROJECT_STAGE_LABEL[stage]} — ${reason}`,
+      `MD override: ${PROJECT_STAGE_LABEL[project.stage]} → ${PROJECT_STAGE_LABEL[stage]}${withReason(reason)}`,
       stage,
     )
   }

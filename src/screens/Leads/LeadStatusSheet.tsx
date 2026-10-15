@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Phone, MessageCircle } from 'lucide-react'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
-import { MdOverrideCard } from '../../components/forms/MdOverrideCard'
+import { MdOverrideCard, withReason } from '../../components/forms/MdOverrideCard'
 import { DateField } from '../../components/forms/DateField'
 import { TimeField } from '../../components/forms/TimeField'
 import { StatusBadge } from '../../components/badges/StatusBadge'
@@ -192,8 +192,8 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     const status = value as LeadStatus
     await save(
       status,
-      `MD override: ${LEAD_STATUS_LABEL[lead.status]} → ${LEAD_STATUS_LABEL[status]} — ${reason}`,
-      { mdStatusOverride: true, ...(status === 'lost' ? { lostReason: reason } : {}) },
+      `MD override: ${LEAD_STATUS_LABEL[lead.status]} → ${LEAD_STATUS_LABEL[status]}${withReason(reason)}`,
+      { mdStatusOverride: true, ...(status === 'lost' ? { lostReason: reason || 'MD override' } : {}) },
     )
   }
 

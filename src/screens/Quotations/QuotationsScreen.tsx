@@ -751,7 +751,7 @@ export default function QuotationsScreen() {
             {user?.role === 'owner' && (
               <MdOverrideCard noun="status" title="quotation status"
                 options={(Object.keys(QUOTATION_STATUS_LABEL) as Quotation['status'][]).filter(s => s !== selected.status).map(s => ({ value: s, label: QUOTATION_STATUS_LABEL[s] }))}
-                onApply={async (v, reason) => { await handleStatusChange(selected, v as Quotation['status'], reason, `MD override: ${QUOTATION_STATUS_LABEL[selected.status]} → ${QUOTATION_STATUS_LABEL[v as Quotation['status']]}`) }} />
+                onApply={async (v, reason) => { await handleStatusChange(selected, v as Quotation['status'], reason || undefined, `MD override: ${QUOTATION_STATUS_LABEL[selected.status]} → ${QUOTATION_STATUS_LABEL[v as Quotation['status']]}`) }} />
             )}
 
             <div className="space-y-2">

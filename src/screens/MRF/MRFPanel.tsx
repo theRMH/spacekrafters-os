@@ -11,7 +11,7 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
-import { MdOverrideCard } from '../../components/forms/MdOverrideCard'
+import { MdOverrideCard, withReason } from '../../components/forms/MdOverrideCard'
 import { getAllMRFs, upsertMRF } from '../../services/mrfService'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { PROCUREMENT_STATUS_OPTIONS } from '../../data/procurementStatuses'
@@ -590,7 +590,7 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
       {user?.role === 'owner' && (
         <MdOverrideCard noun="status" title="MRF status" saving={isSaving}
           options={(Object.keys(MRF_STATUS_LABEL) as MRFStatus[]).filter(s => s !== mrf.status).map(s => ({ value: s, label: MRF_STATUS_LABEL[s] }))}
-          onApply={async (v, reason) => { await saveTransition(v as MRFStatus, `MD override: ${MRF_STATUS_LABEL[mrf.status]} → ${MRF_STATUS_LABEL[v as MRFStatus]} — ${reason}`) }} />
+          onApply={async (v, reason) => { await saveTransition(v as MRFStatus, `MD override: ${MRF_STATUS_LABEL[mrf.status]} → ${MRF_STATUS_LABEL[v as MRFStatus]}${withReason(reason)}`) }} />
       )}
 
       <div>

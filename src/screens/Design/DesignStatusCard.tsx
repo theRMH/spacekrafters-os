@@ -180,7 +180,7 @@ export function DesignStatusCard({ pkg, can, user, lead, updateLead, onChanged, 
       {user?.role === 'owner' && (
         <MdOverrideCard noun="status" title="design status" saving={saving}
           options={(Object.keys(DESIGN_STATUS_LABEL) as DesignPackage['status'][]).filter(s => s !== pkg.status).map(s => ({ value: s, label: DESIGN_STATUS_LABEL[s] }))}
-          onApply={(v, reason) => act(v as DesignPackage['status'], reason, `MD override: ${DESIGN_STATUS_LABEL[pkg.status]} → ${DESIGN_STATUS_LABEL[v as DesignPackage['status']]}`)} />
+          onApply={(v, reason) => act(v as DesignPackage['status'], reason || undefined, `MD override: ${DESIGN_STATUS_LABEL[pkg.status]} → ${DESIGN_STATUS_LABEL[v as DesignPackage['status']]}`)} />
       )}
 
       <button onClick={onReview} className="w-full py-2.5 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-600 active:bg-slate-50">

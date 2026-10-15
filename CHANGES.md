@@ -1,5 +1,9 @@
 ## 2026-10-15
 
+### Changed: MD override reason is now optional
+**Commit:** Uncommitted
+- **Changed:** `MdOverrideCard.tsx` — reason box is optional (placeholder "Reason (optional)"); new `withReason()` helper keeps history notes free of a dangling dash. Callers updated: lead, project, product sale, MRF, quotation, design. `tsc` and unit tests (75) pass.
+
 ### Changed: lead MD override card moved to the top of Update Status
 **Commit:** Uncommitted
 - **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the "MD override — lead status" card now sits above the Lead Details card instead of at the bottom. `tsc --noEmit` passes.

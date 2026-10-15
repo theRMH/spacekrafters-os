@@ -12,8 +12,13 @@ interface Props {
 }
 
 // MD-only escape hatch shared by every status/stage screen: pick any value
-// (forward or back) and give a mandatory reason. The caller records the reason
-// in that record's own history/activity log. Render it only for the owner role.
+// (forward or back) with an optional reason. The caller records the reason (if
+// any) in that record's own history/activity log. Render it only for the owner role.
+// Use withReason() to append it to a history note without a dangling dash.
+export function withReason(reason: string): string {
+  return reason ? ` — ${reason}` : ''
+}
+
 export function MdOverrideCard({ noun, title, options, onApply, saving = false }: Props) {
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState('')
@@ -21,7 +26,7 @@ export function MdOverrideCard({ noun, title, options, onApply, saving = false }
   const [busy, setBusy] = useState(false)
 
   async function apply() {
-    if (!value || !reason.trim()) return
+    if (!value) return
     setBusy(true)
     await onApply(value, reason.trim())
     setBusy(false)
@@ -41,9 +46,9 @@ export function MdOverrideCard({ noun, title, options, onApply, saving = false }
           <SearchableSelect value={value} onChange={setValue} options={options}
             placeholder={`Select new ${noun}…`} searchPlaceholder={`Search ${noun}…`} />
           <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2}
-            placeholder="Reason (required)"
+            placeholder="Reason (optional)"
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-          <button type="button" disabled={!value || !reason.trim() || saving || busy} onClick={apply}
+          <button type="button" disabled={!value || saving || busy} onClick={apply}
             className="w-full py-2.5 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
             Apply override
           </button>

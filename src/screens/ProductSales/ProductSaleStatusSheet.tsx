@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
-import { MdOverrideCard } from '../../components/forms/MdOverrideCard'
+import { MdOverrideCard, withReason } from '../../components/forms/MdOverrideCard'
 import { useAuth } from '../../context/AuthContext'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getAllPurchaseOrders, getAllGoodsReceipts } from '../../services/procurementService'
@@ -158,7 +158,7 @@ export function ProductSaleStatusSheet({ isOpen, onClose, project, onDone }: Pro
         pendingProductSaleStageRequest: undefined,
         status: toStage === 'completed' ? 'closed' as const : project.status === 'closed' ? 'active' as const : project.status,
       },
-      `MD override: ${PRODUCT_SALE_STAGE_LABEL[stage]} → ${PRODUCT_SALE_STAGE_LABEL[toStage]} — ${reason}`,
+      `MD override: ${PRODUCT_SALE_STAGE_LABEL[stage]} → ${PRODUCT_SALE_STAGE_LABEL[toStage]}${withReason(reason)}`,
       toStage,
     )
   }
