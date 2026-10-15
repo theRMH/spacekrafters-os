@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { MdOverrideCard } from '../../components/forms/MdOverrideCard'
 import { QUOTATION_STATUS_LABEL, quotationWorkflowInfo, fmtCurrency } from './QuotationsScreen'
 import { changeQuotationStatus, recordQuotationAdvanceDecision } from './quotationActions'
 import type { AuthUser, Lead, Quotation } from '../../types'
@@ -91,6 +92,12 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
         </div>
         <p className="text-xs text-indigo-700 mt-1.5">Next: {quotationWorkflowInfo(quotation).next}</p>
       </div>
+
+      {user?.role === 'owner' && (
+        <MdOverrideCard noun="status" title="quotation status" saving={saving}
+          options={(Object.keys(QUOTATION_STATUS_LABEL) as Quotation['status'][]).filter(s => s !== quotation.status).map(s => ({ value: s, label: QUOTATION_STATUS_LABEL[s] }))}
+          onApply={(v, reason) => act(v as Quotation['status'], reason, `MD override: ${QUOTATION_STATUS_LABEL[quotation.status]} → ${QUOTATION_STATUS_LABEL[v as Quotation['status']]}`)} />
+      )}
 
       {quotation.rejectionReason && (quotation.status === 'pc_rejected' || quotation.status === 'md_rejected') && (
         <p className="text-xs text-red-600">Revision reason: {quotation.rejectionReason}</p>

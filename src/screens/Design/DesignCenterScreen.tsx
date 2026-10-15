@@ -16,6 +16,7 @@ import { getAllQuotations } from '../../services/quotationService'
 import { addAuditLog } from '../../services/auditLogService'
 import { approvalHistoryEntry } from '../../utils/approvalHistory'
 import { changeDesignStatus, buildDesignClientMessage } from './designActions'
+import { MdOverrideCard } from '../../components/forms/MdOverrideCard'
 import { ROLE_LABELS } from '../../data/permissions'
 import type { Project, DesignPackage, DesignPackageStatus, DesignVersion, AuditLog, Quotation } from '../../types'
 
@@ -439,6 +440,12 @@ export default function DesignCenterScreen() {
                 <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Notes</p>
                 <p className="text-xs text-slate-600">{selected.notes}</p>
               </div>
+            )}
+
+            {user?.role === 'owner' && (
+              <MdOverrideCard noun="status" title="design status"
+                options={(Object.keys(DESIGN_STATUS_LABEL) as DesignPackageStatus[]).filter(s => s !== selected.status).map(s => ({ value: s, label: DESIGN_STATUS_LABEL[s] }))}
+                onApply={async (v, reason) => { await handleStatusChange(v as DesignPackageStatus, reason, `MD override: ${DESIGN_STATUS_LABEL[selected.status]} → ${DESIGN_STATUS_LABEL[v as DesignPackageStatus]}`) }} />
             )}
 
             <div className="space-y-2">

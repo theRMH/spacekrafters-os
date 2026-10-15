@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Phone, MessageCircle } from 'lucide-react'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { MdOverrideCard } from '../../components/forms/MdOverrideCard'
 import { DateField } from '../../components/forms/DateField'
 import { TimeField } from '../../components/forms/TimeField'
 import { StatusBadge } from '../../components/badges/StatusBadge'
@@ -160,7 +161,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
       // negotiating/client_approved/won/lost.
       const implied = impliedMinLeadStatus(myQuotation, myDesign)
       const curIdx = LEAD_STATUS_ORDER.indexOf(lead.status)
-      if (implied && curIdx !== -1 && LEAD_STATUS_ORDER.indexOf(implied) > curIdx) {
+      if (implied && curIdx !== -1 && !lead.mdStatusOverride && LEAD_STATUS_ORDER.indexOf(implied) > curIdx) {
         updateLead(lead.id, { status: implied }, `Synced to actual progress: ${implied.replace(/_/g, ' ')}`)
       }
     })
@@ -175,7 +176,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   // which is what let a lead jump to someone who was never actually told.
   async function save(status: LeadStatus, note: string, extra?: Partial<Lead>) {
     setSaving(true)
-    const result = await updateLead(lead.id, { status, ...extra }, note)
+    const result = await updateLead(lead.id, { status, mdStatusOverride: false, ...extra }, note)
     setSaving(false)
     if (result.ok) {
       onDone(note)
@@ -183,6 +184,17 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
     } else {
       onDone(result.error ?? 'Could not update status.')
     }
+  }
+
+  // MD-only: force the lead to any status (forward or back), bypassing the
+  // stage checks above. The reason is mandatory and goes into the activity log.
+  async function submitMdOverride(value: string, reason: string) {
+    const status = value as LeadStatus
+    await save(
+      status,
+      `MD override: ${LEAD_STATUS_LABEL[lead.status]} → ${LEAD_STATUS_LABEL[status]} — ${reason}`,
+      { mdStatusOverride: true, ...(status === 'lost' ? { lostReason: reason } : {}) },
+    )
   }
 
   // Explicit hand-off — the only way assignedToId/Name/Role ever changes.
@@ -936,6 +948,11 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
         </div>
 
         {renderBody()}
+
+        {user?.role === 'owner' && (
+          <MdOverrideCard noun="status" title="lead status" saving={saving} onApply={submitMdOverride}
+            options={(Object.keys(LEAD_STATUS_LABEL) as LeadStatus[]).filter(s => s !== lead.status).map(s => ({ value: s, label: LEAD_STATUS_LABEL[s] }))} />
+        )}
         <button onClick={onClose} className={secondaryBtn}>Cancel</button>
       </div>
     </BottomSheet>

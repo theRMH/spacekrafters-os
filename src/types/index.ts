@@ -182,6 +182,10 @@ export interface Lead {
   // on leads marked Lost before this field existed, or on leads that were
   // never Lost at all.
   lostFromStatus?: LeadStatus
+  // Set when the MD forces a status from Update Status → "MD override". While
+  // true, LeadStatusSheet's self-healing sync won't pull the lead forward
+  // again; cleared by the next normal status change.
+  mdStatusOverride?: boolean
   advancePaymentAmount?: number
   advancePaymentRef?: string
   activity: LeadActivityItem[]

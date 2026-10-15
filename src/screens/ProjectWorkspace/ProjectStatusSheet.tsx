@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
+import { MdOverrideCard } from '../../components/forms/MdOverrideCard'
 import { useAuth } from '../../context/AuthContext'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getAllPurchaseOrders, getAllVendorBills } from '../../services/procurementService'
@@ -156,6 +157,24 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
       await sendNotification([req.requestedById], 'Project Stage Approved',
         `${updated.name} — MD approved moving to ${PROJECT_STAGE_LABEL[req.toStage]}.`, `/projects/${updated.id}`)
     }
+  }
+
+  // MD-only: move the project to any stage (forward or back), skipping the
+  // approval flow. Clears a pending request, reassigns to the stage's
+  // responsible role, and reopens a closed project. Reason is mandatory.
+  async function submitMdOverride(value: string, reason: string) {
+    const stage = value as ProjectStage
+    const { role, id, name } = nextResponsible(stage)
+    await persist(
+      {
+        stage,
+        assignedRole: role, assignedToId: id, assignedToName: name,
+        pendingStageRequest: undefined,
+        status: stage === 'closed' ? 'closed' as const : project.status === 'closed' ? 'active' as const : project.status,
+      },
+      `MD override: ${PROJECT_STAGE_LABEL[project.stage]} → ${PROJECT_STAGE_LABEL[stage]} — ${reason}`,
+      stage,
+    )
   }
 
   async function handleReject() {
@@ -375,6 +394,10 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
           <p className="text-xs text-slate-400 -mt-2">Moving to the next stage needs MD approval before it takes effect.</p>
         )}
         {renderBody()}
+        {user?.role === 'owner' && (
+          <MdOverrideCard noun="stage" title="project stage" saving={saving} onApply={submitMdOverride}
+            options={PROJECT_STAGE_ORDER.filter(s => s !== project.stage).map(s => ({ value: s, label: PROJECT_STAGE_LABEL[s] }))} />
+        )}
         <button onClick={onClose} className={secondaryBtn}>Cancel</button>
       </div>
     </BottomSheet>

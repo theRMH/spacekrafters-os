@@ -1,5 +1,14 @@
 ## 2026-10-15
 
+### Added: MD override — change any lead / project / quotation / design status
+**Commit:** Uncommitted
+- **Added:** `src/components/forms/MdOverrideCard.tsx` — shared owner-only card: pick any status/stage (forward or back) plus a mandatory reason.
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — owner sees "MD override — lead status". Sets `Lead.mdStatusOverride`, which stops the sheet's self-healing sync from pulling the lead forward again; the next normal status change clears it. Reason goes into the lead activity log.
+- **Changed:** `src/screens/ProjectWorkspace/ProjectStatusSheet.tsx` — owner can move a project to any stage (clears a pending approval request, reassigns to the stage's role, reopens a closed project). Reason goes into the project status history.
+- **Changed:** `QuotationStatusCard.tsx`, `QuotationsScreen.tsx`, `DesignStatusCard.tsx`, `DesignCenterScreen.tsx` — owner can set any quotation / design status via the existing `changeQuotationStatus` / `changeDesignStatus`, so history, notifications and audit log still apply.
+- **Changed:** `src/types/index.ts` — optional `Lead.mdStatusOverride` (stored in the lead's JSON `data`, no DB change).
+- **Verified:** `tsc --noEmit` and unit tests (75) pass. No DB changes.
+
 ### Added: Site Visits sorted by status (page chips + sidebar "Site Visit Sort")
 **Commit:** Uncommitted
 - **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — All / Scheduled / Done chips (`?status=`). Scheduled lists leads whose status is Site Visit Scheduled and have no recorded visit yet (previously the page showed nothing for them), with an Update Status button only. Done is the existing recorded-visit list.
