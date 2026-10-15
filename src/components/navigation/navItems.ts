@@ -43,14 +43,6 @@ const PROJECT_SORT: [string, string][] = [
 
 export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
-    label: 'Lead Sort',
-    items: LEAD_SORT.map(([key, label]) => ({ icon: Circle, label, path: `/leads?bucket=${key}`, permission: 'view_leads' as Permission })),
-  },
-  {
-    label: 'Project Sort',
-    items: PROJECT_SORT.map(([key, label]) => ({ icon: Circle, label, path: `/projects?stage=${key}`, permission: 'view_projects' as Permission })),
-  },
-  {
     label: 'CRM',
     items: [
       { icon: Users,         label: 'Leads',        path: '/leads',        permission: 'view_leads'        },
@@ -58,6 +50,14 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { icon: ClipboardList, label: 'Follow-ups',   path: '/follow-ups',   permission: 'view_activity'     },
       { icon: ShieldCheck,   label: 'Approval',     path: '/approval',    permission: 'view_md_tasks'     },
     ],
+  },
+  {
+    label: 'Lead Sort',
+    items: LEAD_SORT.map(([key, label]) => ({ icon: Circle, label, path: `/leads?bucket=${key}`, permission: 'view_leads' as Permission })),
+  },
+  {
+    label: 'Project Sort',
+    items: PROJECT_SORT.map(([key, label]) => ({ icon: Circle, label, path: `/projects?stage=${key}`, permission: 'view_projects' as Permission })),
   },
   {
     label: 'Product Sales',

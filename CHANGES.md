@@ -3,6 +3,7 @@
 ### Added: Lead Sort and Project Sort sections in the sidebar
 **Commit:** Uncommitted
 - **Changed:** `src/components/navigation/navItems.ts` — new "Lead Sort" (Active, Contacted, Qualified, Appointment, Site Visit, Requirements, Quotation, Negotiation, Won, Lost) and "Project Sort" (Active + each project stage) sections; each links to `/leads?bucket=…` or `/projects?stage=…`. Also appear in the mobile menu drawer, which shares the same list.
+- **Changed:** `src/components/navigation/navItems.ts` — CRM section moved above Lead Sort (order: Main, CRM, Lead Sort, Project Sort, …).
 - **Changed:** `src/components/navigation/SidebarNavigation.tsx` — `/leads` with no query string highlights the Active item.
 - **Changed:** `src/screens/Leads/LeadsScreen.tsx` — bucket filter now follows `?bucket=`; the chips update the URL so the sidebar stays in sync.
 - **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — filters by `?stage=` (`active` = not closed) and shows stage chips. Plain `/projects` still lists every project.
