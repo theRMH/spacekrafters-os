@@ -1,5 +1,9 @@
 ## 2026-10-15
 
+### Changed: lead MD override card moved to the top of Update Status
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Leads/LeadStatusSheet.tsx` — the "MD override — lead status" card now sits above the Lead Details card instead of at the bottom. `tsc --noEmit` passes.
+
 ### Added: MD edit for Daily Diary, Daily Tasks and Task details
 **Commit:** Uncommitted  ·  **⚠ DEPLOY** only for Daily Diary delete (needs `supabase/owner-edit-policies.sql`); everything else works without it
 - **Changed:** `DailyDiaryScreen.tsx` + `dailyDiaryService.ts` — owner can edit an entry (reuses the New Entry form) and delete it. `deleteDiaryEntry()` checks a row was really removed, since without the owner DELETE policy Postgres returns success with 0 rows. Both write to the audit log.

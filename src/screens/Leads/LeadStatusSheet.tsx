@@ -878,6 +878,11 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title={`Update Status — ${LEAD_STATUS_LABEL[lead.status]}`} height="full">
       <div className="space-y-4">
+        {user?.role === 'owner' && (
+          <MdOverrideCard noun="status" title="lead status" saving={saving} onApply={submitMdOverride}
+            options={(Object.keys(LEAD_STATUS_LABEL) as LeadStatus[]).filter(s => s !== lead.status).map(s => ({ value: s, label: LEAD_STATUS_LABEL[s] }))} />
+        )}
+
         {/* Lead details card — compact, light card (not a full-bleed dark
             header) matching the reference app's own "Customer Details" card:
             label, name + status badge, then phone/location/owner/company in
@@ -949,10 +954,6 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone }: Props) {
 
         {renderBody()}
 
-        {user?.role === 'owner' && (
-          <MdOverrideCard noun="status" title="lead status" saving={saving} onApply={submitMdOverride}
-            options={(Object.keys(LEAD_STATUS_LABEL) as LeadStatus[]).filter(s => s !== lead.status).map(s => ({ value: s, label: LEAD_STATUS_LABEL[s] }))} />
-        )}
         <button onClick={onClose} className={secondaryBtn}>Cancel</button>
       </div>
     </BottomSheet>
