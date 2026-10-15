@@ -2,7 +2,7 @@
 
 ### Added: Site Visits sorted by status (page chips + sidebar "Site Visit Sort")
 **Commit:** Uncommitted
-- **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — All / Scheduled / Done chips (`?status=`). Scheduled lists leads whose status is Site Visit Scheduled and have no recorded visit yet (previously the page showed nothing for them), with Update Status and Record Visit buttons. Done is the existing recorded-visit list.
+- **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — All / Scheduled / Done chips (`?status=`). Scheduled lists leads whose status is Site Visit Scheduled and have no recorded visit yet (previously the page showed nothing for them), with an Update Status button only. Done is the existing recorded-visit list.
 - **Changed:** `src/components/navigation/navItems.ts` — new "Site Visit Sort" sidebar section (Scheduled, Done) after Project Sort.
 - **Verified:** `tsc --noEmit` and unit tests (75) pass. No DB changes.
 

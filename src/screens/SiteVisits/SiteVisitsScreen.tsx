@@ -339,19 +339,10 @@ export default function SiteVisitsScreen() {
               <span className="text-xs text-slate-500">{lead.city}</span>
             </div>
             <p className="text-xs text-slate-600">Site visit scheduled — not recorded yet</p>
-            <div className="flex gap-2 mt-3">
-              <button onClick={() => setQuickStatusLeadId(lead.id)}
-                className="flex-1 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 active:bg-blue-100">
-                Update Status
-              </button>
-              <PermissionGate permission="add_site_visit">
-                <button onClick={() => { resetForm(); setLeadId(lead.id); setShowNew(true) }}
-                  className="flex-1 py-2 rounded-xl text-xs font-bold text-white active:opacity-90"
-                  style={{ background: '#0F2A4A' }}>
-                  Record Visit
-                </button>
-              </PermissionGate>
-            </div>
+            <button onClick={() => setQuickStatusLeadId(lead.id)}
+              className="w-full mt-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 active:bg-blue-100">
+              Update Status
+            </button>
           </div>
         ))}
         {!isLoading && showDone && filtered.map(visit => {
