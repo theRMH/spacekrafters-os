@@ -213,8 +213,10 @@ export default function SiteVisitsScreen() {
     setChecklist(prev => prev.map(c => (c.id === id ? { ...c, checked: !c.checked } : c)))
   }
 
-  function setSiteChecklistAnswer(id: string, answer: 'yes' | 'no') {
-    setSiteChecklist(prev => prev.map(c => (c.id === id ? { ...c, answer: c.answer === answer ? null : answer } : c)))
+  // Ticked = Yes; unticked = not answered (null), so an untouched item still
+  // never reads as a confirmed "No".
+  function toggleSiteChecklistItem(id: string) {
+    setSiteChecklist(prev => prev.map(c => (c.id === id ? { ...c, answer: c.answer === 'yes' ? null : 'yes' } : c)))
   }
 
   async function handleAddVisit() {
@@ -539,23 +541,11 @@ export default function SiteVisitsScreen() {
             <label className="text-xs font-semibold text-slate-500 mb-2 block">Site Checklist</label>
             <div className="bg-slate-50 rounded-2xl p-3.5 space-y-2.5">
               {siteChecklist.map(item => (
-                <div key={item.id} className="flex items-center justify-between gap-3">
-                  <span className="text-xs text-slate-700 flex-1">{item.label}</span>
-                  <div className="flex gap-1.5 shrink-0">
-                    <button type="button" onClick={() => setSiteChecklistAnswer(item.id, 'yes')}
-                      className={`w-12 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
-                        item.answer === 'yes' ? 'bg-emerald-600 text-white' : 'bg-white border border-slate-200 text-slate-500'
-                      }`}>
-                      Yes
-                    </button>
-                    <button type="button" onClick={() => setSiteChecklistAnswer(item.id, 'no')}
-                      className={`w-12 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
-                        item.answer === 'no' ? 'bg-red-500 text-white' : 'bg-white border border-slate-200 text-slate-500'
-                      }`}>
-                      No
-                    </button>
-                  </div>
-                </div>
+                <label key={item.id} className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={item.answer === 'yes'} onChange={() => toggleSiteChecklistItem(item.id)}
+                    className="w-4 h-4 accent-indigo-600" />
+                  <span className="text-xs text-slate-700">{item.label}</span>
+                </label>
               ))}
             </div>
           </div>

@@ -1,5 +1,10 @@
 ## 2026-10-15
 
+### Changed: Site Visit form — Site Checklist is now tick boxes
+**Commit:** Uncommitted
+- **Changed:** `src/screens/SiteVisits/SiteVisitsScreen.tsx` — the Yes/No buttons on the Site Checklist are now checkboxes, matching the Checklist above them. Ticked = `yes`, unticked = `null` (not answered); the form no longer writes `no`. Records already saved with `no` still display No in the visit detail and report; editing one shows an unticked box.
+- **Verified:** `tsc --noEmit` passes. No DB changes.
+
 ### Added: Lead Sort and Project Sort sections in the sidebar
 **Commit:** Uncommitted
 - **Changed:** `src/components/navigation/navItems.ts` — new "Lead Sort" (Active, Contacted, Qualified, Appointment, Site Visit, Requirements, Quotation, Negotiation, Won, Lost) and "Project Sort" (Active + each project stage) sections; each links to `/leads?bucket=…` or `/projects?stage=…`. Also appear in the mobile menu drawer, which shares the same list.
