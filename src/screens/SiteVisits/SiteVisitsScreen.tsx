@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Trash2, CheckSquare, Square } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
+import { FilterChips } from '../../components/forms/FilterChips'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { DateField } from '../../components/forms/DateField'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
@@ -86,6 +87,7 @@ export default function SiteVisitsScreen() {
   const { user } = useAuth()
   const { leads } = useCRM()
   const routerLocation = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
   const [visits, setVisits] = useState<SiteVisit[]>([])
@@ -287,6 +289,24 @@ export default function SiteVisitsScreen() {
 
   const filtered = visits.filter(v => !search || leadName(v.leadId).toLowerCase().includes(search.toLowerCase()))
 
+  // Sort by status (sidebar "Site Visit Sort" uses ?status=). Scheduled = leads
+  // whose status is Site Visit Scheduled and have no recorded visit yet; Done =
+  // the recorded visits above.
+  const statusParam = searchParams.get('status')
+  const view: 'all' | 'scheduled' | 'done' = statusParam === 'scheduled' || statusParam === 'done' ? statusParam : 'all'
+  const leadIdsWithVisit = new Set(visits.map(v => v.leadId))
+  const scheduledLeads = leads.filter(l =>
+    l.status === 'site_visit_scheduled' && !leadIdsWithVisit.has(l.id) &&
+    (!search || l.name.toLowerCase().includes(search.toLowerCase())))
+  const showScheduled = view !== 'done'
+  const showDone = view !== 'scheduled'
+  const nothingToShow = (!showScheduled || scheduledLeads.length === 0) && (!showDone || filtered.length === 0)
+  const statusChips = [
+    { value: 'all' as const, label: 'All', count: scheduledLeads.length + filtered.length },
+    { value: 'scheduled' as const, label: 'Scheduled', count: scheduledLeads.length },
+    { value: 'done' as const, label: 'Done', count: filtered.length },
+  ]
+
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
       <AppHeader />
@@ -302,10 +322,39 @@ export default function SiteVisitsScreen() {
           </PermissionGate>
         </div>
         <SearchBar value={search} onChange={setSearch} placeholder="Search by lead name…" />
+        <FilterChips
+          chips={statusChips}
+          active={view}
+          onChange={v => setSearchParams(v === 'all' ? {} : { status: v }, { replace: true })}
+          className="mt-3"
+        />
       </div>
 
       <div className="px-4 pt-4 space-y-2.5">
-        {!isLoading && filtered.map(visit => {
+        {!isLoading && showScheduled && scheduledLeads.map(lead => (
+          <div key={lead.id} className="bg-white rounded-2xl shadow-card border border-slate-100 p-4">
+            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+              <span className="text-sm font-bold text-slate-800">{lead.name}</span>
+              <span className="text-slate-300 text-xs">|</span>
+              <span className="text-xs text-slate-500">{lead.city}</span>
+            </div>
+            <p className="text-xs text-slate-600">Site visit scheduled — not recorded yet</p>
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => setQuickStatusLeadId(lead.id)}
+                className="flex-1 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 active:bg-blue-100">
+                Update Status
+              </button>
+              <PermissionGate permission="add_site_visit">
+                <button onClick={() => { resetForm(); setLeadId(lead.id); setShowNew(true) }}
+                  className="flex-1 py-2 rounded-xl text-xs font-bold text-white active:opacity-90"
+                  style={{ background: '#0F2A4A' }}>
+                  Record Visit
+                </button>
+              </PermissionGate>
+            </div>
+          </div>
+        ))}
+        {!isLoading && showDone && filtered.map(visit => {
           const checked = visit.checklist.filter(c => c.checked).length
           return (
             <div key={visit.id} onClick={() => setSelected(visit)}
@@ -329,7 +378,7 @@ export default function SiteVisitsScreen() {
           )
         })}
 
-        {!isLoading && filtered.length === 0 && (
+        {!isLoading && nothingToShow && (
           <div className="text-center py-16 text-slate-400">
             <p className="text-3xl mb-2">📐</p>
             <p className="text-sm">No site visits found</p>

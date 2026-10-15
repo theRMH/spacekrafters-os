@@ -35,6 +35,7 @@ const LEAD_SORT: [string, string][] = [
   ['appointment', 'Appointment'], ['site_visit', 'Site Visit'], ['requirements', 'Requirements'],
   ['quotation', 'Quotation'], ['negotiation', 'Negotiation'], ['won', 'Won'], ['lost', 'Lost'],
 ]
+const SITE_VISIT_SORT: [string, string][] = [['scheduled', 'Scheduled'], ['done', 'Done']]
 const PROJECT_SORT: [string, string][] = [
   ['active', 'Active'], ['advance_payment', 'Advance Payment'], ['designing', 'Designing'],
   ['execution', 'Execution'], ['procurement', 'Procurement'], ['handover_prep', 'Handover Prep'],
@@ -58,6 +59,10 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Project Sort',
     items: PROJECT_SORT.map(([key, label]) => ({ icon: Circle, label, path: `/projects?stage=${key}`, permission: 'view_projects' as Permission })),
+  },
+  {
+    label: 'Site Visit Sort',
+    items: SITE_VISIT_SORT.map(([key, label]) => ({ icon: Circle, label, path: `/site-visits?status=${key}`, permission: 'view_site_visits' as Permission })),
   },
   {
     label: 'Product Sales',
