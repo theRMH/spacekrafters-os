@@ -17,7 +17,7 @@ import { getAllProjects } from '../../services/projectService'
 import { addAuditLog } from '../../services/auditLogService'
 import type { SiteVisit, Requirement, RequirementLineItem, Project, AuditLog } from '../../types'
 
-const UNIT_OPTIONS = ['sqft', 'nos', 'rft', 'sft', 'lot', 'set']
+const UNIT_OPTIONS = ['sqft', 'nos', 'rft', 'sft', 'lot', 'set', 'cft']
 
 function fmtDate(val: string): string {
   const d = new Date(val)

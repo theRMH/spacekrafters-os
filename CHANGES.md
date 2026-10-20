@@ -1,5 +1,9 @@
 ## 2026-10-15
 
+### Added: CFT unit on the Requirement form
+**Commit:** Uncommitted
+- **Changed:** `RequirementsScreen.tsx` — `cft` added to the unit dropdown (after `set`), same lowercase style as the others. Quotations already had `cft`, so a requirement line in cft carries over unchanged. `tsc` passes.
+
 ### Changed: Site Visit room total no longer uses height
 **Commit:** Uncommitted
 - **Changed:** `SiteVisitsScreen.tsx` — room Total is now Length × Width in sq.ft only (it used to become cu.ft when a height was entered). The entered height is shown as "Height: N ft" under the total, in the form and in the visit detail. The × between Width and Height became a | so it no longer reads as part of the sum. Opening an old visit in Edit recomputes its total in sq.ft; the detail view also recomputes where length/width exist.
