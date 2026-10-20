@@ -1,5 +1,10 @@
 ## 2026-10-15
 
+### Changed: Site Visit room total no longer uses height
+**Commit:** Uncommitted
+- **Changed:** `SiteVisitsScreen.tsx` — room Total is now Length × Width in sq.ft only (it used to become cu.ft when a height was entered). The entered height is shown as "Height: N ft" under the total, in the form and in the visit detail. The × between Width and Height became a | so it no longer reads as part of the sum. Opening an old visit in Edit recomputes its total in sq.ft; the detail view also recomputes where length/width exist.
+- **Not changed:** `RequirementsScreen.tsx` still has its own length×width×height (cu.ft) total — say if it should follow. `tsc` and unit tests (75) pass.
+
 ### Changed: Appointment step removed — Qualified now goes to Go to Site (Site Visits)
 **Commit:** Uncommitted  ·  no DB changes
 - **Flow:** Qualified → **Go to Site** (opens the Site Visits form for that lead) → once a visit is on record, **Confirm Go to Site** moves the lead to Site Visit Scheduled → Mark Site Visit Done (unchanged).

@@ -71,13 +71,17 @@ function formatMeasurements(length: string, width: string, height: string): stri
   return [length, width, height].filter(Boolean).map(v => `${v}ft`).join(' x ')
 }
 
-// Length×Width = area (sq.ft); adding Height upgrades it to volume (cu.ft) —
-// mirrors RequirementsScreen.tsx's calcLineItemTotal() exactly.
-function calcRoomTotal(length?: string, width?: string, height?: string): string {
-  const l = parseFloat(length ?? ''), w = parseFloat(width ?? ''), h = parseFloat(height ?? '')
+// Total = Length × Width in sq.ft. Height is NOT part of the calculation — it is
+// only recorded and shown under the total (see HeightLine below).
+function calcRoomTotal(length?: string, width?: string): string {
+  const l = parseFloat(length ?? ''), w = parseFloat(width ?? '')
   if (isNaN(l) || isNaN(w)) return ''
-  if (!isNaN(h) && h > 0) return `${(l * w * h).toLocaleString('en-IN', { maximumFractionDigits: 2 })} cu.ft`
   return `${(l * w).toLocaleString('en-IN', { maximumFractionDigits: 2 })} sq.ft`
+}
+
+function heightLabel(height?: string): string {
+  const h = parseFloat(height ?? '')
+  return !isNaN(h) && h > 0 ? `Height: ${h} ft` : ''
 }
 
 function defaultChecklist(): SiteVisitChecklistItem[] {
@@ -200,7 +204,7 @@ export default function SiteVisitsScreen() {
     const roomsWithFt = visit.rooms.map(r => {
       const hasFt = r.lengthFt !== undefined || r.widthFt !== undefined
       const { length, width } = hasFt ? { length: r.lengthFt, width: r.widthFt } : parseMeasurements(r.measurements)
-      return { ...r, lengthFt: length, widthFt: width, calculatedTotal: r.calculatedTotal || calcRoomTotal(length, width, r.heightFt) }
+      return { ...r, lengthFt: length, widthFt: width, calculatedTotal: calcRoomTotal(length, width) || r.calculatedTotal }
     })
     setRooms(roomsWithFt.length ? roomsWithFt : [newRoom()])
     setChecklist(visit.checklist.length ? visit.checklist : defaultChecklist())
@@ -413,7 +417,10 @@ export default function SiteVisitsScreen() {
                   <div key={room.id} className="bg-slate-50 rounded-2xl p-3.5">
                     <p className="text-sm font-bold text-slate-800 mb-1">{room.name}</p>
                     {room.measurements && <p className="text-xs text-slate-600 mb-1">📏 {room.measurements}</p>}
-                    {room.calculatedTotal && <p className="text-xl font-bold text-indigo-600 mb-1">Total: {room.calculatedTotal}</p>}
+                    {(calcRoomTotal(room.lengthFt, room.widthFt) || room.calculatedTotal) && (
+                      <p className="text-xl font-bold text-indigo-600 mb-0.5">Total: {calcRoomTotal(room.lengthFt, room.widthFt) || room.calculatedTotal}</p>
+                    )}
+                    {heightLabel(room.heightFt) && <p className="text-xs text-slate-500 mb-1">{heightLabel(room.heightFt)}</p>}
                     {room.notes && <p className="text-xs text-slate-500">{room.notes}</p>}
                     {room.photos && room.photos.length > 0 && (
                       <MultiFileUploadField label="Room Photos" files={room.photos} onChange={() => {}} accept="image/*" uploadButtonLabel="Upload Photo" readOnly />
@@ -550,7 +557,7 @@ export default function SiteVisitsScreen() {
                     <input type="number" min="0" step="0.01" value={room.lengthFt ?? ''}
                       onChange={e => updateRoom(room.id, {
                         lengthFt: e.target.value, measurements: formatMeasurements(e.target.value, room.widthFt ?? '', room.heightFt ?? ''),
-                        calculatedTotal: calcRoomTotal(e.target.value, room.widthFt, room.heightFt),
+                        calculatedTotal: calcRoomTotal(e.target.value, room.widthFt),
                       })}
                       placeholder="Length (ft)"
                       className="w-1/3 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
@@ -558,15 +565,14 @@ export default function SiteVisitsScreen() {
                     <input type="number" min="0" step="0.01" value={room.widthFt ?? ''}
                       onChange={e => updateRoom(room.id, {
                         widthFt: e.target.value, measurements: formatMeasurements(room.lengthFt ?? '', e.target.value, room.heightFt ?? ''),
-                        calculatedTotal: calcRoomTotal(room.lengthFt, e.target.value, room.heightFt),
+                        calculatedTotal: calcRoomTotal(room.lengthFt, e.target.value),
                       })}
                       placeholder="Width (ft)"
                       className="w-1/3 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
-                    <span className="text-slate-400 text-sm">×</span>
+                    <span className="text-slate-300 text-sm">|</span>
                     <input type="number" min="0" step="0.01" value={room.heightFt ?? ''}
                       onChange={e => updateRoom(room.id, {
                         heightFt: e.target.value, measurements: formatMeasurements(room.lengthFt ?? '', room.widthFt ?? '', e.target.value),
-                        calculatedTotal: calcRoomTotal(room.lengthFt, room.widthFt, e.target.value),
                       })}
                       placeholder="Height (ft)"
                       className="w-1/3 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
@@ -574,6 +580,7 @@ export default function SiteVisitsScreen() {
                   {room.calculatedTotal && (
                     <p className="text-xl font-bold text-indigo-600">Total: {room.calculatedTotal}</p>
                   )}
+                  {heightLabel(room.heightFt) && <p className="text-xs text-slate-500 -mt-1">{heightLabel(room.heightFt)}</p>}
                   <input value={room.notes ?? ''} onChange={e => updateRoom(room.id, { notes: e.target.value })}
                     placeholder="Scope of Works (optional)"
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
