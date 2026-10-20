@@ -16,7 +16,6 @@ import UserManagementScreen from './screens/Settings/UserManagementScreen'
 import AttendanceSettingsScreen from './screens/Settings/AttendanceSettingsScreen'
 import LeadsScreen from './screens/Leads/LeadsScreen'
 import LeadDetailScreen from './screens/Leads/LeadDetailScreen'
-import AppointmentsScreen from './screens/Appointments/AppointmentsScreen'
 import FollowUpsScreen from './screens/FollowUps/FollowUpsScreen'
 import SiteVisitsScreen from './screens/SiteVisits/SiteVisitsScreen'
 import RequirementsScreen from './screens/Requirements/RequirementsScreen'
@@ -173,14 +172,6 @@ function AuthedRoutes() {
         element={
           <ProtectedRoute screenPath="leads">
             <AppShell><LeadDetailScreen /></AppShell>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/appointments"
-        element={
-          <ProtectedRoute screenPath="appointments">
-            <AppShell><AppointmentsScreen /></AppShell>
           </ProtectedRoute>
         }
       />

@@ -7,19 +7,17 @@ import { AppHeader } from '../../components/layout/AppHeader'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
-import { getAllAppointments } from '../../services/appointmentService'
 import { getAllFollowUps } from '../../services/followUpService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
 import { BUSINESS_DIVISION_LABEL, BUSINESS_CATEGORY_LABEL, BUSINESS_BRAND_LABEL } from '../../data/businessDivisions'
-import type { Appointment, FollowUp, SiteVisit } from '../../types'
+import type { FollowUp, SiteVisit } from '../../types'
 import { LeadStatusSheet, LEAD_STATUS_LABEL } from './LeadStatusSheet'
 import { LeadActivityHistory } from './LeadActivityHistory'
 
-type Tab = 'overview' | 'appointments' | 'follow-ups' | 'site-visits' | 'activity'
+type Tab = 'overview' | 'follow-ups' | 'site-visits' | 'activity'
 
 const TABS: { value: Tab; label: string }[] = [
   { value: 'overview',     label: 'Overview'    },
-  { value: 'appointments', label: 'Appointments'},
   { value: 'follow-ups',   label: 'Follow-Ups'  },
   { value: 'site-visits',  label: 'Site Visits' },
   { value: 'activity',     label: 'Activity'    },
@@ -45,7 +43,6 @@ export default function LeadDetailScreen() {
   const lead = leads.find(l => l.id === id)
 
   const [tab, setTab] = useState<Tab>('overview')
-  const [appointments, setAppointments] = useState<Appointment[]>([])
   const [followUps, setFollowUps] = useState<FollowUp[]>([])
   const [siteVisits, setSiteVisits] = useState<SiteVisit[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -57,8 +54,7 @@ export default function LeadDetailScreen() {
   useEffect(() => {
     async function load() {
       setIsLoading(true)
-      const [appts, fus, visits] = await Promise.all([getAllAppointments(), getAllFollowUps(), getAllSiteVisits()])
-      setAppointments(appts.filter(a => a.leadId === id))
+      const [fus, visits] = await Promise.all([getAllFollowUps(), getAllSiteVisits()])
       setFollowUps(fus.filter(f => f.leadId === id))
       setSiteVisits(visits.filter(v => v.leadId === id))
       setIsLoading(false)
@@ -177,26 +173,6 @@ export default function LeadDetailScreen() {
                 <p className="text-[12px] font-bold text-red-400 uppercase tracking-wider mb-1">Lost Reason</p>
                 <p className="text-sm text-red-700">{lead.lostReason}</p>
               </div>
-            )}
-          </div>
-        )}
-
-        {tab === 'appointments' && (
-          <div className="space-y-2.5">
-            {!isLoading && appointments.map(a => (
-              <div key={a.id} className="bg-white rounded-2xl border border-slate-100 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">{fmtDateTime(a.scheduledAt)}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{a.location}</p>
-                    <p className="text-[12px] text-slate-400 mt-0.5">Coordinator: {a.coordinatorName}</p>
-                  </div>
-                  <StatusBadge status={a.status} size="xs" />
-                </div>
-              </div>
-            ))}
-            {!isLoading && appointments.length === 0 && (
-              <p className="text-center text-sm text-slate-400 py-10">No appointments yet</p>
             )}
           </div>
         )}

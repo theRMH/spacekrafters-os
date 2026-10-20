@@ -20,6 +20,11 @@ import { addAuditLog } from '../../services/auditLogService'
 import { LeadStatusSheet } from '../Leads/LeadStatusSheet'
 import type { SiteVisit, SiteVisitRoom, SiteVisitChecklistItem, SiteChecklistItem, AuditLog, ManagedUser } from '../../types'
 
+const CUSTOMER_PRESENCE_OPTIONS: { value: NonNullable<SiteVisit['customerPresence']>; label: string }[] = [
+  { value: 'with_customer', label: 'With customer' },
+  { value: 'without_customer', label: 'Without customer' },
+]
+
 const DEFAULT_CHECKLIST_LABELS = [
   'Electrical points marked',
   'Plumbing points marked',
@@ -110,6 +115,7 @@ export default function SiteVisitsScreen() {
   const [leadId, setLeadId] = useState('')
   const [visitDate, setVisitDate] = useState('')
   const [teamMemberIds, setTeamMemberIds] = useState<string[]>([])
+  const [customerPresence, setCustomerPresence] = useState<NonNullable<SiteVisit['customerPresence']>>('with_customer')
   const [rooms, setRooms] = useState<SiteVisitRoom[]>([newRoom()])
   const [checklist, setChecklist] = useState<SiteVisitChecklistItem[]>(defaultChecklist())
   const [siteChecklist, setSiteChecklist] = useState<SiteChecklistItem[]>(defaultSiteChecklist())
@@ -175,7 +181,7 @@ export default function SiteVisitsScreen() {
   }
 
   function resetForm() {
-    setLeadId(''); setVisitDate(''); setTeamMemberIds(user ? [user.id] : []); setRooms([newRoom()]); setChecklist(defaultChecklist())
+    setLeadId(''); setVisitDate(''); setCustomerPresence('with_customer'); setTeamMemberIds(user ? [user.id] : []); setRooms([newRoom()]); setChecklist(defaultChecklist())
     setSiteChecklist(defaultSiteChecklist())
     setNotes(''); setFormError('')
   }
@@ -187,6 +193,7 @@ export default function SiteVisitsScreen() {
 
   function openEdit(visit: SiteVisit) {
     setLeadId(visit.leadId); setVisitDate(visit.visitDate.slice(0, 10))
+    setCustomerPresence(visit.customerPresence ?? 'with_customer')
     setTeamMemberIds(visit.teamMemberIds ?? [])
     // Backfill lengthFt/widthFt for rooms saved before the two-box measurement
     // input existed — they only have the combined "12ft x 14ft" string.
@@ -234,7 +241,7 @@ export default function SiteVisitsScreen() {
     const now = new Date().toISOString()
     const visit: SiteVisit = {
       id: `sv_${Date.now()}`,
-      leadId, visitDate: new Date(visitDate).toISOString(),
+      leadId, visitDate: new Date(visitDate).toISOString(), customerPresence,
       teamMemberIds, teamMemberNames: namesFor(teamMemberIds),
       rooms: validRooms, checklist, siteChecklist, notes: notes.trim() || undefined,
       createdAt: now, updatedAt: now,
@@ -254,7 +261,7 @@ export default function SiteVisitsScreen() {
       return
     }
     const updated: SiteVisit = {
-      ...selected, leadId, visitDate: new Date(visitDate).toISOString(),
+      ...selected, leadId, visitDate: new Date(visitDate).toISOString(), customerPresence,
       teamMemberIds, teamMemberNames: namesFor(teamMemberIds),
       rooms: validRooms, checklist, siteChecklist, notes: notes.trim() || undefined,
       updatedAt: new Date().toISOString(),
@@ -391,6 +398,10 @@ export default function SiteVisitsScreen() {
               </PermissionGate>
             </div>
 
+            {selected.customerPresence && (
+              <p className="text-xs text-slate-500">{selected.customerPresence === 'with_customer' ? 'With customer' : 'Without customer'}</p>
+            )}
+
             {selected.teamMemberNames && selected.teamMemberNames.length > 0 && (
               <p className="text-xs text-slate-500">Team: {selected.teamMemberNames.join(', ')}</p>
             )}
@@ -481,6 +492,14 @@ export default function SiteVisitsScreen() {
                 placeholder="Select a lead…" searchPlaceholder="Search leads…"
               />
             )}
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Visit Type *</label>
+            <SearchableSelect
+              value={customerPresence} onChange={v => setCustomerPresence(v as NonNullable<SiteVisit['customerPresence']>)}
+              options={CUSTOMER_PRESENCE_OPTIONS}
+              placeholder="With or without customer…" searchPlaceholder="Search…"
+            />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Visit Date *</label>

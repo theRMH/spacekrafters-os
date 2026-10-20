@@ -4,8 +4,6 @@ import { Phone, MessageCircle } from 'lucide-react'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { MdOverrideCard, withReason } from '../../components/forms/MdOverrideCard'
-import { DateField } from '../../components/forms/DateField'
-import { TimeField } from '../../components/forms/TimeField'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { BUSINESS_DIVISION_LABEL, BUSINESS_BRAND_LABEL } from '../../data/businessDivisions'
 import { getRoleDisplayLabel } from '../../data/permissions'
@@ -21,11 +19,8 @@ import { DesignStatusCard } from '../Design/DesignStatusCard'
 import { QUOTATION_STATUS_LABEL, quotationWorkflowInfo } from '../Quotations/QuotationsScreen'
 import { QuotationStatusCard } from '../Quotations/QuotationStatusCard'
 import { changeQuotationStatus } from '../Quotations/quotationActions'
-import { getAllAppointments, updateAppointment } from '../../services/appointmentService'
-import { decideRescheduleAndAdvanceLead } from '../Appointments/appointmentActions'
-import { toProperIso } from '../Appointments/appointmentDate'
 import { sendNotification } from '../../utils/notifications'
-import type { Appointment, DesignPackage, Lead, LeadStatus, ManagedUser, Quotation } from '../../types'
+import type { DesignPackage, Lead, LeadStatus, ManagedUser, Quotation } from '../../types'
 
 function todayStr(): string {
   const d = new Date()
@@ -118,12 +113,6 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   const navigate = useNavigate()
 
   const [users, setUsers] = useState<ManagedUser[]>([])
-  const [hasAppointment, setHasAppointment] = useState(false)
-  const [latestAppointment, setLatestAppointment] = useState<Appointment | null>(null)
-  const [showRescheduleForm, setShowRescheduleForm] = useState(false)
-  const [rescheduleReasonText, setRescheduleReasonText] = useState('')
-  const [rescheduledDateInput, setRescheduledDateInput] = useState('')
-  const [mdDecisionNotes, setMdDecisionNotes] = useState('')
   const [hasSiteVisit, setHasSiteVisit] = useState(false)
   const [hasRequirement, setHasRequirement] = useState(false)
   const [quotation, setQuotation] = useState<Quotation | null>(null)
@@ -144,11 +133,6 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     setShowNegotiatingReason(false)
     setShowLostReason(false)
     getManagedUsersDirectory().then(setUsers)
-    getAllAppointments().then(a => {
-      const relevant = a.filter(appt => appt.leadId === lead.id && appt.status.trim().toLowerCase() !== 'cancelled')
-      setHasAppointment(relevant.length > 0)
-      setLatestAppointment(relevant[0] ?? null)
-    })
     getAllSiteVisits().then(v => setHasSiteVisit(v.some(sv => sv.leadId === lead.id)))
     getAllRequirements().then(async reqs => {
       const visits = await getAllSiteVisits()
@@ -231,75 +215,10 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     await save('qualified', 'Lead qualified')
   }
 
-  async function submitConfirmAppointment() {
-    await save('site_visit_scheduled', 'Appointment confirmed — site visit scheduled')
-  }
-
-  async function submitReschedule() {
-    if (!latestAppointment || !rescheduleReasonText.trim()) return
-    setSaving(true)
-    const now = new Date().toISOString()
-    const updated: Appointment = {
-      ...latestAppointment,
-      status: 'rescheduled',
-      rescheduleReason: rescheduleReasonText.trim(),
-      // Stored as a proper UTC ISO string (not the bare "YYYY-MM-DDTHH:mm"
-      // the date/time fields produce) so it's unambiguous once read back —
-      // a bare string is interpreted as local time by whichever device/server
-      // reads it, which can silently shift the actual scheduled time.
-      rescheduledDate: rescheduledDateInput ? toProperIso(rescheduledDateInput) : undefined,
-      rescheduleRequestStatus: 'requested',
-      rescheduleRequestedBy: user?.name,
-      rescheduleRequestedAt: now,
-      updatedAt: now,
-    }
-    const result = await updateAppointment(updated)
-    if (result.ok) {
-      setLatestAppointment(updated)
-      setShowRescheduleForm(false)
-      const mdUsers = users.filter(u => u.role === 'owner')
-      const dateLine = rescheduledDateInput ? ` New date requested: ${new Date(rescheduledDateInput).toLocaleString('en-IN')}.` : ''
-      await sendNotification(
-        mdUsers.map(u => u.id),
-        'Appointment Rescheduled',
-        `${lead.name} (${lead.leadNumber ?? lead.id}) — ${lead.phone}. Reason: ${rescheduleReasonText.trim()}.${dateLine}`,
-        '/approval',
-      )
-      await updateLead(lead.id, {}, `Appointment rescheduled: ${rescheduleReasonText.trim()}`)
-      setRescheduleReasonText('')
-      setRescheduledDateInput('')
-      onDone('Reschedule reason sent to MD.')
-      onClose()
-    } else {
-      onDone(result.error ?? 'Could not save the reschedule request.')
-    }
-    setSaving(false)
-  }
-
-  // Same decision function the central Approval page uses — one source of
-  // truth, so a decision made here is immediately reflected there and vice
-  // versa. Deliberately does not touch lead.status either way (see
-  // decideRescheduleAndAdvanceLead's own comment) — approval only confirms
-  // the appointment's new date; Complete/Rescheduled stay the explicit
-  // choices on this same lead afterward.
-  async function handleDecideReschedule(approved: boolean) {
-    if (!latestAppointment || saving) return
-    setSaving(true)
-    const result = await decideRescheduleAndAdvanceLead({
-      appt: latestAppointment, approved, notes: mdDecisionNotes, lead,
-      decidedByName: user?.name ?? 'Unknown', decidedByRole: user?.role,
-      updateLead,
-    })
-    setSaving(false)
-    if (!result.ok) { onDone(result.error ?? 'Could not record decision.'); return }
-    setLatestAppointment({
-      ...latestAppointment,
-      rescheduleRequestStatus: approved ? 'accepted' : 'rejected',
-      status: approved ? 'scheduled' : latestAppointment.status,
-      scheduledAt: approved && latestAppointment.rescheduledDate ? toProperIso(latestAppointment.rescheduledDate) : latestAppointment.scheduledAt,
-    })
-    setMdDecisionNotes('')
-    onDone(approved ? 'Reschedule accepted.' : 'Reschedule rejected.')
+  // Qualified -> Go to Site: the site visit itself is recorded in Site Visits; this
+  // just confirms the trip so the lead moves to Site Visit Scheduled.
+  async function submitGoToSite() {
+    await save('site_visit_scheduled', 'Go to site confirmed — site visit scheduled')
   }
 
   async function submitSiteVisitScheduled() {
@@ -371,16 +290,6 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   // fair game for just anyone — it stays gated to managers until someone
   // explicitly assigns it.
   const canAct = can('edit_lead') || user?.id === effectiveAssigneeId
-  // Wider than canAct, for the 'qualified'/'site_visit_scheduled' stages only
-  // — the appointment's own attendee list (Appointment.assignedToIds, set
-  // independently in AppointmentsScreen.tsx) is who's actually supposed to
-  // confirm/reschedule the appointment and then go log the Site Visit, and
-  // that's frequently NOT the Lead's own assignee (e.g. the PC owns the lead
-  // but assigns a Designer to attend). Without this, that attendee hits
-  // "Waiting on {lead owner}" at both stages with no way to act, even though
-  // My Tasks routes them to this exact sheet for exactly that.
-  const canActOnAppointment = !!(user && latestAppointment && (latestAppointment.assignedToIds ?? []).includes(user.id))
-  const canActViaAppointment = canActOnAppointment && (lead.status === 'qualified' || lead.status === 'site_visit_scheduled')
   // Tighter than canAct — completing the Site Visit step specifically is
   // reserved for the actual Lead assignee (or the MD), deliberately NOT the
   // appointment's own attendee: the user confirmed the Lead stays with its
@@ -395,7 +304,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   const secondaryBtn = `${btn} border border-slate-200 bg-white text-slate-600`
 
   function renderBody() {
-    if (!canAct && !canActViaAppointment) {
+    if (!canAct) {
       return (
         <p className="text-sm text-slate-500 py-6 text-center">
           Waiting on {effectiveAssigneeName ?? 'Not Assigned'}.
@@ -422,103 +331,23 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
             </button>
           </div>
         )
-      case 'qualified': {
-        if (!hasAppointment) {
-          return (
-            <div className="space-y-3">
-              <p className="text-sm text-slate-600">No appointment scheduled yet — schedule one in the Appointments tab first.</p>
-              <button onClick={() => { onClose(); navigate('/appointments', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
-                Go to Appointments →
-              </button>
-            </div>
-          )
-        }
-
-        const pendingReschedule = latestAppointment?.rescheduleRequestStatus === 'requested'
-
-        if (pendingReschedule && latestAppointment) {
-          const appt = latestAppointment
-          return (
-            <div className="space-y-3">
-              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3.5">
-                <p className="text-xs font-bold text-amber-700">Pending MD Approval</p>
-                <p className="text-xs text-amber-600 mt-1">Requested by {appt.rescheduleRequestedBy ?? '—'}</p>
-                <p className="text-xs text-amber-600">Reason: {appt.rescheduleReason}</p>
-                {appt.rescheduledDate && (
-                  <p className="text-xs text-amber-600">Requested new date: {new Date(appt.rescheduledDate).toLocaleString('en-IN')}</p>
-                )}
-              </div>
-              {/* Same decision function the central Approval page uses
-                  (decideRescheduleAndAdvanceLead) — one source of truth, two
-                  entry points into it, always in sync. */}
-              {user?.role === 'owner' ? (
-                <>
-                  <textarea value={mdDecisionNotes} onChange={e => setMdDecisionNotes(e.target.value)} rows={2}
-                    placeholder="Notes (optional)"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-                  <div className="flex gap-2.5">
-                    <button disabled={saving} onClick={() => handleDecideReschedule(true)}
-                      className="flex-1 text-center p-2.5 rounded-2xl bg-emerald-600 active:bg-emerald-700 disabled:opacity-50">
-                      <p className="text-base font-bold text-white">Approve</p>
-                    </button>
-                    <button disabled={saving} onClick={() => handleDecideReschedule(false)}
-                      className="flex-1 text-center p-2.5 rounded-2xl bg-red-600 active:bg-red-700 disabled:opacity-50">
-                      <p className="text-base font-bold text-white">Reject</p>
-                    </button>
-                  </div>
-                  <button onClick={() => { onClose(); navigate('/approval') }} className={secondaryBtn}>
-                    Open in Approval →
-                  </button>
-                </>
-              ) : (
-                <p className="text-sm text-slate-500 text-center py-2">Waiting on MD to review.</p>
-              )}
-            </div>
-          )
-        }
-
-        if (showRescheduleForm) {
-          return (
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">Reason for rescheduling *</label>
-                <textarea value={rescheduleReasonText} onChange={e => setRescheduleReasonText(e.target.value)}
-                  placeholder="e.g. Client is not interested / Client requested another date" rows={3}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">New date/time <span className="font-normal text-slate-400">(optional)</span></label>
-                <div className="grid grid-cols-2 gap-2">
-                  <DateField value={rescheduledDateInput.split('T')[0] || ''} min={todayStr()}
-                    onChange={v => setRescheduledDateInput(`${v}T${rescheduledDateInput.split('T')[1] || '09:00'}`)} />
-                  <TimeField value={rescheduledDateInput.split('T')[1] || ''}
-                    onChange={v => setRescheduledDateInput(`${rescheduledDateInput.split('T')[0] || new Date().toISOString().slice(0, 10)}T${v}`)} />
-                </div>
-              </div>
-              <button disabled={saving || !rescheduleReasonText.trim()} onClick={submitReschedule} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-                Submit Reschedule
-              </button>
-              <button onClick={() => { setShowRescheduleForm(false); setRescheduleReasonText(''); setRescheduledDateInput('') }} className={secondaryBtn}>
-                Back
-              </button>
-            </div>
-          )
-        }
-
+      case 'qualified':
         return (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">A site visit appointment is scheduled. Reschedule it for MD approval, or confirm it now to move the lead to Site Visit.</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button disabled={saving} onClick={submitConfirmAppointment} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-                Complete
+            <p className="text-sm text-slate-600">
+              {hasSiteVisit ? 'A site visit is on record. Confirm to move this lead to Site Visit.' : 'Plan the trip to site — record it in Site Visits first.'}
+            </p>
+            {hasSiteVisit ? (
+              <button disabled={saving} onClick={submitGoToSite} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                Confirm Go to Site
               </button>
-              <button disabled={saving} onClick={() => setShowRescheduleForm(true)} className={`${btn} border border-amber-200 bg-amber-50 text-amber-700`}>
-                Rescheduled
+            ) : (
+              <button onClick={() => { onClose(); navigate('/site-visits', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
+                Go to Site →
               </button>
-            </div>
+            )}
           </div>
         )
-      }
       case 'site_visit_scheduled':
         return (
           <div className="space-y-3">

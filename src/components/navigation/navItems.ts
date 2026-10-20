@@ -32,7 +32,7 @@ export function getMainItems(): NavItem[] {
 // are ProjectStage values (plus 'active' = every stage except closed).
 const LEAD_SORT: [string, string][] = [
   ['active', 'Active'], ['contacted', 'Contacted'], ['qualified', 'Qualified'],
-  ['appointment', 'Appointment'], ['site_visit', 'Site Visit'], ['requirements', 'Requirements'],
+  ['site_visit', 'Site Visit'], ['requirements', 'Requirements'],
   ['quotation', 'Quotation'], ['negotiation', 'Negotiation'], ['won', 'Won'], ['lost', 'Lost'],
 ]
 const SITE_VISIT_SORT: [string, string][] = [['scheduled', 'Scheduled'], ['done', 'Done']]
@@ -47,7 +47,6 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     label: 'CRM',
     items: [
       { icon: Users,         label: 'Leads',        path: '/leads',        permission: 'view_leads'        },
-      { icon: Calendar,      label: 'Appointments', path: '/appointments', permission: 'view_appointments' },
       { icon: ClipboardList, label: 'Follow-ups',   path: '/follow-ups',   permission: 'view_activity'     },
       { icon: ShieldCheck,   label: 'Approval',     path: '/approval',    permission: 'view_md_tasks'     },
     ],

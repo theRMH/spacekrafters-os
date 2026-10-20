@@ -307,6 +307,8 @@ export interface SiteVisit {
   leadId: string
   projectId?: string
   appointmentId?: string
+  // Go to Site: was the customer present at the visit. Optional — absent on older visits.
+  customerPresence?: 'with_customer' | 'without_customer'
   visitDate: string
   // Who conducted/was present at this visit — captured directly on the site
   // visit itself (not looked up via a linked Appointment, which Site Visits

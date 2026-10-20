@@ -22,13 +22,12 @@ import {
 } from '../../data/businessDivisions'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getNextLeadNumber } from '../../services/leadService'
-import { getAllAppointments } from '../../services/appointmentService'
 import { hasRole } from '../../utils/permissions'
 import { LeadStatusSheet, LEAD_STATUS_LABEL } from './LeadStatusSheet'
 import { ImportLeadsSheet } from './ImportLeadsSheet'
 import { FILTERS, type FilterKey, resolveRange, inRange as inRangeOf } from '../Dashboard/dashboardDateUtils'
 import { leadsToCsvText, downloadCsv } from '../../utils/leadCsv'
-import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser, BusinessDivision, BusinessCategory, BusinessBrand, UserRole, LeadCodePrefix, Appointment } from '../../types'
+import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser, BusinessDivision, BusinessCategory, BusinessBrand, UserRole, LeadCodePrefix } from '../../types'
 
 type Filter = 'all' | LeadStatus
 
@@ -38,14 +37,13 @@ type Filter = 'all' | LeadStatus
 // form's Status field). 'qualified' splits into Qualified/Appointment based
 // on whether the lead actually has a non-cancelled appointment yet, mirroring
 // the same split Tasks' pipeline view already uses for the same reason.
-type LeadBucket = 'contacted' | 'qualified' | 'appointment' | 'site_visit' | 'requirements' | 'quotation' | 'negotiation' | 'won' | 'lost'
+type LeadBucket = 'contacted' | 'qualified' | 'site_visit' | 'requirements' | 'quotation' | 'negotiation' | 'won' | 'lost'
 type BucketFilter = 'active' | LeadBucket
 
-const BUCKET_ORDER: LeadBucket[] = ['contacted', 'qualified', 'appointment', 'site_visit', 'requirements', 'quotation', 'negotiation', 'won', 'lost']
+const BUCKET_ORDER: LeadBucket[] = ['contacted', 'qualified', 'site_visit', 'requirements', 'quotation', 'negotiation', 'won', 'lost']
 const BUCKET_LABEL: Record<LeadBucket, string> = {
   contacted:    'Contacted',
   qualified:    'Qualified',
-  appointment:  'Appointment',
   site_visit:   'Site Visit',
   requirements: 'Requirements',
   quotation:    'Quotation',
@@ -56,12 +54,11 @@ const BUCKET_LABEL: Record<LeadBucket, string> = {
 
 // A brand-new lead has not been contacted yet, so it has no bucket of its own —
 // it only shows under Active until "Mark Contacted" moves it to Contacted.
-function leadBucket(lead: Lead, appointments: Appointment[]): LeadBucket | 'new' {
+function leadBucket(lead: Lead): LeadBucket | 'new' {
   switch (lead.status) {
     case 'new': return 'new'
     case 'contacted': return 'contacted'
-    case 'qualified':
-      return appointments.some(a => a.leadId === lead.id && a.status !== 'cancelled') ? 'appointment' : 'qualified'
+    case 'qualified': return 'qualified'
     case 'site_visit_scheduled': case 'site_visit_done': return 'site_visit'
     case 'requirements_captured': return 'requirements'
     case 'quotation_drafted': case 'internally_approved': case 'design_in_progress': case 'design_approved': case 'sent_to_client': return 'quotation'
@@ -206,7 +203,6 @@ export default function LeadsScreen() {
   // Roles without full CRM access (edit_lead) only ever act on leads currently
   // assigned to them — scope their list down instead of showing the whole pipeline.
   const assignedOnly = !can('edit_lead')
-  const canSeeAppointments = can('view_appointments')
 
   const bucketFromUrl = (): BucketFilter | null => {
     const b = new URLSearchParams(routerLocation.search).get('bucket')
@@ -222,7 +218,6 @@ export default function LeadsScreen() {
   const [dateFilter, setDateFilter] = useState<FilterKey>(() => loadPersistedFilters().dateFilter)
   const [customFrom, setCustomFrom] = useState(() => loadPersistedFilters().customFrom)
   const [customTo, setCustomTo] = useState(() => loadPersistedFilters().customTo)
-  const [appointments, setAppointments] = useState<Appointment[]>([])
   const [search, setSearch] = useState(() => loadPersistedFilters().search)
   const [selected, setSelected] = useState<Lead | null>(null)
   const [showNew, setShowNew] = useState(false)
@@ -331,12 +326,6 @@ export default function LeadsScreen() {
     return () => window.removeEventListener('scroll', saveScroll)
   }, [])
 
-  // Only for the Qualified/Appointment filter split — gated the same way
-  // Tasks' pipeline view gates appointment visibility, so a role without
-  // view_appointments just sees every qualified lead under "Qualified".
-  useEffect(() => {
-    if (canSeeAppointments) getAllAppointments().then(setAppointments)
-  }, [canSeeAppointments])
 
   useEffect(() => {
     if (!sourceMenuOpen) return
@@ -606,27 +595,27 @@ export default function LeadsScreen() {
   // "Active" is the open pipeline only — Won and Lost both get their own
   // separate pills and are excluded from this total.
   const activeCount = dateScoped.filter(l => {
-    const b = leadBucket(l, appointments)
+    const b = leadBucket(l)
     return b !== 'won' && b !== 'lost'
   }).length
 
   // Sort to show after a status change: the lead's new bucket, or Active when it has none (New).
   const bucketAfterChange = (l: Lead): BucketFilter => {
-    const b = leadBucket(l, appointments)
+    const b = leadBucket(l)
     return b === 'new' ? 'active' : b
   }
 
   const bucketChips: { value: BucketFilter; label: string; count: number }[] = [
     { value: 'active', label: 'Active', count: activeCount },
-    ...BUCKET_ORDER.map(b => ({ value: b, label: BUCKET_LABEL[b], count: dateScoped.filter(l => leadBucket(l, appointments) === b).length })),
+    ...BUCKET_ORDER.map(b => ({ value: b, label: BUCKET_LABEL[b], count: dateScoped.filter(l => leadBucket(l) === b).length })),
   ]
 
   const filtered = dateScoped.filter(l => {
     if (bucketFilter === 'active') {
-      const b = leadBucket(l, appointments)
+      const b = leadBucket(l)
       return b !== 'won' && b !== 'lost'
     }
-    return leadBucket(l, appointments) === bucketFilter
+    return leadBucket(l) === bucketFilter
   })
 
   // Exports exactly what's currently on screen — the same search + stage +
@@ -1099,7 +1088,7 @@ export default function LeadsScreen() {
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         title="Mark Lead as Lost"
-        message={`Mark ${deleteTarget?.name ?? 'this lead'} as Lost? It moves out of the active list into the Lost filter — nothing is deleted, and its full history (appointments, quotations, activity log) is kept.`}
+        message={`Mark ${deleteTarget?.name ?? 'this lead'} as Lost? It moves out of the active list into the Lost filter — nothing is deleted, and its full history (site visits, quotations, activity log) is kept.`}
         confirmLabel="Mark Lost"
         onConfirm={confirmDelete}
         variant="danger"

@@ -6,12 +6,11 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { DateField } from '../../components/forms/DateField'
 import { useCRM } from '../../context/CRMContext'
 import { getAllProjects } from '../../services/projectService'
-import { getAllAppointments } from '../../services/appointmentService'
 import { getAllPaymentMilestones, getAllReceipts } from '../../services/financeService'
 import { PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
 import { FILTERS, type FilterKey, dateKey, resolveRange, inRange as inRangeOf, rangeCaption as rangeCaptionFor } from './dashboardDateUtils'
 import { buildSalesPerformance } from './salesPerformance'
-import type { Appointment, Lead, PaymentMilestone, Project, Receipt } from '../../types'
+import type { Lead, PaymentMilestone, Project, Receipt } from '../../types'
 
 function fmtCurrency(n: number): string {
   return `₹${Math.round(n).toLocaleString('en-IN')}`
@@ -26,7 +25,6 @@ export default function DashboardScreen() {
   const navigate = useNavigate()
   const { leads } = useCRM()
   const [projects, setProjects] = useState<Project[]>([])
-  const [appointments, setAppointments] = useState<Appointment[]>([])
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
   const [receipts, setReceipts] = useState<Receipt[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -35,15 +33,15 @@ export default function DashboardScreen() {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [openMonth, setOpenMonth] = useState<string | null>(null)
-  const [detailCard, setDetailCard] = useState<'appointments' | 'projects' | 'installation' | 'collection' | null>(null)
+  const [detailCard, setDetailCard] = useState<'projects' | 'installation' | 'collection' | null>(null)
 
   useEffect(() => {
     (async () => {
       setIsLoading(true)
-      const [p, a, m, r] = await Promise.all([
-        getAllProjects(), getAllAppointments(), getAllPaymentMilestones(), getAllReceipts(),
+      const [p, m, r] = await Promise.all([
+        getAllProjects(), getAllPaymentMilestones(), getAllReceipts(),
       ])
-      setProjects(p); setAppointments(a); setMilestones(m); setReceipts(r)
+      setProjects(p); setMilestones(m); setReceipts(r)
       setIsLoading(false)
     })()
   }, [])
@@ -86,8 +84,6 @@ export default function DashboardScreen() {
   }
   const periodLabel = PERIOD_LABEL[filter]
 
-  const periodAppointments = useMemo(() => appointments.filter(a => inRange(a.scheduledAt) && a.status !== 'cancelled'), [appointments, range])
-  const periodAppointmentsDone = periodAppointments.filter(a => a.status === 'completed').length
 
   // Product Sale shells (type: 'product_sale') have their own dedicated
   // Product Sales screens — excluded from every Interior Projects KPI/report
@@ -133,15 +129,6 @@ export default function DashboardScreen() {
   interface DetailItem { key: string; title: string; subtitle: string; badge?: string; badgeTint?: string; value?: string }
   function detailContent(): { title: string; items: DetailItem[] } {
     switch (detailCard) {
-      case 'appointments':
-        return {
-          title: `${periodLabel} Appointments`,
-          items: periodAppointments.map(a => ({
-            key: a.id, title: leadById.get(a.leadId)?.name ?? a.clientName,
-            subtitle: `${fmtDT(a.scheduledAt)} · ${a.location}`,
-            badge: a.status.replace(/_/g, ' '), badgeTint: a.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700',
-          })),
-        }
       case 'projects':
         return {
           title: `${periodLabel} Projects`,
@@ -284,11 +271,6 @@ export default function DashboardScreen() {
 
         {/* Summary cards — labels and data follow the filter chips above */}
         <div className="grid sm:grid-cols-2 gap-2">
-          <SummaryCard tint="text-blue-600" label={`${periodLabel} Appointments`}
-            big={`${periodAppointments.length} Appointment${periodAppointments.length === 1 ? '' : 's'}`}
-            fraction={`${periodAppointmentsDone} / ${periodAppointments.length}`} sub="done"
-            pct={periodAppointments.length ? (periodAppointmentsDone / periodAppointments.length) * 100 : 0}
-            onClick={() => setDetailCard('appointments')} />
           <SummaryCard tint="text-amber-600" label={`${periodLabel} Projects`}
             big={`${periodNewProjects.length} New`}
             fraction={`${periodNewProjects.length} / ${activeProjects.length}`} sub="active projects"

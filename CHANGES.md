@@ -1,5 +1,13 @@
 ## 2026-10-15
 
+### Changed: Appointment step removed — Qualified now goes to Go to Site (Site Visits)
+**Commit:** Uncommitted  ·  no DB changes
+- **Flow:** Qualified → **Go to Site** (opens the Site Visits form for that lead) → once a visit is on record, **Confirm Go to Site** moves the lead to Site Visit Scheduled → Mark Site Visit Done (unchanged).
+- **Added:** Site Visit form field **Visit Type** dropdown: With customer / Without customer (default With customer). It is just a label saved on the visit (`SiteVisit.customerPresence`, optional) and shown in the visit detail; a lead is still required. Old visits have no value.
+- **Removed:** `AppointmentsScreen.tsx` and its `/appointments` route; "Appointments" sidebar/drawer item; "Appointment" Lead Sort item and Leads-page chip (Qualified leads are no longer split by appointment); Appointments tab on the lead detail page; Appointments card on the Dashboard; the appointment confirm/reschedule/MD-approval UI in `LeadStatusSheet.tsx`.
+- **Deliberately left:** the appointment data/service/types and legacy readers (My Tasks feed, Approval page reschedule section, task pipeline, `appointmentActions.ts`) so existing records are not orphaned — nothing can create a new appointment now. Remove them in a follow-up if no legacy rows remain.
+- **Verified:** `tsc --noEmit` and unit tests (75) pass.
+
 ### Changed: quotation → client decision flow (approved / rejected → resend or drop)
 **Commit:** Uncommitted  ·  no DB changes
 - **Flow:** MD approves → Send to Client → "Waiting for Client Approval" with **Client Approved / Client Rejected** buttons. Rejected needs a reason (status `revision_requested`, relabelled **Client Rejected**). The MD sees the reason and chooses **Resend Quotation** (→ `md_rejected`, back to PC; lead returns to `quotation_drafted`; PC edits/resubmits → MD approves → send to client again) or **Drop Lead** (quotation `rejected`, lead → Lost with the reason, shows under the Lost sort).
