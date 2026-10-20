@@ -409,6 +409,30 @@ export type DiscountType = 'percentage' | 'amount'
 // related in sequence (this is the plan, that is the fact) but never merged.
 export type AdvanceTermOption = 'with_advance' | 'without_advance' | 'full_advance'
 
+// Per-project text blocks of the quotation PDF (see QuotationPrintTemplate.tsx). Multi-line
+// fields hold one point per line.
+export interface QuotationTemplateData {
+  workTitle?: string
+  kindAttn?: string
+  siteName?: string
+  projectType?: string
+  projectMd?: string
+  projectLead?: string
+  projectQs?: string
+  paymentNotes?: string
+  closingNote?: string
+  signName?: string
+  signDesignation?: string
+  signPhone?: string
+  commercialTerms?: string
+  clientScope?: string
+  scopeVariations?: string
+  executionTimeline?: string
+  generalTerms?: string
+  paymentStages?: { stage: string; percent: string }[]
+  paymentFooter?: string
+}
+
 export interface Quotation {
   id: string
   leadId: string
@@ -447,6 +471,8 @@ export interface Quotation {
   documentFiles?: string[]
   terms?: string
   paymentTerms?: string
+  // Text blocks for the generated PDF; absent on quotations saved before the template existed.
+  template?: QuotationTemplateData
   sentAt?: string
   approvedAt?: string
   statusHistory?: QuotationStatusHistoryItem[]

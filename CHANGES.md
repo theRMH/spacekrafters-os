@@ -1,5 +1,12 @@
 ## 2026-10-15
 
+### Added: quotation PDF template (letterhead, BOQ table, totals, Terms & Conditions page)
+**Commit:** Uncommitted  ·  no DB changes (new data lives inside the quotation JSON as `template`)
+- **Added:** `QuotationPrintTemplate.tsx` — the PDF layout from the sample Estimate: letterhead + logo, QUOTATION block (Kind Attn / Site / Project Type / Date, MD / Lead / QS), BOQ table (S.No, description, UoM, qty, rate, amount; each form item's Description becomes the PDF description, text before the first colon in bold), totals (TOTAL AMOUNT, discount, tax, GRAND TOTAL), Amount in Words, Payment Notes, Note, sign-off, then page 2 Terms & Conditions (1–6, payment-stage table) with Managing Director / client acceptance block.
+- **Added:** `QuotationTemplateFields.tsx` — the note boxes in the quotation form (header fields, Payment Notes, Note, sign-off, five T&C boxes one point per line, editable payment stages + note). `data/quotationTemplate.ts` holds the letterhead and the default wording from the sample; `utils/amountInWords.ts` (+ test) writes the Indian-style amount in words.
+- **Changed:** `QuotationsScreen.tsx` — form now saves `template`; the old Terms / Payment Terms boxes are replaced by the new ones (old quotations still print their legacy text). Print view shows the template and "Download PDF" prints a portal on <body> so it paginates (`index.css` print rules rewritten, A4). New: `Quotation.template` / `QuotationTemplateData` in `types/index.ts`.
+- **Known limits:** PDF is produced by the browser's Print → Save as PDF (no PDF library added). Three default T&C lines were cut off in the sample PDF and were completed in `quotationTemplate.ts`. Excel export unchanged. `tsc` passes.
+
 ### Added: CFT unit on the Requirement form
 **Commit:** Uncommitted
 - **Changed:** `RequirementsScreen.tsx` — `cft` added to the unit dropdown (after `set`), same lowercase style as the others. Quotations already had `cft`, so a requirement line in cft carries over unchanged. `tsc` passes.

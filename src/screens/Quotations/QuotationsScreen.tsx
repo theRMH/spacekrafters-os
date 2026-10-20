@@ -20,10 +20,14 @@ import { changeQuotationStatus, recordQuotationAdvanceDecision } from './quotati
 import { getAllProjects, upsertProject } from '../../services/projectService'
 import { addAuditLog } from '../../services/auditLogService'
 import { downloadQuotationExcel } from '../../utils/quotationExport'
+import { createPortal } from 'react-dom'
+import { QuotationPrintTemplate } from './QuotationPrintTemplate'
+import { QuotationTemplateFields } from './QuotationTemplateFields'
+import { defaultTemplateData } from '../../data/quotationTemplate'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { sendNotification } from '../../utils/notifications'
 import { ROLE_LABELS } from '../../data/permissions'
-import type { Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem, Project, AuditLog, DiscountType, QuotationStatus, QuotationStatusHistoryItem, AdvanceTermOption } from '../../types'
+import type { QuotationTemplateData, Requirement, SiteVisit, Quotation, BOQSection, BOQLineItem, Project, AuditLog, DiscountType, QuotationStatus, QuotationStatusHistoryItem, AdvanceTermOption } from '../../types'
 
 const UNIT_OPTIONS = ['sqft', 'nos', 'rft', 'sft', 'lot', 'set', 'lsm', 'cft', 'kgs']
 
@@ -208,8 +212,9 @@ export default function QuotationsScreen() {
   const [advanceTermType, setAdvanceTermType] = useState<DiscountType>('percentage')
   const [advanceTermValue, setAdvanceTermValue] = useState(0)
   const [documentFiles, setDocumentFiles] = useState<string[]>([])
-  const [terms, setTerms] = useState('')
-  const [paymentTerms, setPaymentTerms] = useState('')
+  const [tpl, setTpl] = useState<QuotationTemplateData>({})
+  // The MD's name, used to prefill "Project MD" on the PDF template.
+  const [ownerName, setOwnerName] = useState('')
   const [formError, setFormError] = useState('')
   // Target of the shared "Reject Quotation" sheet — which status a rejection
   // from the currently open stage writes, and who it's then waiting on.
@@ -243,6 +248,9 @@ export default function QuotationsScreen() {
   }
 
   useEffect(() => { refresh() }, [])
+  useEffect(() => {
+    getManagedUsersDirectory().then(users => setOwnerName(users.find(u => u.role === 'owner')?.fullName ?? ''))
+  }, [])
 
   useEffect(() => {
     const state = routerLocation.state as { leadId?: string; returnTo?: string } | null
@@ -291,7 +299,8 @@ export default function QuotationsScreen() {
     setDiscountType('amount'); setDiscountValue(0); setTransportCost(0)
     setAdvanceTermOption(''); setAdvanceTermType('percentage'); setAdvanceTermValue(0)
     setDocumentFiles([])
-    setTerms(''); setPaymentTerms(''); setFormError('')
+    setTpl(defaultTemplateData({ mdName: ownerName, signName: user?.name }))
+    setFormError('')
   }
 
   function openNew() {
@@ -325,7 +334,8 @@ export default function QuotationsScreen() {
     setAdvanceTermType(q.advanceTermType ?? 'percentage')
     setAdvanceTermValue(q.advanceTermValue ?? 0)
     setDocumentFiles(q.documentFiles ?? [])
-    setTerms(q.terms ?? ''); setPaymentTerms(q.paymentTerms ?? '')
+    // Older quotations have no template block — start from the defaults, keeping their legacy text out of the new boxes.
+    setTpl(q.template ?? defaultTemplateData({ lead: leads.find(l => l.id === q.leadId), mdName: ownerName, signName: user?.name }))
     setFormError('')
     setShowEdit(true)
   }
@@ -392,7 +402,7 @@ export default function QuotationsScreen() {
       discountType, discountValue, discountAmount, netAmount,
       ...advanceTerm,
       documentFiles: documentFiles.length > 0 ? documentFiles : undefined,
-      terms: terms.trim() || undefined, paymentTerms: paymentTerms.trim() || undefined,
+      template: tpl,
       createdBy: user?.id ?? '', createdAt: now, updatedAt: now,
     }
     const result = await upsertQuotation(quotation)
@@ -422,7 +432,7 @@ export default function QuotationsScreen() {
       discountType, discountValue, discountAmount, netAmount,
       ...advanceTerm,
       documentFiles: documentFiles.length > 0 ? documentFiles : undefined,
-      terms: terms.trim() || undefined, paymentTerms: paymentTerms.trim() || undefined,
+      template: tpl,
       ...(needsReapproval ? {
         status: 'pending_pc_review' as const,
         rejectionReason: undefined,
@@ -958,101 +968,22 @@ export default function QuotationsScreen() {
               <button onClick={() => window.print()}
                 className="px-4 py-2 rounded-xl text-white text-xs font-bold active:opacity-90"
                 style={{ background: '#0F2A4A' }}>
-                Print / Save as PDF
+                Download PDF (Print → Save as PDF)
               </button>
             </div>
-            <div id="quotation-print-area" className="bg-white p-6 space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-                <div>
-                  <h2 className="text-xl font-extrabold" style={{ color: '#0F2A4A' }}>SpaceKrafters</h2>
-                  <p className="text-xs text-slate-500">Interior Design & Construction</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-slate-800">Quotation v{selected.version}</p>
-                  <p className="text-xs text-slate-500">{fmtDate(selected.createdAt)}</p>
-                </div>
+            {/* On-screen preview of the generated PDF. */}
+            <div className="border border-slate-200 overflow-x-auto bg-white p-2">
+              <div style={{ minWidth: 640 }}>
+                <QuotationPrintTemplate q={selected} tpl={selected.template ?? defaultTemplateData({ lead: leads.find(l => l.id === selected.leadId), mdName: ownerName })} clientName={leadName(selected.leadId)} />
               </div>
-
-              <div>
-                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Client</p>
-                <p className="text-sm font-semibold text-slate-800">{leadName(selected.leadId)}</p>
-              </div>
-
-              {(() => {
-                const sourceLead = leads.find(l => l.id === selected.leadId)
-                if (!sourceLead?.businessDivision) return null
-                const label = BUSINESS_DIVISION_LABEL[sourceLead.businessDivision]
-                  + (sourceLead.businessCategory ? ` (${BUSINESS_CATEGORY_LABEL[sourceLead.businessCategory]})` : '')
-                  + (sourceLead.businessBrand ? ` (${BUSINESS_BRAND_LABEL[sourceLead.businessBrand]})` : '')
-                return (
-                  <div>
-                    <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Company / Brand</p>
-                    <p className="text-sm font-semibold text-slate-800">{label}</p>
-                  </div>
-                )
-              })()}
-
-              {selected.sections.map(section => (
-                <table key={section.id} className="w-full text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50">
-                      <th colSpan={5} className="text-left px-2 py-1.5 font-bold text-slate-800 border border-slate-200">{section.title}</th>
-                    </tr>
-                    <tr className="bg-slate-50 text-slate-500">
-                      <th className="text-left px-2 py-1 border border-slate-200 font-semibold">Description</th>
-                      <th className="text-right px-2 py-1 border border-slate-200 font-semibold">Qty</th>
-                      <th className="text-right px-2 py-1 border border-slate-200 font-semibold">Rate</th>
-                      <th className="text-right px-2 py-1 border border-slate-200 font-semibold">Tax %</th>
-                      <th className="text-right px-2 py-1 border border-slate-200 font-semibold">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {section.items.map(item => (
-                      <tr key={item.id}>
-                        <td className="px-2 py-1 border border-slate-200">{item.description}</td>
-                        <td className="text-right px-2 py-1 border border-slate-200">{item.quantity} {item.unit}</td>
-                        <td className="text-right px-2 py-1 border border-slate-200">{fmtCurrency(item.rate)}</td>
-                        <td className="text-right px-2 py-1 border border-slate-200">{item.taxPercent ?? 0}%</td>
-                        <td className="text-right px-2 py-1 border border-slate-200">{fmtCurrency(item.amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  {section.notes && (
-                    <tfoot>
-                      <tr>
-                        <td colSpan={5} className="px-2 py-1.5 border border-slate-200 text-slate-500 italic">Notes: {section.notes}</td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              ))}
-
-              <div className="flex justify-end">
-                <div className="w-56 space-y-1">
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Material Cost</span><span className="font-semibold">{fmtCurrency(selected.totalAmount)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Discount</span><span className="font-semibold">-{fmtCurrency(selected.discountAmount)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-semibold">{fmtCurrency(selected.taxableAmount ?? selected.totalAmount - selected.discountAmount)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold">{fmtCurrency(selected.taxAmount)}</span></div>
-                  {!!selected.transportCost && (
-                    <div className="flex justify-between text-xs"><span className="text-slate-500">Transport Cost</span><span className="font-semibold">{fmtCurrency(selected.transportCost)}</span></div>
-                  )}
-                  <div className="flex justify-between text-sm border-t border-slate-300 pt-1"><span className="font-bold">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(selected.netAmount)}</span></div>
-                  {selected.advanceTermOption && (
-                    <>
-                      <div className="flex justify-between text-xs pt-1"><span className="text-slate-500">Advance ({selected.advanceTermOption === 'with_advance' ? 'With Advance' : selected.advanceTermOption === 'full_advance' ? 'Full Advance' : 'Without Advance'})</span><span className="font-semibold">{fmtCurrency(selected.advanceTermAmount ?? 0)}</span></div>
-                      <div className="flex justify-between text-xs"><span className="text-slate-500">Balance Due</span><span className="font-semibold">{fmtCurrency(selected.advanceTermBalance ?? selected.netAmount)}</span></div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {selected.terms && (
-                <div><p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p><p className="text-xs text-slate-600">{selected.terms}</p></div>
-              )}
-              {selected.paymentTerms && (
-                <div><p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p><p className="text-xs text-slate-600">{selected.paymentTerms}</p></div>
-              )}
             </div>
+            {/* What actually prints: rendered on <body> so it paginates; see index.css. */}
+            {showPrint && createPortal(
+              <div id="quotation-print-portal">
+                <QuotationPrintTemplate q={selected} tpl={selected.template ?? defaultTemplateData({ lead: leads.find(l => l.id === selected.leadId), mdName: ownerName })} clientName={leadName(selected.leadId)} />
+              </div>,
+              document.body,
+            )}
           </div>
         )}
       </BottomSheet>
@@ -1074,7 +1005,14 @@ export default function QuotationsScreen() {
               </div>
             ) : (
               <SearchableSelect
-                value={leadId} onChange={v => { setLeadId(v); setRequirementId('') }}
+                value={leadId} onChange={v => {
+                  setLeadId(v); setRequirementId('')
+                  const picked = leads.find(l => l.id === v)
+                  if (picked) {
+                    const d = defaultTemplateData({ lead: picked })
+                    setTpl(t => ({ ...t, kindAttn: t.kindAttn || d.kindAttn, siteName: t.siteName || d.siteName, projectType: t.projectType || d.projectType, projectLead: t.projectLead || d.projectLead }))
+                  }
+                }}
                 options={leads.map(l => ({ value: l.id, label: `${l.name} — ${l.city}` }))}
                 placeholder="Select a lead…" searchPlaceholder="Search leads…"
               />
@@ -1216,16 +1154,7 @@ export default function QuotationsScreen() {
             <div className="flex justify-between text-base pt-1.5 border-t border-slate-200"><span className="font-bold text-slate-800">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(formTotals.netAmount)}</span></div>
           </div>
 
-          <div>
-            <label className="text-sm font-semibold text-slate-500 mb-1 block">Terms</label>
-            <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={2}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-indigo-400 resize-none" />
-          </div>
-          <div>
-            <label className="text-sm font-semibold text-slate-500 mb-1 block">Payment Terms</label>
-            <textarea value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} rows={2}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-indigo-400 resize-none" />
-          </div>
+          <QuotationTemplateFields value={tpl} onChange={setTpl} />
 
           <button
             onClick={showEdit ? handleUpdateQuotation : handleAddQuotation}
