@@ -1,5 +1,12 @@
 ## 2026-10-15
 
+### Changed: quotation PDF is now generated and auto-uploaded; header fields are dropdowns
+**Commit:** Uncommitted  ·  new dependencies: `jspdf`, `html2canvas` (loaded lazily, only when a PDF is generated)
+- **Added:** `src/utils/quotationPdf.ts` — renders the template off-screen, captures each page and lays it onto A4 pages, cutting only between table rows; `generateAndUploadQuotationPdf()` uploads through the normal `storeFile()` upload; `downloadQuotationPdf()` saves locally.
+- **Changed:** `QuotationsScreen.tsx` — the form button is now **Generate Quotation PDF** (edit: **Save & Regenerate Quotation PDF**): it saves the quotation, generates the PDF and attaches the uploaded file as the quotation document (replacing the previous document). If the PDF or upload fails the quotation is still saved and the error is shown. The Excel download icon on the detail page is now a PDF download; the preview sheet's button downloads the PDF (browser print dialog and the print-portal CSS removed). Excel export code remains in `quotationExport.ts`, unused.
+- **Changed:** header boxes — Project Type, Project MD, Project Lead and Project QS are dropdowns (MD = owners; Lead/QS = active team); Site is prefilled with the lead name; Kind Attn. is left for typing. Header fields now fill from the chosen lead however the lead was picked (the deep-link path previously left them empty). Payment-stage rows fixed (the stage box was being squashed by a width class).
+- **Changed:** the logo sits on a dark plate in the letterhead (the logo file is white-on-transparent). Verified by rendering a sample in headless Chrome: PDF produced (~1 MB) and the layout matches the sample. `tsc`, build and unit tests (78) pass.
+
 ### Added: quotation PDF template (letterhead, BOQ table, totals, Terms & Conditions page)
 **Commit:** Uncommitted  ·  no DB changes (new data lives inside the quotation JSON as `template`)
 - **Added:** `QuotationPrintTemplate.tsx` — the PDF layout from the sample Estimate: letterhead + logo, QUOTATION block (Kind Attn / Site / Project Type / Date, MD / Lead / QS), BOQ table (S.No, description, UoM, qty, rate, amount; each form item's Description becomes the PDF description, text before the first colon in bold), totals (TOTAL AMOUNT, discount, tax, GRAND TOTAL), Amount in Words, Payment Notes, Note, sign-off, then page 2 Terms & Conditions (1–6, payment-stage table) with Managing Director / client acceptance block.

@@ -55,13 +55,3 @@ button.text-xl, button .text-xl, .rounded-full.text-xl, .app-chrome.text-xl, .ap
   { font-size: 1.25rem; line-height: 1.75rem; }
 button.text-2xl, button .text-2xl, .rounded-full.text-2xl, .app-chrome.text-2xl, .app-chrome .text-2xl
   { font-size: 1.5rem; line-height: 2rem; }
-
-/* Quotation PDF: the template is rendered into #quotation-print-portal (a direct child of
-   <body>); printing hides the app and shows only that, so it paginates across A4 pages. */
-@page { size: A4; margin: 10mm; }
-#quotation-print-portal { display: none; }
-@media print {
-  #root { display: none !important; }
-  #quotation-print-portal { display: block !important; }
-  body { background: #fff !important; }
-}

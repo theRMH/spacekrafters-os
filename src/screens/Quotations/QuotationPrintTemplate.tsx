@@ -54,7 +54,7 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
   return (
     <div style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: 11, color: '#000', lineHeight: 1.35, background: '#fff' }}>
       {/* ───────── Page 1 ───────── */}
-      <div style={{ border: BORDER }}>
+      <div data-pdf-page="1" style={{ border: BORDER }}>
         <div style={{ padding: '10px 14px 4px', textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{ textAlign: 'left', fontWeight: 700, fontSize: 18, lineHeight: 1.15 }}>
@@ -62,7 +62,10 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
             </div>
             <div style={{ fontStyle: 'italic', color: '#666', borderBottom: `1px solid ${GREEN}`, paddingBottom: 2, marginTop: 28, fontSize: 10 }}>{L.tagline}</div>
           </div>
-          <img src={L.logo} alt="" style={{ height: 64, margin: '6px auto', display: 'block', objectFit: 'contain' }} />
+          {/* The logo file is white-on-transparent, so it sits on a dark plate like the sample letterhead. */}
+          <div style={{ background: '#0b0f14', display: 'inline-block', padding: '8px 22px', margin: '6px auto' }}>
+            <img src={L.logo} alt="" style={{ height: 52, display: 'block', objectFit: 'contain' }} />
+          </div>
           <div style={{ fontSize: 10, borderBottom: `1px solid ${GREEN}`, paddingBottom: 3 }}>{L.address}<br />{L.phone}</div>
         </div>
 
@@ -73,7 +76,7 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
 
         <div style={{ display: 'flex', borderTop: BORDER, padding: '3px 6px', fontSize: 10.5 }}>
           <div style={{ flex: 1 }}>
-            <div><strong>Kind Attn.:</strong> {attn}</div>
+            <div><strong>Kind Attn.:</strong> {tpl.kindAttn}</div>
             <div><strong>Site: {tpl.siteName}</strong></div>
             <div><strong>Project Type: {tpl.projectType}</strong></div>
             <div><strong>Date:</strong> {fmtDate(q.createdAt)}</div>
@@ -169,7 +172,7 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
       </div>
 
       {/* ───────── Page 2: Terms & Conditions ───────── */}
-      <div style={{ border: BORDER, marginTop: 14, padding: '6px 8px', breakBefore: 'page', pageBreakBefore: 'always' }}>
+      <div data-pdf-page="2" style={{ border: BORDER, padding: '6px 8px' }}>
         <p style={{ margin: 0, fontWeight: 700, fontSize: 12 }}>TERMS &amp; CONDITIONS</p>
         <p style={{ margin: 0, fontStyle: 'italic', color: '#666' }}>Annexure to Quotation – {attn}</p>
 

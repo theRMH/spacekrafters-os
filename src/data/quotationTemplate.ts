@@ -45,6 +45,8 @@ export const DEFAULT_TERMS = {
   ].join('\n'),
 }
 
+export const PROJECT_TYPE_OPTIONS = ['Residential', 'Commercial', 'Industrial']
+
 export const DEFAULT_PAYMENT_STAGES = [
   { stage: 'Advance – on confirmation of order along with Purchase Order', percent: '50%' },
   { stage: 'During execution', percent: '40%' },
@@ -60,8 +62,8 @@ export function defaultTemplateData(opts: { lead?: Lead; mdName?: string; signNa
   const { lead, mdName, signName, signPhone } = opts
   return {
     workTitle: 'Interior Fit-Out Works',
-    kindAttn: lead?.name ?? '',
-    siteName: lead?.city ?? '',
+    kindAttn: '',
+    siteName: lead?.name ?? '',
     projectType: lead?.businessCategory ? lead.businessCategory.charAt(0).toUpperCase() + lead.businessCategory.slice(1) : '',
     projectMd: mdName ?? '',
     projectLead: lead?.ownerName ?? '',

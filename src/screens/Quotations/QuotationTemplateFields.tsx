@@ -1,17 +1,22 @@
 import { Plus, Trash2 } from 'lucide-react'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
+import { PROJECT_TYPE_OPTIONS } from '../../data/quotationTemplate'
 import type { QuotationTemplateData } from '../../types'
 
 interface Props {
   value: QuotationTemplateData
   onChange: (next: QuotationTemplateData) => void
+  // Team members the Project MD / Lead / QS dropdowns pick from (value = the name printed on the PDF).
+  people: { mds: string[]; everyone: string[] }
 }
 
 const inp = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-indigo-400'
+const inpInline = inp.replace('w-full ', '')
 const lbl = 'text-sm font-semibold text-slate-500 mb-1 block'
 
 // The note boxes behind the quotation PDF (QuotationPrintTemplate.tsx): whatever is
 // typed here is placed into the matching block of the template.
-export function QuotationTemplateFields({ value, onChange }: Props) {
+export function QuotationTemplateFields({ value, onChange, people }: Props) {
   const set = (patch: Partial<QuotationTemplateData>) => onChange({ ...value, ...patch })
   const stages = value.paymentStages ?? []
 
@@ -22,6 +27,18 @@ export function QuotationTemplateFields({ value, onChange }: Props) {
         onChange={e => set({ [key]: e.target.value } as Partial<QuotationTemplateData>)} />
     </div>
   )
+  // Dropdown that keeps a value already saved on an older quotation even if it is no longer in the list.
+  const pick = (key: 'projectType' | 'projectMd' | 'projectLead' | 'projectQs', label: string, options: string[]) => {
+    const current = (value[key] as string | undefined) ?? ''
+    const list = current && !options.includes(current) ? [current, ...options] : options
+    return (
+      <div>
+        <label className={lbl}>{label}</label>
+        <SearchableSelect value={current} onChange={v => set({ [key]: v } as Partial<QuotationTemplateData>)}
+          options={list.map(n => ({ value: n, label: n }))} placeholder={`Select ${label.toLowerCase()}…`} searchPlaceholder="Search…" />
+      </div>
+    )
+  }
   const area = (key: keyof QuotationTemplateData, label: string, rows: number, hint?: string) => (
     <div>
       <label className={lbl}>{label}{hint && <span className="font-normal text-slate-400"> — {hint}</span>}</label>
@@ -44,10 +61,10 @@ export function QuotationTemplateFields({ value, onChange }: Props) {
         <div className="grid grid-cols-2 gap-3">
           {text('kindAttn', 'Kind Attn.')}
           {text('siteName', 'Site')}
-          {text('projectType', 'Project Type')}
-          {text('projectMd', 'Project MD')}
-          {text('projectLead', 'Project Lead')}
-          {text('projectQs', 'Project QS')}
+          {pick('projectType', 'Project Type', PROJECT_TYPE_OPTIONS)}
+          {pick('projectMd', 'Project MD', people.mds)}
+          {pick('projectLead', 'Project Lead', people.everyone)}
+          {pick('projectQs', 'Project QS', people.everyone)}
         </div>
       </div>
 
@@ -73,8 +90,8 @@ export function QuotationTemplateFields({ value, onChange }: Props) {
           <div className="space-y-2">
             {stages.map((s, i) => (
               <div key={i} className="flex gap-2 items-center">
-                <input className={`${inp} flex-1`} value={s.stage} placeholder="Stage" onChange={e => setStage(i, { stage: e.target.value })} />
-                <input className={`${inp} w-24`} value={s.percent} placeholder="%" onChange={e => setStage(i, { percent: e.target.value })} />
+                <input className={`${inpInline} flex-1 min-w-0`} value={s.stage} placeholder="Stage" onChange={e => setStage(i, { stage: e.target.value })} />
+                <input className={`${inpInline} w-24 shrink-0`} value={s.percent} placeholder="%" onChange={e => setStage(i, { percent: e.target.value })} />
                 <button type="button" aria-label="Remove stage" onClick={() => set({ paymentStages: stages.filter((_, idx) => idx !== i) })}
                   className="text-red-500 p-1"><Trash2 size={16} /></button>
               </div>

@@ -19,8 +19,7 @@ import { getAllQuotations, upsertQuotation, deleteQuotation } from '../../servic
 import { changeQuotationStatus, recordQuotationAdvanceDecision } from './quotationActions'
 import { getAllProjects, upsertProject } from '../../services/projectService'
 import { addAuditLog } from '../../services/auditLogService'
-import { downloadQuotationExcel } from '../../utils/quotationExport'
-import { createPortal } from 'react-dom'
+import { downloadQuotationPdf, generateAndUploadQuotationPdf } from '../../utils/quotationPdf'
 import { QuotationPrintTemplate } from './QuotationPrintTemplate'
 import { QuotationTemplateFields } from './QuotationTemplateFields'
 import { defaultTemplateData } from '../../data/quotationTemplate'
@@ -215,6 +214,9 @@ export default function QuotationsScreen() {
   const [tpl, setTpl] = useState<QuotationTemplateData>({})
   // The MD's name, used to prefill "Project MD" on the PDF template.
   const [ownerName, setOwnerName] = useState('')
+  // Names offered by the Project MD / Lead / QS dropdowns.
+  const [people, setPeople] = useState<{ mds: string[]; everyone: string[] }>({ mds: [], everyone: [] })
+  const [generating, setGenerating] = useState(false)
   const [formError, setFormError] = useState('')
   // Target of the shared "Reject Quotation" sheet — which status a rejection
   // from the currently open stage writes, and who it's then waiting on.
@@ -249,7 +251,23 @@ export default function QuotationsScreen() {
 
   useEffect(() => { refresh() }, [])
   useEffect(() => {
-    getManagedUsersDirectory().then(users => setOwnerName(users.find(u => u.role === 'owner')?.fullName ?? ''))
+    if (!showNew || !leadId) return
+    const picked = leads.find(l => l.id === leadId)
+    if (!picked) return
+    const d = defaultTemplateData({ lead: picked, mdName: ownerName })
+    setTpl(t => ({
+      ...t,
+      siteName: t.siteName || d.siteName, projectType: t.projectType || d.projectType,
+      projectLead: t.projectLead || d.projectLead, projectMd: t.projectMd || d.projectMd,
+    }))
+  }, [showNew, leadId, leads, ownerName])
+
+  useEffect(() => {
+    getManagedUsersDirectory().then(users => {
+      const active = users.filter(u => u.status === 'active')
+      setOwnerName(active.find(u => u.role === 'owner')?.fullName ?? '')
+      setPeople({ mds: active.filter(u => u.role === 'owner').map(u => u.fullName), everyone: active.map(u => u.fullName) })
+    })
   }, [])
 
   useEffect(() => {
@@ -383,6 +401,27 @@ export default function QuotationsScreen() {
       .filter(s => s.title.trim() && s.items.length > 0)
   }
 
+  // Builds the PDF from the quotation + its template boxes and uploads it as the quotation's document.
+  // A failure never blocks saving the quotation — the error is reported and the old file (if any) is kept.
+  async function attachGeneratedPdf(q: Quotation): Promise<{ quotation: Quotation; error?: string }> {
+    try {
+      const url = await generateAndUploadQuotationPdf(q, q.template ?? tpl, leadName(q.leadId))
+      return { quotation: { ...q, documentFiles: [url] } }
+    } catch (err) {
+      return { quotation: q, error: err instanceof Error ? err.message : 'unknown error' }
+    }
+  }
+
+  async function downloadPdf(q: Quotation) {
+    setGenerating(true)
+    try {
+      await downloadQuotationPdf(q, q.template ?? defaultTemplateData({ lead: leads.find(l => l.id === q.leadId), mdName: ownerName }), leadName(q.leadId))
+    } catch (err) {
+      setSnack({ open: true, msg: `Could not generate the PDF: ${err instanceof Error ? err.message : 'unknown error'}`, type: 'error' })
+    }
+    setGenerating(false)
+  }
+
   async function handleAddQuotation() {
     const valid = validSections()
     if (!leadId || valid.length === 0) {
@@ -405,12 +444,15 @@ export default function QuotationsScreen() {
       template: tpl,
       createdBy: user?.id ?? '', createdAt: now, updatedAt: now,
     }
-    const result = await upsertQuotation(quotation)
+    setGenerating(true)
+    const pdf = await attachGeneratedPdf(quotation)
+    const result = await upsertQuotation(pdf.quotation)
+    setGenerating(false)
     if (!result.ok) { setFormError(result.error ?? 'Could not save quotation.'); return }
-    setQuotations(prev => [quotation, ...prev])
+    setQuotations(prev => [pdf.quotation, ...prev])
     dismiss(() => setShowNew(false))
-    setSnack({ open: true, msg: 'Quotation created and sent to PC for review.', type: 'success' })
-    notifyPcPending(quotation, 'New quotation created.')
+    setSnack({ open: true, msg: pdf.error ? `Quotation created and sent to PC for review, but the PDF could not be generated/uploaded: ${pdf.error}` : 'Quotation created, PDF generated and uploaded, sent to PC for review.', type: pdf.error ? 'error' : 'success' })
+    notifyPcPending(pdf.quotation, 'New quotation created.')
   }
 
   async function handleUpdateQuotation() {
@@ -440,12 +482,16 @@ export default function QuotationsScreen() {
       } : {}),
       updatedAt: new Date().toISOString(),
     }
-    const result = await upsertQuotation(updated)
+    setGenerating(true)
+    const pdf = await attachGeneratedPdf(updated)
+    const result = await upsertQuotation(pdf.quotation)
+    setGenerating(false)
     if (!result.ok) { setFormError(result.error ?? 'Could not update quotation.'); return }
-    setQuotations(prev => prev.map(q => (q.id === updated.id ? updated : q)))
+    setQuotations(prev => prev.map(q => (q.id === pdf.quotation.id ? pdf.quotation : q)))
     dismiss(() => { setShowEdit(false); setSelected(null) })
-    setSnack({ open: true, msg: needsReapproval ? 'Quotation updated and sent back to PC for review.' : 'Quotation updated.', type: 'success' })
-    if (needsReapproval) notifyPcPending(updated, 'Quotation was edited and needs review again.')
+    const base = needsReapproval ? 'Quotation updated and sent back to PC for review' : 'Quotation updated'
+    setSnack({ open: true, msg: pdf.error ? `${base}, but the PDF could not be generated/uploaded: ${pdf.error}` : `${base}; PDF regenerated and uploaded.`, type: pdf.error ? 'error' : 'success' })
+    if (needsReapproval) notifyPcPending(pdf.quotation, 'Quotation was edited and needs review again.')
   }
 
   // Delegates the actual transition + history + notify + Lead-advance to
@@ -644,8 +690,8 @@ export default function QuotationsScreen() {
             <div className="flex items-center justify-between gap-2">
               <StatusBadge status={selected.status} label={QUOTATION_STATUS_LABEL[selected.status]} size="sm" />
               <div className="flex items-center gap-2">
-                <button onClick={() => downloadQuotationExcel(selected, leadName(selected.leadId))}
-                  aria-label="Download Excel"
+                <button onClick={() => downloadPdf(selected)} disabled={generating}
+                  aria-label="Download PDF"
                   className="w-8 h-8 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-600 active:bg-slate-50">
                   <Download size={14} />
                 </button>
@@ -964,11 +1010,11 @@ export default function QuotationsScreen() {
       <BottomSheet isOpen={showPrint} onClose={() => setShowPrint(false)} title="Print Quotation" height="full">
         {selected && (
           <div>
-            <div className="flex justify-end mb-3 print:hidden">
-              <button onClick={() => window.print()}
+            <div className="flex justify-end mb-3">
+              <button onClick={() => downloadPdf(selected)} disabled={generating}
                 className="px-4 py-2 rounded-xl text-white text-xs font-bold active:opacity-90"
                 style={{ background: '#0F2A4A' }}>
-                Download PDF (Print → Save as PDF)
+                {generating ? 'Generating…' : 'Download PDF'}
               </button>
             </div>
             {/* On-screen preview of the generated PDF. */}
@@ -977,13 +1023,6 @@ export default function QuotationsScreen() {
                 <QuotationPrintTemplate q={selected} tpl={selected.template ?? defaultTemplateData({ lead: leads.find(l => l.id === selected.leadId), mdName: ownerName })} clientName={leadName(selected.leadId)} />
               </div>
             </div>
-            {/* What actually prints: rendered on <body> so it paginates; see index.css. */}
-            {showPrint && createPortal(
-              <div id="quotation-print-portal">
-                <QuotationPrintTemplate q={selected} tpl={selected.template ?? defaultTemplateData({ lead: leads.find(l => l.id === selected.leadId), mdName: ownerName })} clientName={leadName(selected.leadId)} />
-              </div>,
-              document.body,
-            )}
           </div>
         )}
       </BottomSheet>
@@ -1005,14 +1044,7 @@ export default function QuotationsScreen() {
               </div>
             ) : (
               <SearchableSelect
-                value={leadId} onChange={v => {
-                  setLeadId(v); setRequirementId('')
-                  const picked = leads.find(l => l.id === v)
-                  if (picked) {
-                    const d = defaultTemplateData({ lead: picked })
-                    setTpl(t => ({ ...t, kindAttn: t.kindAttn || d.kindAttn, siteName: t.siteName || d.siteName, projectType: t.projectType || d.projectType, projectLead: t.projectLead || d.projectLead }))
-                  }
-                }}
+                value={leadId} onChange={v => { setLeadId(v); setRequirementId('') }}
                 options={leads.map(l => ({ value: l.id, label: `${l.name} — ${l.city}` }))}
                 placeholder="Select a lead…" searchPlaceholder="Search leads…"
               />
@@ -1154,14 +1186,15 @@ export default function QuotationsScreen() {
             <div className="flex justify-between text-base pt-1.5 border-t border-slate-200"><span className="font-bold text-slate-800">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(formTotals.netAmount)}</span></div>
           </div>
 
-          <QuotationTemplateFields value={tpl} onChange={setTpl} />
+          <QuotationTemplateFields value={tpl} onChange={setTpl} people={people} />
 
           <button
             onClick={showEdit ? handleUpdateQuotation : handleAddQuotation}
-            className="w-full text-white rounded-xl py-3 text-base font-bold active:opacity-90"
+            disabled={generating}
+            className="w-full text-white rounded-xl py-3 text-base font-bold active:opacity-90 disabled:opacity-60"
             style={{ background: '#C9A24B' }}
           >
-            {showEdit ? 'Save Changes' : 'Create Quotation'}
+            {generating ? 'Generating PDF…' : showEdit ? 'Save & Regenerate Quotation PDF' : 'Generate Quotation PDF'}
           </button>
         </div>
       </BottomSheet>
