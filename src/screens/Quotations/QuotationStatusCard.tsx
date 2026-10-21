@@ -18,7 +18,8 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
   lead: Lead
   updateLead: (id: string, updates: Partial<Lead>, activityNote?: string) => Promise<{ ok: boolean; error?: string }>
   onChanged: (updated: Quotation) => void
-  onReview: () => void
+  // Optional: when given, shows an "Open full Quotation" button. The Lead sheet leaves it out — the details are shown below.
+  onReview?: () => void
 }) {
   const [showReject, setShowReject] = useState(false)
   // true while the reject box is for the CLIENT rejecting a sent quotation (vs PC/MD rejecting internally)
@@ -99,6 +100,38 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
         <p className="text-xs text-red-600">{quotation.status === 'revision_requested' ? "Client's reason" : 'Revision reason'}: {quotation.rejectionReason}</p>
       )}
       {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
+
+      {/* The quotation itself, so nothing needs a second screen. */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        {quotation.sections.map(section => (
+          <div key={section.id}>
+            <div className="px-3.5 py-2 bg-slate-50 flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800">{section.title}</span>
+              <span className="text-xs font-semibold text-slate-600">{fmtCurrency(section.items.reduce((sum, i) => sum + i.amount, 0))}</span>
+            </div>
+            {section.items.map(item => (
+              <div key={item.id} className="px-3.5 py-2 border-t border-slate-100 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-700">{item.description}</p>
+                  <p className="text-[11px] text-slate-400">{item.quantity} {item.unit} × {fmtCurrency(item.rate)}{item.taxPercent ? ` · ${item.taxPercent}% tax` : ''}</p>
+                </div>
+                <span className="text-xs font-bold text-slate-800 shrink-0">{fmtCurrency(item.amount)}</span>
+              </div>
+            ))}
+            {section.notes && <p className="px-3.5 py-2 border-t border-slate-100 text-[11px] text-slate-500">Notes: {section.notes}</p>}
+          </div>
+        ))}
+        <div className="px-3.5 py-2.5 border-t border-slate-200 bg-slate-50 space-y-1">
+          {quotation.discountAmount > 0 && (
+            <div className="flex justify-between text-xs"><span className="text-slate-500">Discount</span><span className="font-semibold text-slate-700">-{fmtCurrency(quotation.discountAmount)}</span></div>
+          )}
+          <div className="flex justify-between text-xs"><span className="text-slate-500">Tax</span><span className="font-semibold text-slate-700">{fmtCurrency(quotation.taxAmount)}</span></div>
+          {!!quotation.transportCost && (
+            <div className="flex justify-between text-xs"><span className="text-slate-500">Transport</span><span className="font-semibold text-slate-700">{fmtCurrency(quotation.transportCost)}</span></div>
+          )}
+          <div className="flex justify-between text-sm pt-1 border-t border-slate-200"><span className="font-bold text-slate-800">Net Amount</span><span className="font-extrabold" style={{ color: '#0F2A4A' }}>{fmtCurrency(quotation.netAmount)}</span></div>
+        </div>
+      </div>
 
       <QuotationPdfActions quotation={quotation} clientName={lead.name} canEdit={canPc} onChanged={onChanged} />
 
@@ -266,9 +299,11 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
         </div>
       )}
 
-      <button onClick={onReview} className="w-full py-2.5 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-600 active:bg-slate-50">
-        Open full Quotation →
-      </button>
+      {onReview && (
+        <button onClick={onReview} className="w-full py-2.5 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-600 active:bg-slate-50">
+          Open full Quotation →
+        </button>
+      )}
     </div>
   )
 }

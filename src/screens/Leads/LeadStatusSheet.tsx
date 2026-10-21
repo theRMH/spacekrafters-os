@@ -16,7 +16,6 @@ import { getAllRequirements } from '../../services/requirementService'
 import { getAllDesignPackages } from '../../services/designService'
 import { DESIGN_STATUS_LABEL, designWorkflowInfo } from '../Design/DesignCenterScreen'
 import { DesignStatusCard } from '../Design/DesignStatusCard'
-import { QUOTATION_STATUS_LABEL, quotationWorkflowInfo } from '../Quotations/QuotationsScreen'
 import { QuotationStatusCard } from '../Quotations/QuotationStatusCard'
 import { changeQuotationStatus } from '../Quotations/quotationActions'
 import { sendNotification } from '../../utils/notifications'
@@ -316,6 +315,13 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   if (hasRequirement && can('add_requirements') && ['site_visit_done', 'requirements_captured'].includes(lead.status)) editOptions.push({ kind: 'req-edit', label: 'Edit Requirements' })
   if (quotation && can('create_quotation') && QUOTE_STAGES.includes(lead.status)) editOptions.push({ kind: 'quote-edit', label: 'Edit Quotation' })
 
+  const noQuotationBody = (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-600">No quotation yet — create one.</p>
+      <button onClick={() => setEmbed('quote')} className={primaryBtn} style={{ background: '#0F2A4A' }}>Create Quotation</button>
+    </div>
+  )
+
   function renderBody() {
     if (!canAct) {
       return (
@@ -421,41 +427,11 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
         // for whoever can act (PC/MD), so Update Status never has to leave the
         // Lead page. Everyone else (and anything needing real line-item
         // editing) just sees a read-only reflection + a link to the full screen.
-        const canActOnQuotation = quotation && (can('approve_quotation_pc') || can('approve_quotation_internal'))
-        if (quotation && canActOnQuotation) {
-          return (
-            <QuotationStatusCard
-              quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead}
-              onChanged={setQuotation}
-              onReview={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation.id } }) }}
-            />
-          )
+        // The card also shows the quotation details, so it is rendered for everyone (actions are role-gated inside).
+        if (quotation) {
+          return <QuotationStatusCard quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead} onChanged={setQuotation} />
         }
-        return (
-          <div className="space-y-3">
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3.5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Quotation Status</p>
-                  <p className="text-sm font-bold text-indigo-900">{quotation ? QUOTATION_STATUS_LABEL[quotation.status] : 'Not drafted'}</p>
-                </div>
-                {quotation && (
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Responsible</p>
-                    <p className="text-sm font-bold text-indigo-900">{quotationWorkflowInfo(quotation).responsible}</p>
-                  </div>
-                )}
-              </div>
-              {quotation && <p className="text-xs text-indigo-700 mt-1.5">Next: {quotationWorkflowInfo(quotation).next}</p>}
-            </div>
-            {quotation?.rejectionReason && (quotation.status === 'pc_rejected' || quotation.status === 'md_rejected') && (
-              <p className="text-xs text-red-600">Revision reason: {quotation.rejectionReason}</p>
-            )}
-            <button onClick={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation?.id } }) }} className={secondaryBtn}>
-              Review in Quotations →
-            </button>
-          </div>
-        )
+        return noQuotationBody
       }
       case 'internally_approved': {
         if (designPackage) {
@@ -491,37 +467,10 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
         // as the quotation_drafted case above — Send to Client is a plain
         // status transition (changeQuotationStatus), so whoever can send it
         // acts right here instead of being pushed to the full screen.
-        if (quotation && can('send_quotation_client')) {
-          return (
-            <QuotationStatusCard
-              quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead}
-              onChanged={setQuotation}
-              onReview={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation.id } }) }}
-            />
-          )
+        if (quotation) {
+          return <QuotationStatusCard quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead} onChanged={setQuotation} />
         }
-        return (
-          <div className="space-y-3">
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3.5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Quotation Status</p>
-                  <p className="text-sm font-bold text-indigo-900">{quotation ? QUOTATION_STATUS_LABEL[quotation.status] : 'Not drafted'}</p>
-                </div>
-                {quotation && (
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Responsible</p>
-                    <p className="text-sm font-bold text-indigo-900">{quotationWorkflowInfo(quotation).responsible}</p>
-                  </div>
-                )}
-              </div>
-              {quotation && <p className="text-xs text-indigo-700 mt-1.5">Next: {quotationWorkflowInfo(quotation).next}</p>}
-            </div>
-            <button onClick={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation?.id } }) }} className={secondaryBtn}>
-              Review in Quotations →
-            </button>
-          </div>
-        )
+        return noQuotationBody
       }
       case 'design_in_progress': {
         // Same reasoning as the quotation_drafted case above — the real
@@ -578,11 +527,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
         // Client rejected the quotation: the MD now chooses Resend / Drop (same card as on the Quotation).
         if (quotation?.status === 'revision_requested') {
           return (
-            <QuotationStatusCard
-              quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead}
-              onChanged={setQuotation}
-              onReview={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation.id } }) }}
-            />
+            <QuotationStatusCard quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead} onChanged={setQuotation} />
           )
         }
         // Same Approve/Reject card pair and copy as the Approval page's own
@@ -650,38 +595,11 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
         // Received" directly on the Lead and jump straight to Won, skipping
         // that real decision entirely and duplicating the amount capture.
         const advanceDecided = !!(quotation?.advanceStatus || quotation?.advancePaymentReceived)
-        if (quotation && !advanceDecided && can('send_quotation_client')) {
-          return (
-            <QuotationStatusCard
-              quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead}
-              onChanged={setQuotation}
-              onReview={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation.id } }) }}
-            />
-          )
+        if (quotation && !advanceDecided) {
+          return <QuotationStatusCard quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead} onChanged={setQuotation} />
         }
         if (!advanceDecided) {
-          return (
-            <div className="space-y-3">
-              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Quotation Status</p>
-                    <p className="text-sm font-bold text-indigo-900">{quotation ? QUOTATION_STATUS_LABEL[quotation.status] : 'Not drafted'}</p>
-                  </div>
-                  {quotation && (
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">Responsible</p>
-                      <p className="text-sm font-bold text-indigo-900">{quotationWorkflowInfo(quotation).responsible}</p>
-                    </div>
-                  )}
-                </div>
-                {quotation && <p className="text-xs text-indigo-700 mt-1.5">Next: {quotationWorkflowInfo(quotation).next}</p>}
-              </div>
-              <button onClick={() => { onClose(); navigate('/quotations', { state: { quotationId: quotation?.id } }) }} className={secondaryBtn}>
-                Review in Quotations →
-              </button>
-            </div>
-          )
+          return noQuotationBody
         }
         // Advance decided — Design is next, same as the 'internally_approved'
         // case's designReady branch. Lead.status itself never leaves

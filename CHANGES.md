@@ -2,6 +2,11 @@
 
 ## 2026-10-21
 
+### Changed: quotation actions live in the one Update Status sheet (no second screen)
+**Commit:** Uncommitted
+- **Changed:** `QuotationStatusCard.tsx` — now shows the quotation itself (sections, items, discount, tax, transport, net) above the PDF actions and approve/send/client-decision buttons; the "Open full Quotation" button is optional and no longer used by the Lead sheet.
+- **Changed:** `LeadStatusSheet.tsx` — for every quotation stage the card is rendered for everyone (actions stay role-gated inside it) instead of a read-only box + "Review in Quotations →" navigation; with no quotation yet it offers **Create Quotation** in place. Design stages still link to the Design Center.
+
 ### Fixed: View kept opening the old stored PDF
 **Commit:** Uncommitted
 - **Changed:** `QuotationPdfActions.tsx` — **View** now rebuilds the PDF first when the stored one was made with an older layout, saves it, then opens it (window opened inside the click so it isn't blocked). `utils/quotationPdf.ts` — new `PDF_LAYOUT_VERSION` (bump it whenever the layout changes); `types/index.ts` — `Quotation.pdfLayout`; `QuotationsScreen.tsx` stamps `pdfLayout` when it generates a PDF. Existing quotations have no stamp, so their old PDF is refreshed on the next View.
