@@ -167,7 +167,7 @@ function computeAdvanceTerm(netAmount: number, option: AdvanceTermOption | '', t
 
 // `embed` = opened from a lead's Update Status sheet: shows only the Create Quotation form over the
 // page the user is already on (no page change), and closes itself when the form is dismissed/saved.
-export default function QuotationsScreen({ embed }: { embed?: { leadId: string; onClose: (msg?: string) => void } } = {}) {
+export default function QuotationsScreen({ embed }: { embed?: { leadId: string; edit?: boolean; onClose: (msg?: string) => void } } = {}) {
   const { user, can } = useAuth()
   const { leads, updateLead } = useCRM()
   const routerLocation = useLocation()
@@ -279,6 +279,13 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
 
   useEffect(() => {
     if (!embed || isLoading) return
+    if (embed.edit) {
+      const q = quotations.filter(x => x.leadId === embed.leadId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+      if (!q) { embed.onClose('No quotation to edit.'); return }
+      setSelected(q)
+      openEdit(q)
+      return
+    }
     resetForm()
     setLeadId(embed.leadId)
     const req = requirementsForLead(embed.leadId)[0]
@@ -499,7 +506,7 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
     setGenerating(false)
     if (!result.ok) { setFormError(result.error ?? 'Could not update quotation.'); return }
     setQuotations(prev => prev.map(q => (q.id === pdf.quotation.id ? pdf.quotation : q)))
-    dismiss(() => { setShowEdit(false); setSelected(null) })
+    dismiss(() => { setShowEdit(false); setSelected(null) }, 'Quotation updated.')
     const base = needsReapproval ? 'Quotation updated — send it to the MD for approval again' : 'Quotation updated'
     setSnack({ open: true, msg: pdf.error ? `${base}, but the PDF could not be generated/uploaded: ${pdf.error}` : `${base}; PDF regenerated.`, type: pdf.error ? 'error' : 'success' })
   }

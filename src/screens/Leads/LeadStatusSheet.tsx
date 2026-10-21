@@ -131,7 +131,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   const [showReassign, setShowReassign] = useState(false)
   const [reassignTo, setReassignTo] = useState('')
   // Which form is open over the current page (no navigation) — see EmbeddedForm below.
-  const [embed, setEmbed] = useState<'site' | 'req' | 'quote' | null>(null)
+  const [embed, setEmbed] = useState<'site' | 'req' | 'quote' | 'site-edit' | 'req-edit' | 'quote-edit' | null>(null)
 
   function closeEmbed(msg?: string) {
     setEmbed(null)
@@ -309,6 +309,12 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   const btn = 'w-full py-3 rounded-xl text-sm font-bold active:opacity-90 disabled:opacity-50'
   const primaryBtn = `${btn} text-white`
   const secondaryBtn = `${btn} border border-slate-200 bg-white text-slate-600`
+
+  const QUOTE_STAGES: LeadStatus[] = ['requirements_captured', 'quotation_drafted', 'internally_approved', 'design_in_progress', 'design_approved', 'sent_to_client', 'negotiating', 'client_approved']
+  const editOptions: { kind: 'site-edit' | 'req-edit' | 'quote-edit'; label: string }[] = []
+  if (hasSiteVisit && can('edit_site_visit') && ['qualified', 'site_visit_scheduled', 'site_visit_done'].includes(lead.status)) editOptions.push({ kind: 'site-edit', label: 'Edit Site Visit' })
+  if (hasRequirement && can('add_requirements') && ['site_visit_done', 'requirements_captured'].includes(lead.status)) editOptions.push({ kind: 'req-edit', label: 'Edit Requirements' })
+  if (quotation && can('create_quotation') && QUOTE_STAGES.includes(lead.status)) editOptions.push({ kind: 'quote-edit', label: 'Edit Quotation' })
 
   function renderBody() {
     if (!canAct) {
@@ -755,9 +761,9 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     <>
     {isOpen && embed && (
       <Suspense fallback={null}>
-        {embed === 'site' && <SiteVisitsScreen embed={{ leadId: lead.id, onClose: closeEmbed }} />}
-        {embed === 'req' && <RequirementsScreen embed={{ leadId: lead.id, onClose: closeEmbed }} />}
-        {embed === 'quote' && <QuotationsScreen embed={{ leadId: lead.id, onClose: closeEmbed }} />}
+        {embed?.startsWith('site') && <SiteVisitsScreen embed={{ leadId: lead.id, edit: embed === 'site-edit', onClose: closeEmbed }} />}
+        {embed?.startsWith('req') && <RequirementsScreen embed={{ leadId: lead.id, edit: embed === 'req-edit', onClose: closeEmbed }} />}
+        {embed?.startsWith('quote') && <QuotationsScreen embed={{ leadId: lead.id, edit: embed === 'quote-edit', onClose: closeEmbed }} />}
       </Suspense>
     )}
     <BottomSheet isOpen={isOpen && !embed} onClose={onClose} title={`Update Status — ${LEAD_STATUS_LABEL[lead.status]}`} height="full">
@@ -837,6 +843,16 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
         </div>
 
         {renderBody()}
+
+        {/* Edit the record behind the current stage (e.g. after the MD overrides the lead back to it). */}
+        {canAct && editOptions.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Edit this stage</p>
+            {editOptions.map(o => (
+              <button key={o.kind} onClick={() => setEmbed(o.kind)} className={secondaryBtn}>{o.label}</button>
+            ))}
+          </div>
+        )}
 
         <button onClick={onClose} className={secondaryBtn}>Cancel</button>
       </div>

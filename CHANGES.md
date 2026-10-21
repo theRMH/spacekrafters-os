@@ -2,6 +2,11 @@
 
 ## 2026-10-21
 
+### Added: edit the record behind a stage from Update Status (e.g. after an MD override)
+**Commit:** Uncommitted
+- **Changed:** `LeadStatusSheet.tsx` — new "Edit this stage" buttons (Edit Site Visit / Edit Requirements / Edit Quotation) shown when the lead's current stage has that record; they open the record's edit form over the current page. Gated by `edit_site_visit` / `add_requirements` / `create_quotation`.
+- **Changed:** `SiteVisitsScreen.tsx`, `RequirementsScreen.tsx`, `QuotationsScreen.tsx` — `embed.edit` opens the lead's latest record in the existing Edit sheet; saving closes and shows "… updated". Editing does not change the lead's status (editing an approved quotation still sends it back to draft, as before).
+
 ### Fixed: quotation PDF letterhead logos and collapsed table
 **Commit:** Uncommitted
 - **Added:** `public/brand/spacekrafters-logo-full.jpg` and `spacekrafters-mark.jpg` — the two images extracted from the sample estimate PDF (full "space krafters" logo on its dark plate; small mark with the S.P.A.C.E K.R.A.F.T.E.R.S wordmark). The old `spacekrafters-logo.png` was a cropped fragment and rendered as an empty black box on the PDF; it is still used by the app header/login.

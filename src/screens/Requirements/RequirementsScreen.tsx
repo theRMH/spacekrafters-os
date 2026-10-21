@@ -55,7 +55,7 @@ function lineItemsFromSiteVisit(visit: SiteVisit): RequirementLineItem[] {
 
 // `embed` = opened from a lead's Update Status sheet: shows only the New Requirement form over the
 // page the user is already on (no page change), and closes itself when the form is dismissed/saved.
-export default function RequirementsScreen({ embed }: { embed?: { leadId: string; onClose: (msg?: string) => void } } = {}) {
+export default function RequirementsScreen({ embed }: { embed?: { leadId: string; edit?: boolean; onClose: (msg?: string) => void } } = {}) {
   const { user } = useAuth()
   const { leads, updateLead } = useCRM()
   const routerLocation = useLocation()
@@ -121,6 +121,14 @@ export default function RequirementsScreen({ embed }: { embed?: { leadId: string
 
   useEffect(() => {
     if (!embed || isLoading) return
+    if (embed.edit) {
+      const visitIds = new Set(siteVisits.filter(v => v.leadId === embed.leadId).map(v => v.id))
+      const req = requirements.filter(r => visitIds.has(r.siteVisitId)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+      if (!req) { embed.onClose('No requirements to edit.'); return }
+      setSelected(req)
+      openEdit(req)
+      return
+    }
     const visit = siteVisits.filter(v => v.leadId === embed.leadId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     if (!visit) { embed.onClose('Record a site visit first.'); return }
     resetForm()
@@ -231,7 +239,7 @@ export default function RequirementsScreen({ embed }: { embed?: { leadId: string
     const result = await upsertRequirement(updated)
     if (!result.ok) { setFormError(result.error ?? 'Could not update requirement.'); return }
     setRequirements(prev => prev.map(r => (r.id === updated.id ? updated : r)))
-    dismiss(() => { setShowEdit(false); setSelected(null) })
+    dismiss(() => { setShowEdit(false); setSelected(null) }, 'Requirements updated.')
     setSnack({ open: true, msg: 'Requirement updated.', type: 'success' })
   }
 

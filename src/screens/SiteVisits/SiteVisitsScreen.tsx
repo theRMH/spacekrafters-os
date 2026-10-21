@@ -94,7 +94,7 @@ function defaultSiteChecklist(): SiteChecklistItem[] {
 
 // `embed` = opened from a lead's Update Status sheet: shows only the New Site Visit form over the
 // page the user is already on (no page change), and closes itself when the form is dismissed/saved.
-export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; onClose: (msg?: string) => void } } = {}) {
+export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; edit?: boolean; onClose: (msg?: string) => void } } = {}) {
   const { user } = useAuth()
   const { leads, updateLead } = useCRM()
   const routerLocation = useLocation()
@@ -173,12 +173,19 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
   }
 
   useEffect(() => {
-    if (!embed) return
+    if (!embed || isLoading) return
+    if (embed.edit) {
+      const visit = visits.filter(v => v.leadId === embed.leadId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+      if (!visit) { embed.onClose('No site visit to edit.'); return }
+      setSelected(visit)
+      openEdit(visit)
+      return
+    }
     resetForm()
     setLeadId(embed.leadId)
     setShowNew(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [isLoading])
 
   // Closes a sheet normally, unless this screen was entered via a Lead deep
   // link carrying returnTo — then every dismissal (X, backdrop, Cancel, or a
@@ -290,7 +297,7 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
     const result = await upsertSiteVisit(updated)
     if (!result.ok) { setFormError(result.error ?? 'Could not update site visit.'); return }
     setVisits(prev => prev.map(v => (v.id === updated.id ? updated : v)))
-    dismiss(() => { setShowEdit(false); setSelected(null) })
+    dismiss(() => { setShowEdit(false); setSelected(null) }, 'Site visit updated.')
     setSnack({ open: true, msg: 'Site visit updated.', type: 'success' })
   }
 
