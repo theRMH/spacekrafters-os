@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { coreStatus, impliedMinLeadStatus } from './leadPipeline'
+import { coreStatus, leadStatusForQuotation, statusToSyncFromQuotation } from './leadPipeline'
 import type { Quotation } from '../../types'
 
 function quotation(status: Quotation['status']): Quotation {
@@ -9,19 +9,50 @@ function quotation(status: Quotation['status']): Quotation {
   } as unknown as Quotation
 }
 
-// Guards the self-healing catch-up in LeadStatusSheet: a lead whose quotation has moved on must not stay behind.
-describe('impliedMinLeadStatus', () => {
-  it('no quotation -> no implied minimum', () => {
-    expect(impliedMinLeadStatus(null)).toBeNull()
+// The lead's status follows its quotation step by step.
+describe('leadStatusForQuotation', () => {
+  it.each([
+    ['draft', 'quotation_drafted'], ['internal_review', 'sent_to_md'], ['md_rejected', 'md_rejected'],
+    ['internally_approved', 'internally_approved'], ['sent_to_client', 'sent_to_client'],
+    ['revision_requested', 'client_rejected'], ['client_approved', 'client_approved'],
+  ] as const)('quotation %s -> lead %s', (q, lead) => {
+    expect(leadStatusForQuotation(q)).toBe(lead)
   })
 
-  it.each(['draft', 'internal_review', 'md_rejected', 'internally_approved', 'sent_to_client', 'revision_requested'] as const)(
-    'quotation %s -> quotation_drafted', status => {
-      expect(impliedMinLeadStatus(quotation(status))).toBe('quotation_drafted')
-    })
+  it('a dropped (rejected) quotation leaves the lead alone', () => {
+    expect(leadStatusForQuotation('rejected')).toBeNull()
+  })
+})
 
-  it('quotation client_approved -> client_approved', () => {
-    expect(impliedMinLeadStatus(quotation('client_approved'))).toBe('client_approved')
+// Guards the sync in LeadStatusSheet / quotationActions: the status follows the quotation, never backwards past its stage.
+describe('statusToSyncFromQuotation', () => {
+  it('no quotation -> nothing to sync', () => {
+    expect(statusToSyncFromQuotation('requirements_captured', null)).toBeNull()
+  })
+
+  it('lead already matches -> nothing to sync', () => {
+    expect(statusToSyncFromQuotation('sent_to_md', quotation('internal_review'))).toBeNull()
+  })
+
+  it('requirements done, quotation created -> Quotation Created', () => {
+    expect(statusToSyncFromQuotation('requirements_captured', quotation('draft'))).toBe('quotation_drafted')
+  })
+
+  it('inside the quotation stage the status moves with each step, and can step back after an MD rejection', () => {
+    expect(statusToSyncFromQuotation('quotation_drafted', quotation('internal_review'))).toBe('sent_to_md')
+    expect(statusToSyncFromQuotation('sent_to_md', quotation('internally_approved'))).toBe('internally_approved')
+    expect(statusToSyncFromQuotation('sent_to_md', quotation('md_rejected'))).toBe('md_rejected')
+    expect(statusToSyncFromQuotation('md_rejected', quotation('draft'))).toBe('quotation_drafted')
+  })
+
+  it('client approval moves the lead on to Payment', () => {
+    expect(statusToSyncFromQuotation('sent_to_client', quotation('client_approved'))).toBe('client_approved')
+  })
+
+  it('never moves a lead back out of Payment, or touches Project Created / Lost', () => {
+    expect(statusToSyncFromQuotation('client_approved', quotation('sent_to_client'))).toBeNull()
+    expect(statusToSyncFromQuotation('won', quotation('client_approved'))).toBeNull()
+    expect(statusToSyncFromQuotation('lost', quotation('draft'))).toBeNull()
   })
 })
 
@@ -29,6 +60,7 @@ describe('impliedMinLeadStatus', () => {
 describe('coreStatus', () => {
   it.each([
     ['qualified', 'contacted'], ['site_visit_scheduled', 'contacted'],
+    ['sent_to_md', 'quotation_drafted'], ['md_rejected', 'quotation_drafted'], ['client_rejected', 'quotation_drafted'],
     ['internally_approved', 'quotation_drafted'], ['design_in_progress', 'quotation_drafted'], ['design_approved', 'quotation_drafted'],
     ['sent_to_client', 'quotation_drafted'], ['negotiating', 'quotation_drafted'],
   ] as const)('%s -> %s', (from, to) => {
@@ -36,7 +68,7 @@ describe('coreStatus', () => {
   })
 
   it.each(['new', 'contacted', 'site_visit_done', 'requirements_captured', 'quotation_drafted', 'client_approved', 'won', 'lost'] as const)(
-    'current stage %s is unchanged', status => {
+    'stage %s is unchanged', status => {
       expect(coreStatus(status)).toBe(status)
     })
 })

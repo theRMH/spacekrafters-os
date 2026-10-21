@@ -15,7 +15,7 @@ import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllRequirements } from '../../services/requirementService'
 import { QuotationStatusCard } from '../Quotations/QuotationStatusCard'
 import { sendNotification } from '../../utils/notifications'
-import { AUTO_STAGES, PIPELINE, coreStatus, impliedMinLeadStatus } from './leadPipeline'
+import { PIPELINE, coreStatus, statusToSyncFromQuotation } from './leadPipeline'
 import type { Lead, LeadStatus, ManagedUser, Quotation } from '../../types'
 
 // Lazy: these screens import LeadStatusSheet themselves, so a static import would be circular.
@@ -39,16 +39,25 @@ export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
   qualified:              'Qualified',
   site_visit_scheduled:   'Site Visit Scheduled',
   site_visit_done:        'Site Visit Done',
-  requirements_captured:  'Requirements Captured',
-  quotation_drafted:      'Quotation Drafted',
-  internally_approved:    'Internally Approved',
+  requirements_captured:  'Requirements Done',
+  quotation_drafted:      'Quotation Created',
+  sent_to_md:             'Waiting for MD Approval',
+  md_rejected:            'MD Rejected',
+  client_rejected:        'Client Rejected',
+  internally_approved:    'MD Approved',
   design_in_progress:     'Design In Progress',
   design_approved:        'Design Approved',
-  sent_to_client:         'Sent To Client',
+  sent_to_client:         'Waiting for Client Approval',
   negotiating:            'Negotiating',
-  client_approved:        'Client Approved',
-  won:                    'Won',
+  client_approved:        'Waiting for Advance Payment',
+  won:                    'Project Created',
   lost:                   'Lost',
+}
+
+// What to show for a lead: the label of its status, except at Payment where it says whether the advance has come in.
+export function leadStatusLabel(lead: Pick<Lead, 'status' | 'advancePaymentAmount'>): string {
+  if (lead.status === 'client_approved' && lead.advancePaymentAmount) return 'Advance Received'
+  return LEAD_STATUS_LABEL[lead.status]
 }
 
 // The statuses the MD can force a lead to (the 7 stages + Lost).
@@ -105,13 +114,10 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     getAllQuotations().then(qs => {
       const mine = qs.filter(q => q.leadId === lead.id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null
       setQuotation(mine)
-      // Self-healing catch-up: if the quotation is further along than the lead says (e.g. the client approved
-      // it), move the lead forward. Only ever forward, never touches Won/Lost or an MD override.
-      const implied = impliedMinLeadStatus(mine)
-      const curIdx = AUTO_STAGES.indexOf(coreStatus(lead.status))
-      if (implied && curIdx !== -1 && !lead.mdStatusOverride && AUTO_STAGES.indexOf(implied) > curIdx) {
-        updateLead(lead.id, { status: implied }, `Synced to the quotation: ${LEAD_STATUS_LABEL[implied]}`)
-      }
+      // Self-healing catch-up: keep the lead's status in step with its quotation (e.g. the client approved it but
+      // the lead still says Sent to Client). Never moves a lead backwards, never touches Won/Lost or an MD override.
+      const sync = lead.mdStatusOverride ? null : statusToSyncFromQuotation(lead.status, mine)
+      if (sync) updateLead(lead.id, { status: sync }, `Synced to the quotation: ${LEAD_STATUS_LABEL[sync]}`)
     })
   }, [isOpen, lead.id])
 
@@ -153,7 +159,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     await sendNotification(
       [person.id],
       'New Lead Task',
-      `${lead.name} (${lead.leadNumber ?? lead.id}) — ${LEAD_STATUS_LABEL[lead.status]}. Assigned by ${user?.name ?? 'System'}.`,
+      `${lead.name} (${lead.leadNumber ?? lead.id}) — ${leadStatusLabel(lead)}. Assigned by ${user?.name ?? 'System'}.`,
       `/tasks?leadId=${lead.id}`,
     )
     setShowReassign(false)
@@ -301,7 +307,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
         {embed?.startsWith('quote') && <QuotationsScreen embed={{ leadId: lead.id, edit: embed === 'quote-edit', onClose: closeEmbed }} />}
       </Suspense>
     )}
-    <BottomSheet isOpen={isOpen && !embed} onClose={onClose} title={`Update Status — ${LEAD_STATUS_LABEL[lead.status]}`} height="full">
+    <BottomSheet isOpen={isOpen && !embed} onClose={onClose} title={`Update Status — ${leadStatusLabel(lead)}`} height="full">
       <div className="space-y-4">
         {user?.role === 'owner' && (
           <MdOverrideCard noun="status" title="lead status" saving={saving} onApply={submitMdOverride}
@@ -315,7 +321,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
               <h3 className="text-base font-extrabold text-slate-800 leading-tight truncate">{lead.name}</h3>
               {lead.leadNumber && <p className="text-xs text-slate-400 mt-0.5">{lead.leadNumber}</p>}
             </div>
-            <StatusBadge status={lead.status} label={LEAD_STATUS_LABEL[lead.status]} />
+            <StatusBadge status={lead.status} label={leadStatusLabel(lead)} />
           </div>
           <div className="space-y-0.5 text-sm text-slate-600 pt-1">
             <p>{lead.phone}</p>

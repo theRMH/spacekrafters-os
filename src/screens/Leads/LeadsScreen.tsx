@@ -23,7 +23,7 @@ import {
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getNextLeadNumber } from '../../services/leadService'
 import { hasRole } from '../../utils/permissions'
-import { LeadStatusSheet, LEAD_STATUS_LABEL } from './LeadStatusSheet'
+import { LeadStatusSheet, LEAD_STATUS_LABEL, leadStatusLabel } from './LeadStatusSheet'
 import { coreStatus } from './leadPipeline'
 import { ImportLeadsSheet } from './ImportLeadsSheet'
 import { FILTERS, type FilterKey, resolveRange, inRange as inRangeOf } from '../Dashboard/dashboardDateUtils'
@@ -742,7 +742,7 @@ export default function LeadsScreen() {
                 </div>
                 {!selectMode && (
                   <div className="flex flex-col items-end gap-1 shrink-0">
-                    <StatusBadge status={lead.status} size="xs" />
+                    <StatusBadge status={lead.status} label={leadStatusLabel(lead)} size="xs" />
                     {overdue && (
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">
                         ⚠ SLA overdue
@@ -795,7 +795,7 @@ export default function LeadsScreen() {
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <StatusBadge status={selected.status} size="md" />
+                <StatusBadge status={selected.status} label={leadStatusLabel(selected)} size="md" />
                 {isSlaOverdue(selected) && (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">
                     ⚠ SLA overdue — due {fmtDateTime(selected.slaDueAt)}
@@ -863,7 +863,7 @@ export default function LeadsScreen() {
               <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                 <div>
                   <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>
-                  <p className="text-sm font-bold text-slate-800 mt-1">{LEAD_STATUS_LABEL[selected.status]}</p>
+                  <p className="text-sm font-bold text-slate-800 mt-1">{leadStatusLabel(selected)}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Responsible: {selected.assignedToName ?? selected.ownerName ?? 'Not Assigned'}
                   </p>

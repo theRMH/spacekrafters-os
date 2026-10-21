@@ -10,6 +10,7 @@ import { upsertProject } from '../../services/projectService'
 import { upsertDesignPackage } from '../../services/designService'
 import { addAuditLog } from '../../services/auditLogService'
 import { approvalHistoryEntry } from '../../utils/approvalHistory'
+import { statusToSyncFromQuotation } from '../Leads/leadPipeline'
 import type { Quotation, DesignPackage, DesignVersion, Project, AuditLog, QuotationStatus, DesignPackageStatus } from '../../types'
 
 export function fmtCurrency(n: number): string {
@@ -71,11 +72,19 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
     return 'Unassigned'
   }
 
+  // The lead's status follows the quotation (MD Approved, MD Rejected, Client Approved, Client Rejected).
+  async function syncLead(updated: Quotation) {
+    const lead = leadFor(updated.leadId)
+    const next = lead ? statusToSyncFromQuotation(lead.status, updated) : null
+    if (lead && next) await updateLead(lead.id, { status: next }, updated.statusHistory?.[updated.statusHistory.length - 1]?.label ?? 'Quotation updated')
+  }
+
   async function decideQuotation(approved: boolean) {
     const q = quote
     if (!q || (!approved && !reason.trim())) return
     setSaving(true)
-    const status: QuotationStatus = approved ? 'internally_approved' : 'rejected'
+    // A rejection goes back to the PC (MD Rejected), who edits or resubmits it.
+    const status: QuotationStatus = approved ? 'internally_approved' : 'md_rejected'
     const note = approved ? undefined : reason.trim()
     const updated: Quotation = {
       ...q, status,
@@ -96,6 +105,7 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
       }
       addAuditLog(log)
     }
+    await syncLead(updated)
     onDecided({ quotation: updated })
     setSnack({ open: true, msg: approved ? 'Quotation approved.' : 'Quotation rejected.', type: 'success' })
   }
@@ -127,10 +137,7 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
       }
     }
     setSaving(false)
-    const lead = leadFor(updated.leadId)
-    if (approved && lead && !['client_approved', 'won', 'lost'].includes(lead.status)) {
-      await updateLead(lead.id, { status: 'client_approved' }, 'Client approved the quotation')
-    }
+    await syncLead(updated)
     onDecided({ quotation: updated })
     setSnack({ open: true, msg: approved ? 'Client approval recorded.' : 'Revision request recorded.', type: 'success' })
   }

@@ -1,5 +1,5 @@
 import { PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
-import { LEAD_STATUS_LABEL } from '../Leads/LeadStatusSheet'
+import { leadStatusLabel } from '../Leads/LeadStatusSheet'
 import type {
   Appointment, AuthUser, DailyReport, DailyTask, DesignPackage, ExpenseRequest, Lead,
   LeaveApplication, MaterialRequestForm, Project, PurchaseOrder, PurchaseRequest,
@@ -114,7 +114,7 @@ export function buildMyTaskFeed(opts: {
     if (l.status === 'won' || l.status === 'lost') continue
     items.push({
       key: `lead-${l.id}`, at: l.updatedAt,
-      title: `Lead: ${LEAD_STATUS_LABEL[l.status]}`, badge: 'Lead', badgeCls: 'bg-sky-50 text-sky-700',
+      title: `Lead: ${leadStatusLabel(l)}`, badge: 'Lead', badgeCls: 'bg-sky-50 text-sky-700',
       subjectLabel: 'Lead', subject: l.name,
       meta: [l.leadNumber ? `ID: ${l.leadNumber}` : '', l.city, l.phone].filter(Boolean),
       // The actual current assignee (an explicit hand-off, or the lead's

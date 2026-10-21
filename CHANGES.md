@@ -2,6 +2,17 @@
 
 ## 2026-10-21
 
+### Changed: "Waiting for …" wording on every status that depends on someone else
+**Commit:** Uncommitted
+- **Changed:** `LeadStatusSheet.tsx` — `LEAD_STATUS_LABEL`: Sent to MD → **Waiting for MD Approval**, Sent to Client → **Waiting for Client Approval**, Client Approved → **Waiting for Advance Payment**; new `leadStatusLabel(lead)` shows **Advance Received** once the advance is recorded. Used by the Update Status sheet, My Tasks cards, the Leads list/detail badges and the Dashboard sales lists (`LeadsScreen.tsx`, `LeadDetailScreen.tsx`, `myTaskFeed.ts`, `salesPerformance.ts`). `QuotationsScreen.tsx` — quotation labels match (Waiting for MD Approval / Waiting for Client Approval).
+
+### Changed: lead status now follows the quotation step by step, with simple names
+**Commit:** Uncommitted  ·  no DB changes (status is plain text)
+- **Changed:** `types/index.ts` — new lead statuses `sent_to_md`, `md_rejected`, `client_rejected`. Labels (`LEAD_STATUS_LABEL`, `StatusBadge`): Quotation Created, Sent to MD, MD Rejected, MD Approved, Sent to Client, Client Rejected, Client Approved, Requirements Done, Project Created (was Quotation Drafted / Internally Approved / Won…).
+- **Changed:** `leadPipeline.ts` — `leadStatusForQuotation()` and `statusToSyncFromQuotation()` (replace `impliedMinLeadStatus`); the new statuses belong to the Quotation stage in `coreStatus()`.
+- **Changed:** `quotationActions.ts`, `QuotationsScreen.tsx` (edit sends it back to Quotation Created), `ApprovalReviewSheets.tsx` (MD approve/reject, client decision) — every quotation step now updates the lead's status; the Update Status sheet also re-syncs a lead that is out of step. MD rejection on the Approval page now sends the quotation back to the PC (`md_rejected`) instead of the dead-end `rejected`. Quotation status labels match (Quotation Created, Sent to MD, MD Approved, Sent to Client, Client Rejected, Client Approved).
+- **Changed:** `salesPerformance.ts` — new statuses counted as negotiation stage.
+
 ### Changed: lead flow simplified to 7 stages (New → Contacted → Site Visit → Requirements → Quotation → Payment → Project)
 **Commit:** Uncommitted  ·  no DB changes (statuses are plain text; older leads keep working)
 - **Added:** `screens/Leads/leadPipeline.ts` (+ `leadPipeline.test.ts`, replaces `LeadStatusSheet.test.ts`) — `PIPELINE`, `coreStatus()` (maps retired statuses qualified / site_visit_scheduled / internally_approved / design_* / sent_to_client / negotiating onto their stage) and `impliedMinLeadStatus(quotation)`.

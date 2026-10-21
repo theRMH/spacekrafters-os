@@ -22,6 +22,7 @@ import { downloadQuotationPdf, generateAndUploadQuotationPdf, PDF_LAYOUT_VERSION
 import { QuotationPrintTemplate } from './QuotationPrintTemplate'
 import { QuotationTemplateFields } from './QuotationTemplateFields'
 import { QuotationPdfActions } from './QuotationPdfActions'
+import { statusToSyncFromQuotation } from '../Leads/leadPipeline'
 import { defaultTemplateData } from '../../data/quotationTemplate'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { sendNotification } from '../../utils/notifications'
@@ -49,11 +50,11 @@ function normalizeQuotationUnits(q: Quotation): Quotation {
 // rather than editing the shared status-label map, since 'internally_approved'
 // is also a Lead status and renaming it there would relabel Leads too.
 export const QUOTATION_STATUS_LABEL: Record<QuotationStatus, string> = {
-  draft:               'Draft',
-  pending_pc_review:   'Pending PC Review',
-  pc_rejected:         'PC Rejected — Back to QS',
-  internal_review:     'Pending MD Approval',
-  md_rejected:         'MD Rejected — Back to PC',
+  draft:               'Quotation Created',
+  pending_pc_review:   'Quotation Created',
+  pc_rejected:         'MD Rejected',
+  internal_review:     'Waiting for MD Approval',
+  md_rejected:         'MD Rejected',
   internally_approved: 'MD Approved',
   sent_to_client:      'Waiting for Client Approval',
   revision_requested:  'Client Rejected',
@@ -504,6 +505,12 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
     setGenerating(false)
     if (!result.ok) { setFormError(result.error ?? 'Could not update quotation.'); return }
     setQuotations(prev => prev.map(q => (q.id === pdf.quotation.id ? pdf.quotation : q)))
+    if (needsReapproval) {
+      // Back to "Quotation Created" until it is sent to the MD again.
+      const lead = leads.find(l => l.id === pdf.quotation.leadId)
+      const next = lead ? statusToSyncFromQuotation(lead.status, pdf.quotation) : null
+      if (lead && next) await updateLead(lead.id, { status: next }, 'Quotation edited — send it to the MD again')
+    }
     dismiss(() => { setShowEdit(false); setSelected(null) }, 'Quotation updated.')
     const base = needsReapproval ? 'Quotation updated — send it to the MD for approval again' : 'Quotation updated'
     setSnack({ open: true, msg: pdf.error ? `${base}, but the PDF could not be generated/uploaded: ${pdf.error}` : `${base}; PDF regenerated.`, type: pdf.error ? 'error' : 'success' })

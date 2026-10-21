@@ -1,5 +1,5 @@
 import { PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
-import { LEAD_STATUS_LABEL } from '../Leads/LeadStatusSheet'
+import { leadStatusLabel } from '../Leads/LeadStatusSheet'
 import type { Lead, LeadStatus, Project } from '../../types'
 
 // Sales-pipeline bucketing: a lead moves Active -> Negotiation, then once it's
@@ -9,7 +9,7 @@ import type { Lead, LeadStatus, Project } from '../../types'
 // no contract value yet in this data model (no quotation-value join here) —
 // showing ₹0 for them is real, not a placeholder.
 export const ACTIVE_STATUSES: LeadStatus[] = ['new', 'contacted', 'qualified', 'site_visit_scheduled', 'site_visit_done', 'requirements_captured']
-export const NEGOTIATION_STATUSES: LeadStatus[] = ['quotation_drafted', 'internally_approved', 'design_in_progress', 'design_approved', 'sent_to_client', 'negotiating', 'client_approved']
+export const NEGOTIATION_STATUSES: LeadStatus[] = ['quotation_drafted', 'sent_to_md', 'md_rejected', 'client_rejected', 'internally_approved', 'design_in_progress', 'design_approved', 'sent_to_client', 'negotiating', 'client_approved']
 
 export interface SalesRecord {
   key: string
@@ -44,7 +44,7 @@ export function buildSalesPerformance(leads: Lead[], projects: Project[]): Sales
     if (ACTIVE_STATUSES.includes(lead.status)) {
       person.active.count++
       person.active.records.push({
-        key: lead.id, name: lead.name, stageLabel: LEAD_STATUS_LABEL[lead.status], amount: 0,
+        key: lead.id, name: lead.name, stageLabel: leadStatusLabel(lead), amount: 0,
         updatedAt: lead.updatedAt, assignedTo: name, linkTo: `/leads/${lead.id}`,
       })
       continue
@@ -52,7 +52,7 @@ export function buildSalesPerformance(leads: Lead[], projects: Project[]): Sales
     if (NEGOTIATION_STATUSES.includes(lead.status)) {
       person.negotiation.count++
       person.negotiation.records.push({
-        key: lead.id, name: lead.name, stageLabel: LEAD_STATUS_LABEL[lead.status], amount: 0,
+        key: lead.id, name: lead.name, stageLabel: leadStatusLabel(lead), amount: 0,
         updatedAt: lead.updatedAt, assignedTo: name, linkTo: `/leads/${lead.id}`,
       })
       continue

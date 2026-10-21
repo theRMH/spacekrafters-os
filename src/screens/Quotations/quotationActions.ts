@@ -10,6 +10,7 @@
 import { upsertQuotation } from '../../services/quotationService'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { sendNotification } from '../../utils/notifications'
+import { statusToSyncFromQuotation } from '../Leads/leadPipeline'
 import type { Quotation, QuotationStatus, QuotationStatusHistoryItem, Lead, UserRole } from '../../types'
 
 const STATUS_HISTORY_LABEL: Partial<Record<QuotationStatus, string>> = {
@@ -60,13 +61,10 @@ export async function changeQuotationStatus(params: {
   if (status === 'revision_requested') await notifyPcClientRejected(updated, leadLabel)
 
   if (lead && updateLead) {
-    if (status === 'client_approved') {
-      // The only quotation step that moves the lead: client approved → Payment stage.
-      if (!['client_approved', 'won', 'lost'].includes(lead.status)) await updateLead(lead.id, { status: 'client_approved' }, 'Client approved the quotation')
-    } else if (status === 'internally_approved' || status === 'sent_to_client' || status === 'revision_requested') {
-      // The lead stays at Quotation — just leave a line in its activity log.
-      await updateLead(lead.id, {}, status === 'revision_requested' ? `Client rejected the quotation${note ? `: ${note}` : ''}` : label)
-    }
+    // The lead's status follows the quotation (Sent to MD, MD Approved, Sent to Client, Client Approved, …),
+    // and the step is logged in its activity.
+    const next = statusToSyncFromQuotation(lead.status, updated)
+    await updateLead(lead.id, next ? { status: next } : {}, status === 'revision_requested' ? `Client rejected the quotation${note ? `: ${note}` : ''}` : label)
   }
 
   return { ok: true, updated }

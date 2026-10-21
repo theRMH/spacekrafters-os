@@ -11,7 +11,7 @@ import { getAllFollowUps } from '../../services/followUpService'
 import { getAllSiteVisits } from '../../services/siteVisitService'
 import { BUSINESS_DIVISION_LABEL, BUSINESS_CATEGORY_LABEL, BUSINESS_BRAND_LABEL } from '../../data/businessDivisions'
 import type { FollowUp, SiteVisit } from '../../types'
-import { LeadStatusSheet, LEAD_STATUS_LABEL } from './LeadStatusSheet'
+import { LeadStatusSheet, leadStatusLabel } from './LeadStatusSheet'
 import { LeadActivityHistory } from './LeadActivityHistory'
 
 type Tab = 'overview' | 'follow-ups' | 'site-visits' | 'activity'
@@ -98,7 +98,7 @@ export default function LeadDetailScreen() {
             <h1 className="text-base font-extrabold text-slate-800 truncate">{lead.name}</h1>
             <p className="text-xs text-slate-500">{lead.city}</p>
           </div>
-          <StatusBadge status={lead.status} size="sm" />
+          <StatusBadge status={lead.status} label={leadStatusLabel(lead)} size="sm" />
         </div>
         <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-1">
           {TABS.map(t => (
@@ -152,7 +152,7 @@ export default function LeadDetailScreen() {
               <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
                 <div>
                   <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Current Action Needed</p>
-                  <p className="text-sm font-bold text-slate-800 mt-1">{LEAD_STATUS_LABEL[lead.status]}</p>
+                  <p className="text-sm font-bold text-slate-800 mt-1">{leadStatusLabel(lead)}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Responsible: {lead.assignedToName ?? lead.ownerName ?? 'Not Assigned'}
                   </p>
