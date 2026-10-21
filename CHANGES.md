@@ -2,9 +2,9 @@
 
 ## 2026-10-21
 
-### Changed: menu is one flat MAIN list + REPORTING (replaces the earlier grouped menu changes today)
+### Reverted: flat MAIN + REPORTING menu → back to four groups
 **Commit:** Uncommitted
-- **Changed:** `components/navigation/navItems.ts` — MAIN: Dashboard, Projects, Leads, Site Visits, Quotations, Approval, Task, Attendance, Leave, Files; REPORTING: Reports, Settings. Everything else (Site Visit Report, Design Center, Clients, Tasks/Gantt/Daily pages, Procurement, Finance, Personal Finance, Follow-ups, Product Sales, Audit Log…) has no menu entry any more; the pages still exist and open from links. User Management and Attendance Settings are reachable from Settings.
+- **Changed:** `components/navigation/navItems.ts` — the flat MAIN + REPORTING menu (pushed in `2f5fd2a`) is undone. Menu is again: **Main** (Dashboard, Task, Projects, Clients), **Site & Design** (Leads, Site Visits, Site Visit Report, Quotations, Design Center), **Projects & Tasks** (Tasks, Gantt, Daily Diary, Daily Task, Daily Report), **Admin** (User Management, Attendance Settings, Settings, Audit Log). Procurement, Finance, Personal Finance, HR and Reports/Files stay out of the menu (pages still exist).
 
 ### Changed: menu — removed CRM, Site Visit Sort and Product Sales; Leads moved under Site & Design
 **Commit:** Uncommitted

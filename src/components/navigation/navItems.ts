@@ -1,8 +1,9 @@
 import type { ComponentType } from 'react'
 import type { LucideProps } from 'lucide-react'
 import {
-  Users, MapPin, FileText, FolderOpen, Wrench, LayoutDashboard, ShieldCheck,
-  ClipboardCheck, CalendarOff, File, BarChart2, Settings,
+  Users, MapPin, FileText, Layers, FolderOpen, CheckSquare, GanttChartSquare, BookOpen,
+  UserCog, Settings, History, LocateFixed, ListChecks, FileSearch, FileEdit, Wrench,
+  LayoutDashboard,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -13,29 +14,43 @@ export interface NavItem {
   permission: Permission
 }
 
-// One flat MAIN list, then REPORTING. Pages that are not listed here (Gantt, Daily Diary,
-// Procurement, Finance, Admin pages, ...) still exist and are reached through links.
 export function getMainItems(): NavItem[] {
   return [
-    { icon: LayoutDashboard, label: 'Dashboard',  path: '/dashboard',   permission: 'view_dashboard' },
-    { icon: FolderOpen,      label: 'Projects',   path: '/projects',    permission: 'view_projects' },
-    { icon: Users,           label: 'Leads',      path: '/leads',       permission: 'view_leads' },
-    { icon: MapPin,          label: 'Site Visits', path: '/site-visits', permission: 'view_site_visits' },
-    { icon: FileText,        label: 'Quotations', path: '/quotations',  permission: 'view_quotations' },
-    { icon: ShieldCheck,     label: 'Approval',   path: '/approval',    permission: 'view_md_tasks' },
-    { icon: Wrench,          label: 'Task',       path: '/my-tasks',    permission: 'view_my_tasks' },
-    { icon: ClipboardCheck,  label: 'Attendance', path: '/attendance',  permission: 'view_attendance' },
-    { icon: CalendarOff,     label: 'Leave',      path: '/leave',       permission: 'view_leave' },
-    { icon: File,            label: 'Files',      path: '/files',       permission: 'view_home' },
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', permission: 'view_dashboard' },
+    { icon: Wrench,     label: 'Task',     path: '/my-tasks', permission: 'view_my_tasks' },
+    { icon: FolderOpen, label: 'Projects', path: '/projects', permission: 'view_projects' },
+    { icon: Users,      label: 'Clients',  path: '/clients',  permission: 'view_projects' },
   ]
 }
 
 export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
-    label: 'Reporting',
+    label: 'Site & Design',
     items: [
-      { icon: BarChart2, label: 'Reports',  path: '/reports',  permission: 'view_reports' },
-      { icon: Settings,  label: 'Settings', path: '/settings', permission: 'view_home' },
+      { icon: Users,    label: 'Leads',        path: '/leads',        permission: 'view_leads'       },
+      { icon: MapPin,    label: 'Site Visits',  path: '/site-visits',  permission: 'view_site_visits' },
+      { icon: FileSearch, label: 'Site Visit Report', path: '/site-visit-report', permission: 'view_site_visit_reports' },
+      { icon: FileText,  label: 'Quotations',   path: '/quotations',   permission: 'view_quotations'  },
+      { icon: Layers,    label: 'Design Center', path: '/design',      permission: 'view_design'      },
+    ],
+  },
+  {
+    label: 'Projects & Tasks',
+    items: [
+      { icon: CheckSquare,        label: 'Tasks',       path: '/tasks',       permission: 'view_tasks' },
+      { icon: GanttChartSquare,   label: 'Gantt',       path: '/gantt',       permission: 'view_gantt' },
+      { icon: BookOpen,           label: 'Daily Diary', path: '/daily-diary', permission: 'view_tasks' },
+      { icon: ListChecks,         label: 'Daily Task',  path: '/daily-tasks', permission: 'view_daily_tasks' },
+      { icon: FileEdit,           label: 'Daily Report',path: '/daily-reports', permission: 'view_daily_reports' },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { icon: UserCog,  label: 'User Management', path: '/settings/users', permission: 'manage_users' },
+      { icon: LocateFixed, label: 'Attendance Settings', path: '/settings/attendance', permission: 'manage_settings' },
+      { icon: Settings, label: 'Settings',        path: '/settings',       permission: 'view_home'    },
+      { icon: History,  label: 'Audit Log',       path: '/audit-log',      permission: 'view_audit_log' },
     ],
   },
 ]
