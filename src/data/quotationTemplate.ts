@@ -2,11 +2,13 @@ import type { Lead, QuotationTemplateData } from '../types'
 
 // Fixed letterhead of the quotation PDF (QuotationPrintTemplate.tsx). Edit here to change it.
 export const QUOTATION_LETTERHEAD = {
-  companyName: ['S.P.A.C.E', 'K.R.A.F.T.E.R.S'],
   tagline: 'Turnkey Projects & Constructions | Quotation',
   address: 'NO.16/18, Ground Floor, Cabin No.02, Arulambal Street, Rama Kamath Puram, T.Nagar, Chennai - 600097',
   phone: 'Office : +91 93 63 73 00 96',
-  logo: '/brand/spacekrafters-logo.png',
+  // Both images are taken from the sample quotation PDF: the small mark with the S.P.A.C.E K.R.A.F.T.E.R.S
+  // wordmark (top left) and the full "space krafters" logo on its dark plate (centre).
+  mark: '/brand/spacekrafters-mark.jpg',
+  logo: '/brand/spacekrafters-logo-full.jpg',
   signingCompany: 'For Space Krafters Turnkey Projects & Constructions',
 }
 

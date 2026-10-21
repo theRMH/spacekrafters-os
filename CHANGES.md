@@ -2,6 +2,11 @@
 
 ## 2026-10-21
 
+### Fixed: quotation PDF letterhead logos and collapsed table
+**Commit:** Uncommitted
+- **Added:** `public/brand/spacekrafters-logo-full.jpg` and `spacekrafters-mark.jpg` — the two images extracted from the sample estimate PDF (full "space krafters" logo on its dark plate; small mark with the S.P.A.C.E K.R.A.F.T.E.R.S wordmark). The old `spacekrafters-logo.png` was a cropped fragment and rendered as an empty black box on the PDF; it is still used by the app header/login.
+- **Changed:** `QuotationPrintTemplate.tsx` — letterhead now uses the mark (top left) + full logo (centre) instead of text + the old logo. Tables use separate borders and whole-pixel line heights (collapsed borders / 1.35 line height were captured doubled and misaligned, so rows looked squashed with text on the lines). `data/quotationTemplate.ts` — letterhead gets `mark`, `logo` points to the new file, unused `companyName` removed.
+
 ### Changed: one-step lead updates, forms open in place, simpler quotation flow (PC → MD → PC → client)
 **Commit:** Uncommitted  ·  ⚠ DEPLOY `supabase/pc-send-quotation-to-client.sql`
 - **Changed:** `SiteVisitsScreen.tsx`, `RequirementsScreen.tsx`, `QuotationsScreen.tsx` — new optional `embed` prop: shows only the form over the current page (no route change) and closes itself when saved/dismissed. Submitting the form moves the lead on by itself (site visit → Site Visit Done, requirements → Requirements Captured, quotation → Quotation Drafted).

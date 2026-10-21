@@ -13,7 +13,11 @@ const NAVY = '#1c2533'
 const GOLD = '#c8a96a'
 const GREEN = '#7cb342'
 const BORDER = '1px solid #000'
-const cell: CSSProperties = { border: BORDER, padding: '4px 6px', verticalAlign: 'top' }
+// Tables use separate borders (right + bottom on every cell, left + top on the table) with whole-pixel
+// line heights: collapsed borders and fractional line heights come out doubled and misaligned when the
+// page is captured to an image for the PDF.
+const cell: CSSProperties = { borderRight: BORDER, borderBottom: BORDER, padding: '5px 6px', verticalAlign: 'top', lineHeight: '15px' }
+const table: CSSProperties = { width: '100%', borderCollapse: 'separate', borderSpacing: 0, borderLeft: BORDER, borderTop: BORDER }
 
 const money = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const lines = (s?: string) => (s ?? '').split('\n').map(x => x.trim()).filter(Boolean)
@@ -52,20 +56,15 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
   const stages = (tpl.paymentStages ?? []).filter(s => s.stage.trim() || s.percent.trim())
 
   return (
-    <div style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: 11, color: '#000', lineHeight: 1.35, background: '#fff' }}>
+    <div style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: 11, color: '#000', lineHeight: '15px', background: '#fff' }}>
       {/* ───────── Page 1 ───────── */}
       <div data-pdf-page="1" style={{ border: BORDER }}>
         <div style={{ padding: '10px 14px 4px', textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div style={{ textAlign: 'left', fontWeight: 700, fontSize: 18, lineHeight: 1.15 }}>
-              {L.companyName.map(n => <div key={n}>{n}</div>)}
-            </div>
-            <div style={{ fontStyle: 'italic', color: '#666', borderBottom: `1px solid ${GREEN}`, paddingBottom: 2, marginTop: 28, fontSize: 10 }}>{L.tagline}</div>
+            <img src={L.mark} alt="" style={{ height: 64, display: 'block' }} />
+            <div style={{ fontStyle: 'italic', color: '#666', borderBottom: `1px solid ${GREEN}`, paddingBottom: 2, marginTop: 46, fontSize: 10 }}>{L.tagline}</div>
           </div>
-          {/* The logo file is white-on-transparent, so it sits on a dark plate like the sample letterhead. */}
-          <div style={{ background: '#0b0f14', display: 'inline-block', padding: '8px 22px', margin: '6px auto' }}>
-            <img src={L.logo} alt="" style={{ height: 52, display: 'block', objectFit: 'contain' }} />
-          </div>
+          <img src={L.logo} alt="" style={{ height: 96, display: 'block', margin: '0 auto 6px' }} />
           <div style={{ fontSize: 10, borderBottom: `1px solid ${GREEN}`, paddingBottom: 3 }}>{L.address}<br />{L.phone}</div>
         </div>
 
@@ -88,7 +87,7 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
           </div>
         </div>
 
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <table style={{ ...table, tableLayout: 'fixed', borderLeft: 'none' }}>
           <colgroup>
             <col style={{ width: '6%' }} /><col style={{ width: '46%' }} /><col style={{ width: '9%' }} />
             <col style={{ width: '11%' }} /><col style={{ width: '13%' }} /><col style={{ width: '15%' }} />
@@ -188,7 +187,7 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
             <SectionTitle>3. Scope, Design &amp; Variations</SectionTitle><Bullets text={tpl.scopeVariations} />
             <SectionTitle>4. Payment Terms</SectionTitle>
             {stages.length > 0 && (
-              <table style={{ width: '100%', borderCollapse: 'collapse', margin: '2px 0' }}>
+              <table style={{ ...table, margin: '2px 0' }}>
                 <thead>
                   <tr style={{ background: NAVY, color: '#fff' }}>
                     <th style={{ ...cell, textAlign: 'left' }}>Stage</th>
