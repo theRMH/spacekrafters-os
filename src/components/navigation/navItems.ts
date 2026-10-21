@@ -1,13 +1,13 @@
 import type { ComponentType } from 'react'
 import type { LucideProps } from 'lucide-react'
 import {
-  Users, Calendar, ClipboardList, MapPin, FileText, Layers,
+  Users, Calendar, MapPin, FileText, Layers,
   FolderOpen, CheckSquare, GanttChartSquare, BookOpen, ShoppingCart,
   Truck, Wallet, Landmark, Receipt, CreditCard, BarChart2, ClipboardCheck,
   CalendarOff, UserCog, File, Settings, UploadCloud, History,
   PiggyBank, Tags, BellRing, TrendingUp, PieChart, CalendarDays, Scale, LineChart,
-  CalendarClock, LocateFixed, ListChecks, FileSearch, Hammer, FileEdit, Wrench, ShieldCheck,
-  LayoutDashboard, Package, Circle,
+  CalendarClock, LocateFixed, ListChecks, FileSearch, Hammer, FileEdit, Wrench,
+  LayoutDashboard,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -27,30 +27,11 @@ export function getMainItems(): NavItem[] {
   ]
 }
 
-// Site Visit Sort: each entry opens the Site Visits list filtered by status.
-const SITE_VISIT_SORT: [string, string][] = [['scheduled', 'Scheduled'], ['done', 'Done']]
 export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
-  {
-    label: 'CRM',
-    items: [
-      { icon: Users,         label: 'Leads',        path: '/leads',        permission: 'view_leads'        },
-      { icon: ClipboardList, label: 'Follow-ups',   path: '/follow-ups',   permission: 'view_activity'     },
-      { icon: ShieldCheck,   label: 'Approval',     path: '/approval',    permission: 'view_md_tasks'     },
-    ],
-  },
-  {
-    label: 'Site Visit Sort',
-    items: SITE_VISIT_SORT.map(([key, label]) => ({ icon: Circle, label, path: `/site-visits?status=${key}`, permission: 'view_site_visits' as Permission })),
-  },
-  {
-    label: 'Product Sales',
-    items: [
-      { icon: Package, label: 'Product Sales', path: '/product-sales', permission: 'view_product_sales' },
-    ],
-  },
   {
     label: 'Site & Design',
     items: [
+      { icon: Users,    label: 'Leads',        path: '/leads',        permission: 'view_leads'       },
       { icon: MapPin,    label: 'Site Visits',  path: '/site-visits',  permission: 'view_site_visits' },
       { icon: FileSearch, label: 'Site Visit Report', path: '/site-visit-report', permission: 'view_site_visit_reports' },
       { icon: FileText,  label: 'Quotations',   path: '/quotations',   permission: 'view_quotations'  },

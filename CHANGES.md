@@ -2,6 +2,10 @@
 
 ## 2026-10-21
 
+### Changed: menu — removed CRM, Site Visit Sort and Product Sales; Leads moved under Site & Design
+**Commit:** Uncommitted
+- **Changed:** `components/navigation/navItems.ts` — the CRM section (Leads, Follow-ups, Approval), Site Visit Sort and Product Sales sections are no longer in the sidebar/mobile menu; **Leads** is now the first item of Site & Design, above Site Visits. The Follow-ups, Approval and Product Sales pages still exist and work by URL/links, they just have no menu entry.
+
 ### Removed: Lead Sort and Project Sort from the menu
 **Commit:** Uncommitted
 - **Changed:** `components/navigation/navItems.ts` — the Lead Sort and Project Sort sections (and their now-unused lists) are gone from the sidebar and the mobile menu. Site Visit Sort stays. The Leads/Projects pages still accept `?bucket=` / `?stage=` in the URL; only the menu entries were removed.
