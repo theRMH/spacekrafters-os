@@ -2,6 +2,10 @@
 
 ## 2026-10-21
 
+### Changed: menu is one flat MAIN list + REPORTING (replaces the earlier grouped menu changes today)
+**Commit:** Uncommitted
+- **Changed:** `components/navigation/navItems.ts` — MAIN: Dashboard, Projects, Leads, Site Visits, Quotations, Approval, Task, Attendance, Leave, Files; REPORTING: Reports, Settings. Everything else (Site Visit Report, Design Center, Clients, Tasks/Gantt/Daily pages, Procurement, Finance, Personal Finance, Follow-ups, Product Sales, Audit Log…) has no menu entry any more; the pages still exist and open from links. User Management and Attendance Settings are reachable from Settings.
+
 ### Changed: menu — removed CRM, Site Visit Sort and Product Sales; Leads moved under Site & Design
 **Commit:** Uncommitted
 - **Changed:** `components/navigation/navItems.ts` — the CRM section (Leads, Follow-ups, Approval), Site Visit Sort and Product Sales sections are no longer in the sidebar/mobile menu; **Leads** is now the first item of Site & Design, above Site Visits. The Follow-ups, Approval and Product Sales pages still exist and work by URL/links, they just have no menu entry.
