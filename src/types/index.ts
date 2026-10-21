@@ -189,6 +189,8 @@ export interface Lead {
   // true, LeadStatusSheet's self-healing sync won't pull the lead forward
   // again; cleared by the next normal status change.
   mdStatusOverride?: boolean
+  // Chosen after the client approves the quotation: proceeding with an advance payment, or without one.
+  advanceStatus?: 'with_advance' | 'without_advance'
   advancePaymentAmount?: number
   advancePaymentRef?: string
   activity: LeadActivityItem[]

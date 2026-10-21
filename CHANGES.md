@@ -2,6 +2,12 @@
 
 ## 2026-10-21
 
+### Changed: after client approval — Proceed with / without Advance, then Convert to Project (asks first)
+**Commit:** Uncommitted
+- **Changed:** `QuotationStatusCard.tsx`, `QuotationsScreen.tsx` — two buttons again: **Proceed with Advance** (opens the advance amount/ref entry, then saves) and **Proceed without Advance** (recorded straight away). `quotationActions.ts` copies the choice (and any payment) onto the lead; `types/index.ts` — `Lead.advanceStatus`.
+- **Changed:** `LeadStatusSheet.tsx` — **Convert to Project** button appears once with-advance is entered or without-advance is chosen; it opens a confirmation ("Convert <lead> to a project?" with the quotation amount and advance) and only then marks the lead Project Created and opens the new-project form. Lead label shows Client Approved → Advance Received / Proceeding Without Advance.
+- **Changed:** `leadPipeline.ts` — `advanceDecided()`; My Tasks action: "Proceed With / Without Advance", then "Convert to Project".
+
 ### Changed: sending the quotation to the client is by WhatsApp or Email, and recorded
 **Commit:** Uncommitted
 - **Added:** `Quotations/sendToClient.ts` — the two channels and their labels.

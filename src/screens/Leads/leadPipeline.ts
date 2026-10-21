@@ -54,7 +54,12 @@ export function statusToSyncFromQuotation(current: LeadStatus, quotation: Quotat
 }
 
 // What the person looking after the lead has to do next, in a few words — the heading of its My Tasks card.
-export function leadNextAction(lead: { status: LeadStatus; advancePaymentAmount?: number }): string {
+// True once the advance option has been chosen (older leads that recorded a payment count as "with advance").
+export function advanceDecided(lead: { advanceStatus?: string; advancePaymentAmount?: number }): boolean {
+  return !!(lead.advanceStatus || lead.advancePaymentAmount)
+}
+
+export function leadNextAction(lead: { status: LeadStatus; advanceStatus?: string; advancePaymentAmount?: number }): string {
   switch (lead.status) {
     case 'sent_to_md': return 'Waiting for MD Approval'
     case 'md_rejected': case 'client_rejected': return 'Edit Quotation and Send Again'
@@ -67,7 +72,7 @@ export function leadNextAction(lead: { status: LeadStatus; advancePaymentAmount?
     case 'site_visit_done': return 'Add Requirements'
     case 'requirements_captured': return 'Create Quotation'
     case 'quotation_drafted': return 'Send Quotation to MD'
-    case 'client_approved': return lead.advancePaymentAmount ? 'Create Project' : 'Record Advance Payment'
+    case 'client_approved': return advanceDecided(lead) ? 'Convert to Project' : 'Proceed With / Without Advance'
     default: return 'Update Lead'
   }
 }

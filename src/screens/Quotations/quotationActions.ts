@@ -95,9 +95,12 @@ export async function recordQuotationAdvanceDecision(params: {
   }
   const result = await upsertQuotation(updated)
   if (!result.ok) return { ok: false, error: result.error }
-  // The payment is also copied onto the lead — the project created from it starts with this advance received.
+  // The choice (and any payment) is also copied onto the lead — the project created from it starts with this advance received.
   if (lead && updateLead) {
-    const payment = patch.advancePaymentReceived ? { advancePaymentAmount: patch.advancePaymentAmount, advancePaymentRef: patch.advancePaymentRef } : {}
+    const payment = {
+      ...(patch.advanceStatus ? { advanceStatus: patch.advanceStatus } : {}),
+      ...(patch.advancePaymentReceived ? { advancePaymentAmount: patch.advancePaymentAmount, advancePaymentRef: patch.advancePaymentRef } : {}),
+    }
     await updateLead(lead.id, payment, `${label} — ${note}`)
   }
   return { ok: true, updated }

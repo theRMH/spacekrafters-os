@@ -15,6 +15,7 @@ import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllRequirements } from '../../services/requirementService'
 import { QuotationStatusCard } from '../Quotations/QuotationStatusCard'
 import { sendNotification } from '../../utils/notifications'
+import { Dialog } from '../../components/feedback/Dialog'
 import { PIPELINE, coreStatus, statusToSyncFromQuotation } from './leadPipeline'
 import type { Lead, LeadStatus, ManagedUser, Quotation } from '../../types'
 
@@ -49,14 +50,17 @@ export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
   design_approved:        'Design Approved',
   sent_to_client:         'Waiting for Client Approval',
   negotiating:            'Negotiating',
-  client_approved:        'Waiting for Advance Payment',
+  client_approved:        'Client Approved',
   won:                    'Project Created',
   lost:                   'Lost',
 }
 
 // What to show for a lead: the label of its status, except at Payment where it says whether the advance has come in.
-export function leadStatusLabel(lead: Pick<Lead, 'status' | 'advancePaymentAmount'>): string {
-  if (lead.status === 'client_approved' && lead.advancePaymentAmount) return 'Advance Received'
+export function leadStatusLabel(lead: Pick<Lead, 'status' | 'advanceStatus' | 'advancePaymentAmount'>): string {
+  if (lead.status === 'client_approved') {
+    if (lead.advanceStatus === 'without_advance') return 'Proceeding Without Advance'
+    if (lead.advancePaymentAmount) return 'Advance Received'
+  }
   return LEAD_STATUS_LABEL[lead.status]
 }
 
@@ -83,6 +87,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   const [hasRequirement, setHasRequirement] = useState(false)
   const [quotation, setQuotation] = useState<Quotation | null>(null)
 
+  const [showConvert, setShowConvert] = useState(false)
   const [showLostReason, setShowLostReason] = useState(false)
   const [lostReason, setLostReason] = useState('')
   const [saving, setSaving] = useState(false)
@@ -271,16 +276,15 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
               <button onClick={() => setEmbed('quote')} className={primaryBtn} style={navy}>Create Quotation</button>
             </div>
           )
-      // Payment stage: record the client's advance payment, then convert the lead into a project.
+      // Client approved: choose to proceed with or without an advance (with = enter the advance), then Convert to Project.
       case 'client_approved':
         return quotation
           ? (
             <div className="space-y-3">
               <QuotationStatusCard quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead} onChanged={setQuotation} />
-              {quotation.advancePaymentReceived && (
-                <button disabled={saving} onClick={async () => { await save('won', 'Advance received — converting to a project'); navigate(`/projects?leadId=${lead.id}`) }}
-                  className={primaryBtn} style={navy}>
-                  Create Project
+              {(quotation.advancePaymentReceived || quotation.advanceStatus === 'without_advance') && (
+                <button disabled={saving} onClick={() => setShowConvert(true)} className={primaryBtn} style={navy}>
+                  Convert to Project
                 </button>
               )}
             </div>
@@ -415,6 +419,26 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
         <button onClick={onClose} className={secondaryBtn}>Cancel</button>
       </div>
     </BottomSheet>
+
+    <Dialog
+      isOpen={showConvert}
+      onClose={() => setShowConvert(false)}
+      title="Convert to Project"
+      message={`Convert ${lead.name} to a project?`}
+      confirmLabel="Yes, Convert"
+      onConfirm={async () => {
+        setShowConvert(false)
+        await save('won', quotation?.advancePaymentReceived ? 'Advance received — converted to a project' : 'Proceeding without advance — converted to a project')
+        navigate(`/projects?leadId=${lead.id}`)
+      }}
+    >
+      {quotation && (
+        <div className="bg-slate-50 rounded-xl p-3 text-xs space-y-1 text-left">
+          <div className="flex justify-between"><span className="text-slate-500">Quotation amount</span><span className="font-bold text-slate-800">₹{Math.round(quotation.netAmount).toLocaleString('en-IN')}</span></div>
+          <div className="flex justify-between"><span className="text-slate-500">Advance</span><span className="font-bold text-slate-800">{quotation.advancePaymentReceived ? `₹${Math.round(quotation.advancePaymentAmount ?? 0).toLocaleString('en-IN')} received` : 'Without advance'}</span></div>
+        </div>
+      )}
+    </Dialog>
     </>
   )
 }

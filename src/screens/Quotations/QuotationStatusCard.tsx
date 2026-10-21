@@ -67,9 +67,13 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
         advanceStatus: 'with_advance', advancePaymentReceived: true,
         advancePaymentAmount: amount, advancePaymentRef: advanceRef.trim() || undefined, advancePaymentAt: new Date().toISOString(),
       },
-      'Advance payment received',
-      detail,
+      'Proceeding with advance payment',
+      `Advance received (${detail})`,
     )
+  }
+
+  function handleProceedWithoutAdvance() {
+    recordAdvance({ advanceStatus: 'without_advance' }, 'Proceeding without advance payment', 'Advance status: Without Advance')
   }
 
   const canPc = can('approve_quotation_pc')
@@ -205,14 +209,26 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
         <p className="text-xs text-slate-500">The client rejected this quotation. Edit it, then send it to the MD for approval again.</p>
       )}
 
-      {/* Payment stage: the PC records the client's advance payment, then the lead can be converted to a project. */}
-      {quotation.status === 'client_approved' && !quotation.advancePaymentReceived && (canSendClient || canMd) && !showAdvanceForm && (
+      {/* Client approved: proceed with an advance (enter it) or without one — then the lead can be converted to a project. */}
+      {quotation.status === 'client_approved' && !quotation.advanceStatus && !quotation.advancePaymentReceived && (canSendClient || canMd) && !showAdvanceForm && (
         <div className="space-y-2">
-          <p className="text-xs text-slate-500">Client approved. Record the advance payment to create the project.</p>
-          <button disabled={saving} onClick={() => setShowAdvanceForm(true)}
-            className="w-full py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
-            Record Advance Payment
-          </button>
+          <p className="text-xs text-slate-500">Client approved. How is the project proceeding?</p>
+          <div className="flex gap-2">
+            <button disabled={saving} onClick={() => setShowAdvanceForm(true)}
+              className="flex-1 py-3 rounded-xl text-sm font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 active:bg-emerald-100 disabled:opacity-50">
+              Proceed with Advance
+            </button>
+            <button disabled={saving} onClick={handleProceedWithoutAdvance}
+              className="flex-1 py-3 rounded-xl text-sm font-bold border border-amber-200 bg-amber-50 text-amber-700 active:bg-amber-100 disabled:opacity-50">
+              Proceed without Advance
+            </button>
+          </div>
+        </div>
+      )}
+      {quotation.status === 'client_approved' && quotation.advanceStatus === 'without_advance' && !quotation.advancePaymentReceived && (
+        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3.5">
+          <p className="text-xs font-bold text-amber-700">Proceeding without advance</p>
+          <p className="text-[12px] text-amber-600 mt-1">Ready to convert to a project.</p>
         </div>
       )}
       {quotation.status === 'client_approved' && quotation.advancePaymentReceived && (

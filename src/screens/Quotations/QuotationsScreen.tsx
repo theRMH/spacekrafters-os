@@ -80,8 +80,8 @@ export function quotationWorkflowInfo(q: Pick<Quotation, 'status' | 'advanceStat
     case 'sent_to_client':      return { responsible: 'PC',      next: 'Update the client\'s decision: Approved or Rejected' }
     case 'revision_requested':  return { responsible: 'PC',      next: 'Edit the quotation and send it to the MD again' }
     case 'client_approved':
-      if (q.advancePaymentReceived) return { responsible: '—', next: 'Payment received — create the project' }
-      return { responsible: 'PC', next: 'Record the advance payment' }
+      if (q.advancePaymentReceived || q.advanceStatus) return { responsible: 'PC', next: 'Convert to project' }
+      return { responsible: 'PC', next: 'Choose: proceed with or without advance' }
     case 'rejected':            return { responsible: 'QS',      next: 'Revise and resubmit' }
   }
 }
@@ -581,7 +581,17 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
     return true
   }
 
-  // Records the advance payment received (amount required, reference optional).
+  // "Proceed without Advance": recorded, and the lead can be converted to a project.
+  async function handleProceedWithoutAdvance() {
+    await saveAdvanceDecision(
+      { advanceStatus: 'without_advance' },
+      'Proceeding without advance payment',
+      'Advance status: Without Advance',
+      'Proceeding without advance — recorded.',
+    )
+  }
+
+  // "Proceed with Advance": records the advance payment received (amount required, reference optional).
   async function handleRecordAdvancePayment() {
     if (!selected) return
     const amount = Number(advanceAmount)
@@ -595,9 +605,9 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
         advancePaymentRef: advanceRef.trim() || undefined,
         advancePaymentAt: new Date().toISOString(),
       },
-      'Advance payment received',
-      detail,
-      'Advance payment recorded.',
+      'Proceeding with advance payment',
+      `Advance received (${detail})`,
+      'Proceeding with advance — recorded.',
     )
     if (!ok) return
     setShowAdvancePayment(false)
@@ -890,12 +900,16 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
                     <p className="text-xs text-slate-500">Edit the quotation, then send it to the MD for approval again.</p>
                   </div>
                 )}
-                {selected.status === 'client_approved' && !selected.advancePaymentReceived && can('send_quotation_client') && (
+                {selected.status === 'client_approved' && !selected.advanceStatus && !selected.advancePaymentReceived && can('send_quotation_client') && (
                   <>
-                    <p className="w-full text-xs text-slate-500">Client approved. Record the advance payment to create the project.</p>
+                    <p className="w-full text-xs text-slate-500">Client approved. How is the project proceeding?</p>
                     <button onClick={() => setShowAdvancePayment(true)}
                       className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
-                      Record Advance Payment
+                      Proceed with Advance
+                    </button>
+                    <button onClick={handleProceedWithoutAdvance}
+                      className="px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-700 active:bg-amber-100">
+                      Proceed without Advance
                     </button>
                   </>
                 )}
@@ -1178,7 +1192,7 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
       />
 
       {/* Record Advance Payment */}
-      <BottomSheet isOpen={showAdvancePayment} onClose={() => setShowAdvancePayment(false)} title="Record Advance Payment">
+      <BottomSheet isOpen={showAdvancePayment} onClose={() => setShowAdvancePayment(false)} title="Proceed with Advance">
         <div className="space-y-3 pb-4">
           <p className="text-xs text-slate-500">Records the advance received and that the project is proceeding With Advance. Design can then be started for this lead.</p>
           <div>
