@@ -60,20 +60,15 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
   function handleRecordAdvancePayment() {
     const amount = Number(advanceAmount)
     if (!amount || amount <= 0) { setError('Enter a valid advance payment amount.'); return }
-    const laterPayment = quotation.advanceStatus === 'without_advance'
     const detail = `${fmtCurrency(amount)}${advanceRef.trim() ? ` · Ref: ${advanceRef.trim()}` : ''}`
     recordAdvance(
       {
         advanceStatus: 'with_advance', advancePaymentReceived: true,
         advancePaymentAmount: amount, advancePaymentRef: advanceRef.trim() || undefined, advancePaymentAt: new Date().toISOString(),
       },
-      laterPayment ? 'Advance payment received (was proceeding without advance)' : 'Proceeding with advance payment',
-      `Advance status: With Advance (${detail})`,
+      'Advance payment received',
+      detail,
     )
-  }
-
-  function handleProceedWithoutAdvance() {
-    recordAdvance({ advanceStatus: 'without_advance' }, 'Proceeding without advance payment', 'Advance status: Without Advance')
   }
 
   const canPc = can('approve_quotation_pc')
@@ -176,21 +171,12 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
         </button>
       )}
 
-      {/* Records which channel the quotation went out on (activity log only —
-          no WhatsApp/email is actually sent, same as QuotationsScreen.tsx's
-          own "Send to Client" sheet) and moves the quotation to Sent to
-          Client, same underlying transition (changeQuotationStatus). */}
+      {/* PC sends the approved quotation to the client (nothing is actually emailed/WhatsApped — it records the send). */}
       {quotation.status === 'internally_approved' && canSendClient && (
-        <div className="grid grid-cols-2 gap-2">
-          <button disabled={saving} onClick={() => act('sent_to_client', undefined, 'Quotation sent via WhatsApp')}
-            className="py-3 rounded-xl text-sm font-bold border border-blue-200 bg-blue-50 text-blue-700 active:bg-blue-100 disabled:opacity-50">
-            Send via WhatsApp
-          </button>
-          <button disabled={saving} onClick={() => act('sent_to_client', undefined, 'Quotation sent via Email')}
-            className="py-3 rounded-xl text-sm font-bold border border-blue-200 bg-blue-50 text-blue-700 active:bg-blue-100 disabled:opacity-50">
-            Send via Email
-          </button>
-        </div>
+        <button disabled={saving} onClick={() => act('sent_to_client', undefined, 'Quotation sent to client')}
+          className="w-full py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
+          Send to Client
+        </button>
       )}
 
       {/* Sent to the client: record their decision. Rejected needs a reason (below). */}
@@ -207,54 +193,28 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
         </div>
       )}
 
-      {/* Client rejected: the MD chooses — redo it through PC again, or drop the lead. */}
-      {quotation.status === 'revision_requested' && (canMd ? (
-        <div className="flex gap-2">
-          <button disabled={saving} onClick={() => act('md_rejected', undefined, 'MD sent back to PC to redo — client rejected')}
-            className="flex-1 py-3 rounded-xl text-sm font-bold text-white bg-blue-600 active:bg-blue-700 disabled:opacity-50">
-            Resend Quotation
-          </button>
-          <button disabled={saving} onClick={() => act('rejected', undefined, 'MD dropped the lead')}
-            className="flex-1 py-3 rounded-xl text-sm font-bold border border-red-300 bg-white text-red-600 active:bg-red-50 disabled:opacity-50">
-            Drop Lead
-          </button>
-        </div>
-      ) : (
-        <p className="text-xs text-slate-500">Waiting for the MD to resend or drop.</p>
-      ))}
-
-      {/* Advance decision — a field patch (recordQuotationAdvanceDecision),
-          not a status transition; quotation.status stays 'client_approved'
-          throughout. Same three states QuotationsScreen.tsx's own Status
-          Actions block shows. */}
-      {quotation.status === 'client_approved' && !quotation.advanceStatus && !quotation.advancePaymentReceived && canSendClient && !showAdvanceForm && (
-        <div className="space-y-2">
-          <p className="text-xs text-slate-500">Client approved. How is the project proceeding to Design?</p>
-          <div className="flex gap-2">
-            <button disabled={saving} onClick={() => setShowAdvanceForm(true)}
-              className="flex-1 py-3 rounded-xl text-sm font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 active:bg-emerald-100 disabled:opacity-50">
-              Proceed with Advance
-            </button>
-            <button disabled={saving} onClick={handleProceedWithoutAdvance}
-              className="flex-1 py-3 rounded-xl text-sm font-bold border border-amber-200 bg-amber-50 text-amber-700 active:bg-amber-100 disabled:opacity-50">
-              Proceed without Advance
-            </button>
-          </div>
-        </div>
+      {/* Client rejected: the PC edits the quotation and sends it to the MD again (Edit Quotation is on the sheet). */}
+      {quotation.status === 'revision_requested' && (
+        <p className="text-xs text-slate-500">The client rejected this quotation. Edit it, then send it to the MD for approval again.</p>
       )}
-      {quotation.status === 'client_approved' && quotation.advanceStatus === 'without_advance' && !quotation.advancePaymentReceived && canSendClient && !showAdvanceForm && (
-        <button disabled={saving} onClick={() => setShowAdvanceForm(true)}
-          className="w-full py-3 rounded-xl text-sm font-bold border border-blue-200 bg-blue-50 text-blue-700 active:bg-blue-100 disabled:opacity-50">
-          Record Advance Payment (when received)
-        </button>
+
+      {/* Payment stage: the PC records the client's advance payment, then the lead can be converted to a project. */}
+      {quotation.status === 'client_approved' && !quotation.advancePaymentReceived && (canSendClient || canMd) && !showAdvanceForm && (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500">Client approved. Record the advance payment to create the project.</p>
+          <button disabled={saving} onClick={() => setShowAdvanceForm(true)}
+            className="w-full py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
+            Record Advance Payment
+          </button>
+        </div>
       )}
       {quotation.status === 'client_approved' && quotation.advancePaymentReceived && (
         <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3.5">
-          <p className="text-xs font-bold text-emerald-700">Advance status: With Advance — Payment Received</p>
+          <p className="text-xs font-bold text-emerald-700">Advance payment received</p>
           <p className="text-xs text-emerald-600 mt-0.5">
             {fmtCurrency(quotation.advancePaymentAmount ?? 0)}{quotation.advancePaymentRef ? ` · Ref: ${quotation.advancePaymentRef}` : ''}
           </p>
-          <p className="text-[12px] text-emerald-600 mt-1">Design can now be started for this lead in Design Center.</p>
+          <p className="text-[12px] text-emerald-600 mt-1">Ready to create the project.</p>
         </div>
       )}
       {showAdvanceForm && (
@@ -271,7 +231,7 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
           </div>
           <button disabled={saving} onClick={handleRecordAdvancePayment}
             className="w-full py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
-            Confirm & Proceed with Advance
+            Save Advance Payment
           </button>
           <button onClick={() => { setShowAdvanceForm(false); setAdvanceAmount(''); setAdvanceRef(''); setError('') }}
             className="w-full py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600">

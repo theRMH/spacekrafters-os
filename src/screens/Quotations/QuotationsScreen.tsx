@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Trash2, Download, Printer, MessageCircle, Mail } from 'lucide-react'
+import { Plus, Trash2, Download, Printer } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -76,10 +76,10 @@ export function quotationWorkflowInfo(q: Pick<Quotation, 'status' | 'advanceStat
     case 'md_rejected':         return { responsible: 'PC',      next: 'Resubmit to MD, or revise first' }
     case 'internally_approved': return { responsible: 'PC',      next: 'Send to client' }
     case 'sent_to_client':      return { responsible: 'PC',      next: 'Update the client\'s decision: Approved or Rejected' }
-    case 'revision_requested':  return { responsible: 'MD',      next: 'MD decides: resend to PC to redo it, or drop the lead' }
+    case 'revision_requested':  return { responsible: 'PC',      next: 'Edit the quotation and send it to the MD again' }
     case 'client_approved':
-      if (q.advanceStatus || q.advancePaymentReceived) return { responsible: '—', next: 'Quotation complete — proceed in Design Center' }
-      return { responsible: 'PC / MD', next: 'Choose an advance payment option' }
+      if (q.advancePaymentReceived) return { responsible: '—', next: 'Payment received — create the project' }
+      return { responsible: 'PC', next: 'Record the advance payment' }
     case 'rejected':            return { responsible: 'QS',      next: 'Revise and resubmit' }
   }
 }
@@ -185,8 +185,6 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
   const [showEdit, setShowEdit] = useState(false)
   const [showPrint, setShowPrint] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [showSendChoice, setShowSendChoice] = useState(false)
-  const [sendChannel, setSendChannel] = useState<'whatsapp' | 'email' | null>(null)
   const [showAdvancePayment, setShowAdvancePayment] = useState(false)
   const [advanceAmount, setAdvanceAmount] = useState('')
   const [advanceRef, setAdvanceRef] = useState('')
@@ -556,21 +554,6 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
     return true
   }
 
-  // "Send to Client" only RECORDS the send — it does not open WhatsApp or an
-  // email, and nothing is sent anywhere (no provider is integrated yet). The
-  // chosen method is stored in the quotation's approval history and in the
-  // lead's activity log (who + when), and the quotation moves to Sent to Client
-  // / Awaiting Client Approval.
-  async function handleSendToClient() {
-    if (!selected || !sendChannel) return
-    const channelLabel = sendChannel === 'whatsapp' ? 'WhatsApp' : 'Email'
-    const activity = `Quotation sent via ${channelLabel}`
-    setShowSendChoice(false)
-    const ok = await handleStatusChange(selected, 'sent_to_client', undefined, activity)
-    if (!ok) return
-    setSnack({ open: true, msg: `${activity} — recorded in the activity log (nothing was actually sent).`, type: 'success' })
-  }
-
   // Saves an advance decision on a client-approved quotation, adds it to the
   // quotation's approval history AND the lead's Activity Log (action, date/time
   // and user are stamped on both), and unlocks Design Center for the lead.
@@ -590,14 +573,11 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
     return true
   }
 
-  // "Proceed with Advance": records the advance received (amount required,
-  // reference optional) and Advance status: With Advance. Also used later to
-  // record an advance that arrives after "Proceed without Advance".
+  // Records the advance payment received (amount required, reference optional).
   async function handleRecordAdvancePayment() {
     if (!selected) return
     const amount = Number(advanceAmount)
     if (!amount || amount <= 0) { setSnack({ open: true, msg: 'Enter a valid advance payment amount.', type: 'error' }); return }
-    const laterPayment = selected.advanceStatus === 'without_advance'
     const detail = `${fmtCurrency(amount)}${advanceRef.trim() ? ` · Ref: ${advanceRef.trim()}` : ''}`
     const ok = await saveAdvanceDecision(
       {
@@ -607,24 +587,13 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
         advancePaymentRef: advanceRef.trim() || undefined,
         advancePaymentAt: new Date().toISOString(),
       },
-      laterPayment ? 'Advance payment received (was proceeding without advance)' : 'Proceeding with advance payment',
-      `Advance status: With Advance (${detail})`,
-      'Proceeding with advance — recorded in the activity log.',
+      'Advance payment received',
+      detail,
+      'Advance payment recorded.',
     )
     if (!ok) return
     setShowAdvancePayment(false)
     setAdvanceAmount(''); setAdvanceRef('')
-  }
-
-  // "Proceed without Advance": the client hasn't paid yet. Recorded, and Design
-  // is NOT blocked.
-  async function handleProceedWithoutAdvance() {
-    await saveAdvanceDecision(
-      { advanceStatus: 'without_advance' },
-      'Proceeding without advance payment',
-      'Advance status: Without Advance',
-      'Proceeding without advance — recorded in the activity log. Design can start.',
-    )
   }
 
   async function confirmDelete() {
@@ -885,7 +854,7 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
                   </button>
                 )}
                 {selected.status === 'internally_approved' && can('send_quotation_client') && (
-                  <button onClick={() => { setSendChannel(null); setShowSendChoice(true) }}
+                  <button onClick={() => handleStatusChange(selected, 'sent_to_client', undefined, 'Quotation sent to client')}
                     className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
                     Send to Client
                   </button>
@@ -903,42 +872,19 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
                   </div>
                 )}
                 {selected.status === 'revision_requested' && (
-                  <div className="w-full space-y-2">
+                  <div className="w-full space-y-1">
                     {selected.rejectionReason && <p className="text-xs text-red-600">Client's reason: {selected.rejectionReason}</p>}
-                    {can('approve_quotation_internal') ? (
-                      <div className="flex justify-center gap-3">
-                        <button onClick={() => handleStatusChange(selected, 'md_rejected', undefined, 'MD sent back to PC to redo — client rejected')}
-                          className="px-8 py-3.5 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700">
-                          Resend Quotation
-                        </button>
-                        <button onClick={() => handleStatusChange(selected, 'rejected', undefined, 'MD dropped the lead')}
-                          className="px-8 py-3.5 rounded-xl border border-red-300 bg-white text-sm font-bold text-red-600 active:bg-red-50">
-                          Drop Lead
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-500">Waiting for the MD to resend or drop.</p>
-                    )}
+                    <p className="text-xs text-slate-500">Edit the quotation, then send it to the MD for approval again.</p>
                   </div>
                 )}
-                {selected.status === 'client_approved' && !selected.advanceStatus && !selected.advancePaymentReceived && can('send_quotation_client') && (
+                {selected.status === 'client_approved' && !selected.advancePaymentReceived && can('send_quotation_client') && (
                   <>
-                    <p className="w-full text-xs text-slate-500">Client approved. How is the project proceeding to Design?</p>
+                    <p className="w-full text-xs text-slate-500">Client approved. Record the advance payment to create the project.</p>
                     <button onClick={() => setShowAdvancePayment(true)}
                       className="px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700 active:bg-emerald-100">
-                      Proceed with Advance
-                    </button>
-                    <button onClick={handleProceedWithoutAdvance}
-                      className="px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-700 active:bg-amber-100">
-                      Proceed without Advance
+                      Record Advance Payment
                     </button>
                   </>
-                )}
-                {selected.status === 'client_approved' && selected.advanceStatus === 'without_advance' && !selected.advancePaymentReceived && can('send_quotation_client') && (
-                  <button onClick={() => setShowAdvancePayment(true)}
-                    className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
-                    Record Advance Payment (when received)
-                  </button>
                 )}
               </div>
             </div>
@@ -977,21 +923,14 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
               </div>
             )}
 
-            {selected.status === 'client_approved' && selected.advanceStatus === 'without_advance' && !selected.advancePaymentReceived && (
-              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3.5">
-                <p className="text-xs font-bold text-amber-700">Advance status: Without Advance</p>
-                <p className="text-[12px] text-amber-600 mt-1">Design can be started for this lead in Design Center. Record the advance when the client pays it.</p>
-              </div>
-            )}
-
             {selected.status === 'client_approved' && selected.advancePaymentReceived && (
               <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3.5">
-                <p className="text-xs font-bold text-emerald-700">Advance status: With Advance — Payment Received</p>
+                <p className="text-xs font-bold text-emerald-700">Advance payment received</p>
                 <p className="text-xs text-emerald-600 mt-0.5">
                   {fmtCurrency(selected.advancePaymentAmount ?? 0)}{selected.advancePaymentRef ? ` · Ref: ${selected.advancePaymentRef}` : ''}
                   {selected.advancePaymentAt ? ` · ${fmtDate(selected.advancePaymentAt)}` : ''}
                 </p>
-                <p className="text-[12px] text-emerald-600 mt-1">Design can now be started for this lead in Design Center.</p>
+                <p className="text-[12px] text-emerald-600 mt-1">Ready to create the project.</p>
               </div>
             )}
 
@@ -1225,33 +1164,8 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
         variant="danger"
       />
 
-      {/* Send to Client — choose channel */}
-      <BottomSheet isOpen={showSendChoice} onClose={() => setShowSendChoice(false)} title="Send to Client">
-        <div className="space-y-3 pb-4">
-          <p className="text-xs text-slate-500">
-            Choose how the quotation goes to {leadName(selected?.leadId ?? '')}. For now this only records the action in the
-            activity log — no WhatsApp message or email is actually sent.
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {([['whatsapp', 'WhatsApp', MessageCircle], ['email', 'Email', Mail]] as const).map(([value, label, Icon]) => (
-              <button key={value} type="button" onClick={() => setSendChannel(value)} aria-pressed={sendChannel === value}
-                className={`flex items-center justify-center gap-2 py-3.5 rounded-xl border-2 text-sm font-bold active:opacity-90 ${
-                  sendChannel === value ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600'
-                }`}>
-                <Icon size={16} /> {label}
-              </button>
-            ))}
-          </div>
-          <button disabled={!sendChannel} onClick={handleSendToClient}
-            className="w-full py-3.5 rounded-xl text-white text-sm font-bold active:opacity-90 disabled:opacity-40"
-            style={{ background: '#0F2A4A' }}>
-            Send to Client
-          </button>
-        </div>
-      </BottomSheet>
-
       {/* Record Advance Payment */}
-      <BottomSheet isOpen={showAdvancePayment} onClose={() => setShowAdvancePayment(false)} title="Proceed with Advance">
+      <BottomSheet isOpen={showAdvancePayment} onClose={() => setShowAdvancePayment(false)} title="Record Advance Payment">
         <div className="space-y-3 pb-4">
           <p className="text-xs text-slate-500">Records the advance received and that the project is proceeding With Advance. Design can then be started for this lead.</p>
           <div>
@@ -1267,7 +1181,7 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
           <button onClick={handleRecordAdvancePayment}
             className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
             style={{ background: '#0F2A4A' }}>
-            Confirm & Proceed with Advance
+            Save Advance Payment
           </button>
         </div>
       </BottomSheet>

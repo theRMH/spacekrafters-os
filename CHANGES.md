@@ -2,6 +2,15 @@
 
 ## 2026-10-21
 
+### Changed: lead flow simplified to 7 stages (New → Contacted → Site Visit → Requirements → Quotation → Payment → Project)
+**Commit:** Uncommitted  ·  no DB changes (statuses are plain text; older leads keep working)
+- **Added:** `screens/Leads/leadPipeline.ts` (+ `leadPipeline.test.ts`, replaces `LeadStatusSheet.test.ts`) — `PIPELINE`, `coreStatus()` (maps retired statuses qualified / site_visit_scheduled / internally_approved / design_* / sent_to_client / negotiating onto their stage) and `impliedMinLeadStatus(quotation)`.
+- **Changed:** `LeadStatusSheet.tsx` — rewritten around the 7 stages: Mark Contacted → Add Site Visit → Add Requirements → Create Quotation (each form opens in place and submitting it moves the lead on) → quotation card (PC sends to MD, MD approves, PC sends to client, client decision) → client approved = Payment: record the advance, then **Create Project**. Stage tracker on the sheet, **Mark as Lost** link, MD override limited to the 7 stages + Lost. Design stages, Qualified, Negotiating and the design cards are gone from the lead flow (Design Center itself still exists, used after the project is created).
+- **Changed:** `quotationActions.ts` — the lead only changes when the client approves (→ Payment); MD approve / send to client / client reject just log on the lead. Client rejection now goes to the PC (edit → send to MD again); the MD resend/drop step is removed. Recording the advance also copies amount/ref onto the lead so the project starts with it.
+- **Changed:** `QuotationStatusCard.tsx`, `QuotationsScreen.tsx` — one **Send to Client** button (no WhatsApp/Email choice), single **Record Advance Payment** (no "without advance"), client-rejected message for the PC. `ApprovalReviewSheets.tsx` — no lead status changes on MD quotation/design approval or client rejection. `SiteVisitsScreen.tsx` — a site visit now advances the lead from New/Contacted/Qualified/Scheduled.
+- **Changed:** `LeadsScreen.tsx` — filter chips are Contacted / Site Visit / Requirements / Quotation / Payment / Won / Lost (Qualified and Negotiation removed); status dropdown in Edit Lead limited to the 7 stages + Lost.
+- **Not changed:** the Create Lead form (SK/FGD type, business division/brand, interest, etc.).
+
 ### Added: delete button on every client card
 **Commit:** Uncommitted
 - **Changed:** `ClientMasterScreen.tsx` — owner (MD) sees a red trash button on each client in the list, with a confirmation naming the client. A client that still has projects can't be deleted (projects reference their client in the database) — it shows "still has N projects — remove or reassign them first" instead. The existing Delete link inside the client's Profile tab uses the same check. No DB change (the owner-only delete policy already exists).

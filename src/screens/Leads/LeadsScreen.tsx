@@ -24,6 +24,7 @@ import { getManagedUsersDirectory } from '../../services/userService'
 import { getNextLeadNumber } from '../../services/leadService'
 import { hasRole } from '../../utils/permissions'
 import { LeadStatusSheet, LEAD_STATUS_LABEL } from './LeadStatusSheet'
+import { coreStatus } from './leadPipeline'
 import { ImportLeadsSheet } from './ImportLeadsSheet'
 import { FILTERS, type FilterKey, resolveRange, inRange as inRangeOf } from '../Dashboard/dashboardDateUtils'
 import { leadsToCsvText, downloadCsv } from '../../utils/leadCsv'
@@ -31,23 +32,19 @@ import type { Lead, LeadSource, LeadInterest, LeadStatus, ManagedUser, BusinessD
 
 type Filter = 'all' | LeadStatus
 
-// Consolidated top-level stages the Leads list filters by — a display/filter
-// grouping only, never written anywhere. Lead.status itself still holds the
-// full, real status (see LeadStatus/CHIPS below, still used by the Edit Lead
-// form's Status field). 'qualified' splits into Qualified/Appointment based
-// on whether the lead actually has a non-cancelled appointment yet, mirroring
-// the same split Tasks' pipeline view already uses for the same reason.
-type LeadBucket = 'contacted' | 'qualified' | 'site_visit' | 'requirements' | 'quotation' | 'negotiation' | 'won' | 'lost'
+// The Leads list filters by the stages of the lead flow — a display/filter grouping only, never written
+// anywhere. Lead.status holds the real status; leadBucket() also places leads that still hold a retired
+// status (qualified, site_visit_scheduled, internally_approved, design_*, sent_to_client, negotiating).
+type LeadBucket = 'contacted' | 'site_visit' | 'requirements' | 'quotation' | 'payment' | 'won' | 'lost'
 type BucketFilter = 'active' | LeadBucket
 
-const BUCKET_ORDER: LeadBucket[] = ['contacted', 'qualified', 'site_visit', 'requirements', 'quotation', 'negotiation', 'won', 'lost']
+const BUCKET_ORDER: LeadBucket[] = ['contacted', 'site_visit', 'requirements', 'quotation', 'payment', 'won', 'lost']
 const BUCKET_LABEL: Record<LeadBucket, string> = {
   contacted:    'Contacted',
-  qualified:    'Qualified',
   site_visit:   'Site Visit',
   requirements: 'Requirements',
   quotation:    'Quotation',
-  negotiation:  'Negotiation',
+  payment:      'Payment',
   won:          'Won',
   lost:         'Lost',
 }
@@ -55,16 +52,15 @@ const BUCKET_LABEL: Record<LeadBucket, string> = {
 // A brand-new lead has not been contacted yet, so it has no bucket of its own —
 // it only shows under Active until "Mark Contacted" moves it to Contacted.
 function leadBucket(lead: Lead): LeadBucket | 'new' {
-  switch (lead.status) {
+  switch (coreStatus(lead.status)) {
     case 'new': return 'new'
-    case 'contacted': return 'contacted'
-    case 'qualified': return 'qualified'
-    case 'site_visit_scheduled': case 'site_visit_done': return 'site_visit'
+    case 'site_visit_done': return 'site_visit'
     case 'requirements_captured': return 'requirements'
-    case 'quotation_drafted': case 'internally_approved': case 'design_in_progress': case 'design_approved': case 'sent_to_client': return 'quotation'
-    case 'negotiating': case 'client_approved': return 'negotiation'
+    case 'quotation_drafted': return 'quotation'
+    case 'client_approved': return 'payment'
     case 'won': return 'won'
     case 'lost': return 'lost'
+    default: return 'contacted'
   }
 }
 
@@ -109,22 +105,15 @@ const EXTRA_ASSIGNEE_CUSTOM_NAMES: Record<LeadCodePrefix, string[]> = {
 const CUSTOM_NAME_PREFIX = 'name:'
 
 const CHIPS: { value: Filter; label: string }[] = [
-  { value: 'all',                    label: 'All'          },
-  { value: 'new',                    label: 'New'          },
-  { value: 'contacted',              label: 'Contacted'    },
-  { value: 'qualified',              label: 'Qualified'    },
-  { value: 'site_visit_scheduled',   label: 'Site Visit'   },
-  { value: 'site_visit_done',        label: LEAD_STATUS_LABEL.site_visit_done       },
-  { value: 'requirements_captured',  label: 'Requirements' },
-  { value: 'quotation_drafted',      label: LEAD_STATUS_LABEL.quotation_drafted     },
-  { value: 'internally_approved',    label: LEAD_STATUS_LABEL.internally_approved   },
-  { value: 'design_in_progress',     label: LEAD_STATUS_LABEL.design_in_progress    },
-  { value: 'design_approved',        label: LEAD_STATUS_LABEL.design_approved       },
-  { value: 'sent_to_client',         label: LEAD_STATUS_LABEL.sent_to_client        },
-  { value: 'negotiating',            label: LEAD_STATUS_LABEL.negotiating           },
-  { value: 'client_approved',        label: LEAD_STATUS_LABEL.client_approved       },
-  { value: 'won',                    label: 'Won'          },
-  { value: 'lost',                   label: 'Lost'         },
+  { value: 'all',                    label: 'All'                                    },
+  { value: 'new',                    label: 'New'                                    },
+  { value: 'contacted',              label: 'Contacted'                              },
+  { value: 'site_visit_done',        label: LEAD_STATUS_LABEL.site_visit_done        },
+  { value: 'requirements_captured',  label: LEAD_STATUS_LABEL.requirements_captured  },
+  { value: 'quotation_drafted',      label: LEAD_STATUS_LABEL.quotation_drafted      },
+  { value: 'client_approved',        label: LEAD_STATUS_LABEL.client_approved        },
+  { value: 'won',                    label: 'Won'                                    },
+  { value: 'lost',                   label: 'Lost'                                   },
 ]
 
 const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
@@ -189,7 +178,10 @@ function loadPersistedFilters(): PersistedLeadsFilters {
   const fallback: PersistedLeadsFilters = { bucketFilter: 'active', dateFilter: 'all', customFrom: '', customTo: '', search: '', scrollY: 0 }
   try {
     const raw = sessionStorage.getItem(LEADS_FILTERS_KEY)
-    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback
+    const saved = raw ? { ...fallback, ...JSON.parse(raw) } : fallback
+    // A filter saved before the stages were simplified (e.g. "qualified") no longer exists.
+    if (saved.bucketFilter !== 'active' && !BUCKET_ORDER.includes(saved.bucketFilter as LeadBucket)) saved.bucketFilter = 'active'
+    return saved
   } catch {
     return fallback
   }

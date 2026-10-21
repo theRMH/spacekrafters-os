@@ -274,7 +274,7 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
     setVisits(prev => [visit, ...prev])
     // Submitting the visit is the confirmation — move the lead on to Site Visit Done by itself.
     const lead = leads.find(l => l.id === leadId)
-    if (lead && (lead.status === 'qualified' || lead.status === 'site_visit_scheduled')) {
+    if (lead && ['new', 'contacted', 'qualified', 'site_visit_scheduled'].includes(lead.status)) {
       await updateLead(lead.id, { status: 'site_visit_done' }, 'Site visit recorded')
     }
     dismiss(() => setShowNew(false), 'Site visit recorded — lead moved to Site Visit Done.')

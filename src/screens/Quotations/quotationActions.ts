@@ -57,25 +57,15 @@ export async function changeQuotationStatus(params: {
 
   if (status === 'pending_pc_review') await notifyPcPending(updated, leadLabel)
   if (status === 'internal_review') await notifyMdPending(updated, leadLabel)
-  if (status === 'revision_requested') await notifyMdClientRejected(updated, leadLabel)
-  if (status === 'md_rejected' && wasClientRejected) await notifyPcResend(updated, leadLabel)
+  if (status === 'revision_requested') await notifyPcClientRejected(updated, leadLabel)
 
   if (lead && updateLead) {
-    if (status === 'internally_approved' && lead.status === 'quotation_drafted') {
-      await updateLead(lead.id, { status: 'internally_approved' }, 'MD approved the quotation')
-    } else if (status === 'sent_to_client') {
-      await updateLead(lead.id, {}, label)
-    } else if (status === 'client_approved' && ['internally_approved', 'sent_to_client', 'negotiating'].includes(lead.status)) {
-      await updateLead(lead.id, { status: 'client_approved' }, 'Client approved the quotation')
-    } else if (status === 'revision_requested') {
-      await updateLead(lead.id, {}, `Client rejected the quotation${note ? `: ${note}` : ''}`)
-    } else if (status === 'md_rejected' && wasClientRejected) {
-      // MD chose "Resend to PC": the lead goes back to the quotation stage so the
-      // PC -> MD approval chain runs again before it is re-sent to the client.
-      await updateLead(lead.id, { status: 'quotation_drafted' }, 'MD sent the quotation back to PC to be redone')
-    } else if (status === 'rejected' && wasClientRejected) {
-      const reason = (q.rejectionReason ?? note ?? '').trim() || 'Dropped after the client rejected the quotation'
-      await updateLead(lead.id, { status: 'lost', lostReason: reason, lostFromStatus: lead.status === 'lost' ? undefined : lead.status }, `MD dropped the lead — ${reason}`)
+    if (status === 'client_approved') {
+      // The only quotation step that moves the lead: client approved → Payment stage.
+      if (!['client_approved', 'won', 'lost'].includes(lead.status)) await updateLead(lead.id, { status: 'client_approved' }, 'Client approved the quotation')
+    } else if (status === 'internally_approved' || status === 'sent_to_client' || status === 'revision_requested') {
+      // The lead stays at Quotation — just leave a line in its activity log.
+      await updateLead(lead.id, {}, status === 'revision_requested' ? `Client rejected the quotation${note ? `: ${note}` : ''}` : label)
     }
   }
 
@@ -107,7 +97,11 @@ export async function recordQuotationAdvanceDecision(params: {
   }
   const result = await upsertQuotation(updated)
   if (!result.ok) return { ok: false, error: result.error }
-  if (lead && updateLead) await updateLead(lead.id, {}, `${label} — ${note}`)
+  // The payment is also copied onto the lead — the project created from it starts with this advance received.
+  if (lead && updateLead) {
+    const payment = patch.advancePaymentReceived ? { advancePaymentAmount: patch.advancePaymentAmount, advancePaymentRef: patch.advancePaymentRef } : {}
+    await updateLead(lead.id, payment, `${label} — ${note}`)
+  }
   return { ok: true, updated }
 }
 
@@ -115,13 +109,9 @@ async function notifyMdPending(q: Quotation, leadLabel?: string) {
   const mdIds = (await getManagedUsersDirectory()).filter(u => u.role === 'owner').map(u => u.id)
   await sendNotification(mdIds, 'Quotation Pending MD Approval', `${leadLabel ?? q.leadId} — sent to MD for approval.`, '/approval')
 }
-async function notifyMdClientRejected(q: Quotation, leadLabel?: string) {
-  const mdIds = (await getManagedUsersDirectory()).filter(u => u.role === 'owner').map(u => u.id)
-  await sendNotification(mdIds, 'Client Rejected Quotation', `${leadLabel ?? q.leadId} — resend to PC or drop the lead.`, '/approval')
-}
-async function notifyPcResend(q: Quotation, leadLabel?: string) {
+async function notifyPcClientRejected(q: Quotation, leadLabel?: string) {
   const pcIds = (await getManagedUsersDirectory()).filter(u => u.role === 'project_coordinator').map(u => u.id)
-  await sendNotification(pcIds, 'Quotation Sent Back To PC', `${leadLabel ?? q.leadId} — client rejected it; please redo the quotation.`, `/quotations?quotationId=${q.id}`)
+  await sendNotification(pcIds, 'Client Rejected Quotation', `${leadLabel ?? q.leadId} — edit the quotation and send it to the MD again.`, `/quotations?quotationId=${q.id}`)
 }
 async function notifyPcPending(q: Quotation, leadLabel?: string) {
   const pcIds = (await getManagedUsersDirectory()).filter(u => u.role === 'project_coordinator').map(u => u.id)

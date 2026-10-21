@@ -96,11 +96,6 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
       }
       addAuditLog(log)
     }
-    // Keep the Lead in step with the MD's decision so task feeds/lists move on.
-    const lead = leadFor(updated.leadId)
-    if (approved && lead && ['quotation_drafted', 'requirements_captured'].includes(lead.status)) {
-      await updateLead(lead.id, { status: 'internally_approved' }, 'MD approved the quotation')
-    }
     onDecided({ quotation: updated })
     setSnack({ open: true, msg: approved ? 'Quotation approved.' : 'Quotation rejected.', type: 'success' })
   }
@@ -133,12 +128,8 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
     }
     setSaving(false)
     const lead = leadFor(updated.leadId)
-    if (lead) {
-      if (approved && ['quotation_drafted', 'internally_approved', 'design_in_progress', 'design_approved', 'sent_to_client', 'negotiating'].includes(lead.status)) {
-        await updateLead(lead.id, { status: 'client_approved' }, 'Client approved the quotation')
-      } else if (!approved) {
-        await updateLead(lead.id, { status: 'negotiating' }, `Client requested changes: ${note}`)
-      }
+    if (approved && lead && !['client_approved', 'won', 'lost'].includes(lead.status)) {
+      await updateLead(lead.id, { status: 'client_approved' }, 'Client approved the quotation')
     }
     onDecided({ quotation: updated })
     setSnack({ open: true, msg: approved ? 'Client approval recorded.' : 'Revision request recorded.', type: 'success' })
@@ -168,10 +159,6 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
         createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
       }
       addAuditLog(log)
-    }
-    const lead = leadFor(updated.leadId)
-    if (approved && lead && ['internally_approved', 'design_in_progress'].includes(lead.status)) {
-      await updateLead(lead.id, { status: 'design_approved' }, 'MD approved the design')
     }
     onDecided({ design: updated })
     setSnack({ open: true, msg: approved ? 'Design approved.' : 'Design rejected.', type: 'success' })
