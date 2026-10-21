@@ -1,5 +1,5 @@
 import { PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
-import { leadStatusLabel } from '../Leads/LeadStatusSheet'
+import { coreStatus, leadNextAction } from '../Leads/leadPipeline'
 import type {
   Appointment, AuthUser, DailyReport, DailyTask, DesignPackage, ExpenseRequest, Lead,
   LeaveApplication, MaterialRequestForm, Project, PurchaseOrder, PurchaseRequest,
@@ -32,6 +32,13 @@ export interface MyTaskItem {
   // instead of just this item's own timestamp, so everything about a Lead
   // someone just worked on surfaces together near the top.
   leadId?: string
+}
+
+// Tag colour per lead stage on the My Tasks cards.
+const LEAD_TAG_CLS: Record<string, string> = {
+  new: 'bg-sky-50 text-sky-700', contacted: 'bg-sky-50 text-sky-700',
+  site_visit_done: 'bg-violet-50 text-violet-700', requirements_captured: 'bg-teal-50 text-teal-700',
+  quotation_drafted: 'bg-blue-50 text-blue-700', client_approved: 'bg-amber-50 text-amber-700',
 }
 
 function isToday(iso: string): boolean {
@@ -114,9 +121,10 @@ export function buildMyTaskFeed(opts: {
     if (l.status === 'won' || l.status === 'lost') continue
     items.push({
       key: `lead-${l.id}`, at: l.updatedAt,
-      title: `Lead: ${leadStatusLabel(l)}`, badge: 'Lead', badgeCls: 'bg-sky-50 text-sky-700',
-      subjectLabel: 'Lead', subject: l.name,
-      meta: [l.leadNumber ? `ID: ${l.leadNumber}` : '', l.city, l.phone].filter(Boolean),
+      // The card is headed by the action to do next, and shows the client and place.
+      title: leadNextAction(l), badge: leadNextAction(l), badgeCls: LEAD_TAG_CLS[coreStatus(l.status)] ?? 'bg-sky-50 text-sky-700',
+      subjectLabel: '', subject: `${l.name} - ${l.city}`,
+      meta: [l.leadNumber ? `ID: ${l.leadNumber}` : '', l.phone].filter(Boolean),
       // The actual current assignee (an explicit hand-off, or the lead's
       // owner if none) — not always ownerName, now that a lead can be
       // reassigned to someone else mid-pipeline.

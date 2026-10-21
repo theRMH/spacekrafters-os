@@ -52,3 +52,22 @@ export function statusToSyncFromQuotation(current: LeadStatus, quotation: Quotat
   const wantIdx = AUTO_STAGES.indexOf(coreStatus(desired))
   return curIdx !== -1 && curIdx <= wantIdx ? desired : null
 }
+
+// What the person looking after the lead has to do next, in a few words — the heading of its My Tasks card.
+export function leadNextAction(lead: { status: LeadStatus; advancePaymentAmount?: number }): string {
+  switch (lead.status) {
+    case 'sent_to_md': return 'Waiting for MD Approval'
+    case 'md_rejected': case 'client_rejected': return 'Edit Quotation and Send Again'
+    case 'internally_approved': return 'Send Quotation to Client'
+    case 'sent_to_client': return 'Waiting for Client Approval'
+  }
+  switch (coreStatus(lead.status)) {
+    case 'new': return 'Contact Lead'
+    case 'contacted': return 'Add Site Visit'
+    case 'site_visit_done': return 'Add Requirements'
+    case 'requirements_captured': return 'Create Quotation'
+    case 'quotation_drafted': return 'Send Quotation to MD'
+    case 'client_approved': return lead.advancePaymentAmount ? 'Create Project' : 'Record Advance Payment'
+    default: return 'Update Lead'
+  }
+}

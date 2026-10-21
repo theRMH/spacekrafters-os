@@ -29,12 +29,6 @@ import type {
 function isToday(iso: string): boolean {
   return new Date(iso).toDateString() === new Date().toDateString()
 }
-function fmtShort(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return ''
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-}
-
 export default function MyTaskScreen() {
   const { user } = useAuth()
   const { leads } = useCRM()
@@ -159,15 +153,18 @@ export default function MyTaskScreen() {
         <div className="space-y-2.5">
           {feed.map(item => (
             <div key={item.key} className="bg-white rounded-2xl shadow-card border border-slate-100 p-4">
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-[11px] text-slate-400 shrink-0 mt-0.5">{fmtShort(item.at)}</span>
+              <div className="flex justify-end">
                 <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${item.badgeCls}`}>{item.badge}</span>
               </div>
               <h3 className="text-sm font-extrabold text-slate-800 mt-2">{item.title}</h3>
-              <p className="text-xs text-slate-600 mt-1.5 break-words">
-                <span className="text-slate-400">{item.subjectLabel}: </span>
-                <span className="font-semibold">{item.subject}</span>
-              </p>
+              {item.subjectLabel ? (
+                <p className="text-xs text-slate-600 mt-1.5 break-words">
+                  <span className="text-slate-400">{item.subjectLabel}: </span>
+                  <span className="font-semibold">{item.subject}</span>
+                </p>
+              ) : (
+                <p className="text-xs font-semibold text-slate-600 mt-1.5 break-words uppercase">{item.subject}</p>
+              )}
               {item.meta.length > 0 && (
                 <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
                   {item.meta.map((m, i) => <span key={i} className="text-xs text-slate-400 break-words">{m}</span>)}

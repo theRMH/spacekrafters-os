@@ -2,6 +2,12 @@
 
 ## 2026-10-21
 
+### Changed: My Tasks cards are headed by the action to do (like the Fenster cards)
+**Commit:** Uncommitted
+- **Changed:** `leadPipeline.ts` — new `leadNextAction(lead)`: Contact Lead / Add Site Visit / Add Requirements / Create Quotation / Send Quotation to MD / Waiting for MD Approval / Send Quotation to Client / Waiting for Client Approval / Edit Quotation and Send Again / Record Advance Payment / Create Project.
+- **Changed:** `myTaskFeed.ts` — lead cards use it as both heading and tag (was "Lead: Quotation Created" with a "Lead" tag), show `CLIENT NAME - CITY`, then ID and phone, then "Assigned to".
+- **Changed:** `MyTaskScreen.tsx` — cards no longer show the date row; items with no subject label (the lead cards) show the subject in capitals, others unchanged.
+
 ### Changed: "Waiting for …" wording on every status that depends on someone else
 **Commit:** Uncommitted
 - **Changed:** `LeadStatusSheet.tsx` — `LEAD_STATUS_LABEL`: Sent to MD → **Waiting for MD Approval**, Sent to Client → **Waiting for Client Approval**, Client Approved → **Waiting for Advance Payment**; new `leadStatusLabel(lead)` shows **Advance Received** once the advance is recorded. Used by the Update Status sheet, My Tasks cards, the Leads list/detail badges and the Dashboard sales lists (`LeadsScreen.tsx`, `LeadDetailScreen.tsx`, `myTaskFeed.ts`, `salesPerformance.ts`). `QuotationsScreen.tsx` — quotation labels match (Waiting for MD Approval / Waiting for Client Approval).
