@@ -2,6 +2,11 @@
 
 ## 2026-10-21
 
+### Changed: sending the quotation to the client is by WhatsApp or Email, and recorded
+**Commit:** Uncommitted
+- **Added:** `Quotations/sendToClient.ts` — `openClientChannel()` opens the WhatsApp chat (wa.me, 10-digit numbers get 91) or the mail app with the quotation message and the PDF link ready.
+- **Changed:** `QuotationStatusCard.tsx`, `QuotationsScreen.tsx` — the single Send to Client button is now **Send via WhatsApp** / **Send via Email**. Either one opens the chat/mail, moves the quotation to Waiting for Client Approval and records "Quotation sent via WhatsApp/Email" in the quotation's approval history and the lead's activity log (who + when).
+
 ### Added: Approval tab back in the menu, Approvals page restyled
 **Commit:** Uncommitted
 - **Changed:** `components/navigation/navItems.ts` — **Approval** (MD only, `view_md_tasks`) is back in the Main menu group. `Approval/ApprovalScreen.tsx` — title "Approvals", subtitle "N waiting for your review", indigo filter chips (All / Today / Yesterday / This Week / This Month / Custom). `MDTasks/ApprovalSection.tsx` — cards now show a coloured type tag, the title in capitals, a tinted details box (amount, lead owner, sent time), the place with a pin, and a full-width Review button in the type colour. Same list as before: quotations waiting for the MD, client approvals, designs, MRFs and rescheduled appointments.

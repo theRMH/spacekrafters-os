@@ -22,6 +22,7 @@ import { downloadQuotationPdf, generateAndUploadQuotationPdf, PDF_LAYOUT_VERSION
 import { QuotationPrintTemplate } from './QuotationPrintTemplate'
 import { QuotationTemplateFields } from './QuotationTemplateFields'
 import { QuotationPdfActions } from './QuotationPdfActions'
+import { CHANNEL_LABEL, openClientChannel, type SendChannel } from './sendToClient'
 import { statusToSyncFromQuotation } from '../Leads/leadPipeline'
 import { defaultTemplateData } from '../../data/quotationTemplate'
 import { getManagedUsersDirectory } from '../../services/userService'
@@ -861,10 +862,19 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
                   </button>
                 )}
                 {selected.status === 'internally_approved' && can('send_quotation_client') && (
-                  <button onClick={() => handleStatusChange(selected, 'sent_to_client', undefined, 'Quotation sent to client')}
-                    className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
-                    Send to Client
-                  </button>
+                  <>
+                    {(Object.keys(CHANNEL_LABEL) as SendChannel[]).map(ch => (
+                      <button key={ch}
+                        onClick={() => {
+                          const lead = leads.find(l => l.id === selected.leadId)
+                          if (lead) openClientChannel(ch, lead, selected)
+                          handleStatusChange(selected, 'sent_to_client', undefined, `Quotation sent via ${CHANNEL_LABEL[ch]}`)
+                        }}
+                        className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
+                        Send via {CHANNEL_LABEL[ch]}
+                      </button>
+                    ))}
+                  </>
                 )}
                 {selected.status === 'sent_to_client' && (
                   <div className="w-full flex justify-center gap-3">

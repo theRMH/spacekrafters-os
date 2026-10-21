@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { QUOTATION_STATUS_LABEL, quotationWorkflowInfo, fmtCurrency } from './QuotationsScreen'
 import { changeQuotationStatus, recordQuotationAdvanceDecision } from './quotationActions'
 import { QuotationPdfActions } from './QuotationPdfActions'
+import { CHANNEL_LABEL, openClientChannel, type SendChannel } from './sendToClient'
 import type { AuthUser, Lead, Quotation } from '../../types'
 
 // The compact, Lead-page version of QuotationsScreen.tsx's own Status
@@ -171,12 +172,18 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
         </button>
       )}
 
-      {/* PC sends the approved quotation to the client (nothing is actually emailed/WhatsApped — it records the send). */}
+      {/* PC sends the approved quotation to the client by WhatsApp or Email: the chat / mail opens with the message
+          ready, and the send is recorded in the quotation history and the lead's activity. */}
       {quotation.status === 'internally_approved' && canSendClient && (
-        <button disabled={saving} onClick={() => act('sent_to_client', undefined, 'Quotation sent to client')}
-          className="w-full py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
-          Send to Client
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          {(Object.keys(CHANNEL_LABEL) as SendChannel[]).map(ch => (
+            <button key={ch} disabled={saving}
+              onClick={() => { openClientChannel(ch, lead, quotation); act('sent_to_client', undefined, `Quotation sent via ${CHANNEL_LABEL[ch]}`) }}
+              className="py-3 rounded-xl text-sm font-bold border border-blue-200 bg-blue-50 text-blue-700 active:bg-blue-100 disabled:opacity-50">
+              Send via {CHANNEL_LABEL[ch]}
+            </button>
+          ))}
+        </div>
       )}
 
       {/* Sent to the client: record their decision. Rejected needs a reason (below). */}
