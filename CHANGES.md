@@ -2,6 +2,10 @@
 
 ## 2026-10-21
 
+### Added: Approval tab back in the menu, Approvals page restyled
+**Commit:** Uncommitted
+- **Changed:** `components/navigation/navItems.ts` — **Approval** (MD only, `view_md_tasks`) is back in the Main menu group. `Approval/ApprovalScreen.tsx` — title "Approvals", subtitle "N waiting for your review", indigo filter chips (All / Today / Yesterday / This Week / This Month / Custom). `MDTasks/ApprovalSection.tsx` — cards now show a coloured type tag, the title in capitals, a tinted details box (amount, lead owner, sent time), the place with a pin, and a full-width Review button in the type colour. Same list as before: quotations waiting for the MD, client approvals, designs, MRFs and rescheduled appointments.
+
 ### Changed: My Tasks cards are headed by the action to do (like the Fenster cards)
 **Commit:** Uncommitted
 - **Changed:** `leadPipeline.ts` — new `leadNextAction(lead)`: Contact Lead / Add Site Visit / Add Requirements / Create Quotation / Send Quotation to MD / Waiting for MD Approval / Send Quotation to Client / Waiting for Client Approval / Edit Quotation and Send Again / Record Advance Payment / Create Project.

@@ -3,7 +3,7 @@ import type { LucideProps } from 'lucide-react'
 import {
   Users, MapPin, FileText, Layers, FolderOpen, CheckSquare, GanttChartSquare, BookOpen,
   UserCog, Settings, History, LocateFixed, ListChecks, FileSearch, FileEdit, Wrench,
-  LayoutDashboard,
+  LayoutDashboard, ShieldCheck,
 } from 'lucide-react'
 import type { Permission } from '../../types'
 
@@ -20,6 +20,7 @@ export function getMainItems(): NavItem[] {
     { icon: Wrench,     label: 'Task',     path: '/my-tasks', permission: 'view_my_tasks' },
     { icon: FolderOpen, label: 'Projects', path: '/projects', permission: 'view_projects' },
     { icon: Users,      label: 'Clients',  path: '/clients',  permission: 'view_projects' },
+    { icon: ShieldCheck, label: 'Approval', path: '/approval', permission: 'view_md_tasks' },
   ]
 }
 

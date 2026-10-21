@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X } from 'lucide-react'
+import { MapPin, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { getAllQuotations } from '../../services/quotationService'
@@ -18,6 +18,12 @@ import { inRange, type DateRange } from '../Dashboard/dashboardDateUtils'
 import type { Quotation, DesignPackage, DesignVersion, Project, MaterialRequestForm, Appointment, Lead } from '../../types'
 
 type EntryType = 'quotation' | 'client' | 'design' | 'mrf' | 'reschedule' | 'quotation_pc' | 'design_pc'
+
+// Colour of the Review button per kind of approval (matches the tag colours below).
+const ENTRY_BTN_COLOR: Record<EntryType, string> = {
+  quotation: '#2563EB', client: '#059669', design: '#7C3AED', mrf: '#D97706',
+  reschedule: '#EA580C', quotation_pc: '#0891B2', design_pc: '#0891B2',
+}
 
 interface PendingEntry {
   key: string
@@ -266,29 +272,33 @@ export function ApprovalSection({ onDecided, range, onPendingCount }: {
 
       {visibleEntries.map(e => (
         <div key={e.key} className={cardShell}>
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-extrabold text-slate-800 truncate">{e.title}</p>
-            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 ${e.badgeCls}`}>{e.badge}</span>
-          </div>
-          {e.owner && <p className="text-xs text-slate-500 mt-0.5">Lead Owner: {e.owner}</p>}
-          <div className="bg-slate-50 rounded-xl p-3 mt-3 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{e.amountLabel}</p>
-              <p className="text-base font-extrabold truncate" style={{ color: '#0F2A4A' }}>{e.amountValue}</p>
+          {/* Type tag, title, a tinted box with the details, the place, and one big Review button. */}
+          <p className={`text-[10px] font-bold uppercase tracking-wide ${e.badgeCls.split(' ').find(c => c.startsWith('text-')) ?? 'text-slate-500'}`}>{e.badge}</p>
+          <p className="text-sm font-extrabold text-slate-800 uppercase mt-1 break-words">{e.title}</p>
+          <div className={`rounded-xl p-3.5 mt-3 space-y-1.5 text-xs ${e.badgeCls}`}>
+            <div className="flex items-start justify-between gap-3">
+              <span className="opacity-80">{e.amountLabel}</span>
+              <span className="font-bold text-right break-words min-w-0">{e.amountValue}</span>
             </div>
-            <div className="text-right shrink-0">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Uploaded</p>
-              <p className="text-xs font-semibold text-slate-600">{fmtDateTime(e.uploadedAt)}</p>
+            {e.owner && (
+              <div className="flex items-start justify-between gap-3">
+                <span className="opacity-80">Lead Owner</span>
+                <span className="font-bold text-right">{e.owner}</span>
+              </div>
+            )}
+            <div className="flex items-start justify-between gap-3">
+              <span className="opacity-80">Sent</span>
+              <span className="font-bold text-right">{fmtDateTime(e.uploadedAt)}</span>
             </div>
           </div>
           {e.site && (
-            <p className="text-xs text-slate-500 mt-2">
-              <span className="font-semibold text-slate-400">Site: </span>
-              {e.siteUrl ? <a href={e.siteUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">{e.site}</a> : e.site}
-            </p>
+            <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2.5 mt-3 text-[11px] font-semibold uppercase text-slate-500">
+              <MapPin size={12} className="shrink-0" />
+              {e.siteUrl ? <a href={e.siteUrl} target="_blank" rel="noopener noreferrer" className="underline">{e.site}</a> : e.site}
+            </div>
           )}
           <button onClick={() => (e.leadAction ? setQuickStatusLeadId(e.leadAction) : e.navigateTo ? navigate(e.navigateTo.path, { state: e.navigateTo.state }) : openEntry(e))}
-            className="w-full mt-3 py-3 rounded-xl text-sm font-bold text-white active:opacity-90" style={{ background: '#0F2A4A' }}>
+            className="w-full mt-3 py-3 rounded-xl text-xs font-bold text-white active:opacity-90" style={{ background: ENTRY_BTN_COLOR[e.type] }}>
             Review · Approve / Reject →
           </button>
         </div>

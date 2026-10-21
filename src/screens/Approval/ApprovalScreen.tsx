@@ -21,13 +21,13 @@ export default function ApprovalScreen() {
     <div className="min-h-screen bg-slate-50 pb-24">
       <AppHeader />
       <div className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-14 z-20">
-        <h1 className="text-lg font-extrabold text-slate-800">Approval</h1>
-        <p className="text-xs text-slate-400 mt-0.5">{pendingCount} pending approval{pendingCount === 1 ? '' : 's'} waiting for your review</p>
+        <h1 className="text-lg font-extrabold text-slate-800">Approvals</h1>
+        <p className="text-xs text-slate-400 mt-0.5">{pendingCount} waiting for your review</p>
         <div className="flex items-center gap-1.5 flex-wrap mt-3">
           {FILTERS.map(f => (
             <button key={f.key} onClick={() => setDateFilter(f.key)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${dateFilter === f.key ? 'text-white' : 'bg-white border border-slate-200 text-slate-600'}`}
-              style={dateFilter === f.key ? { background: '#0F2A4A' } : {}}>
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${dateFilter === f.key ? 'text-white' : 'bg-slate-100 text-slate-500'}`}
+              style={dateFilter === f.key ? { background: '#4F46E5' } : {}}>
               {f.label}
             </button>
           ))}
