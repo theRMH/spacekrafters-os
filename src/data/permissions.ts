@@ -45,7 +45,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view_leads', 'add_lead', 'edit_lead', 'convert_lead', 'view_activity',
     'view_appointments', 'add_appointment', 'edit_appointment',
     'view_site_visits', 'add_site_visit', 'edit_site_visit', 'add_requirements',
-    'view_quotations', 'create_quotation', 'approve_quotation_pc',
+    'view_quotations', 'create_quotation', 'approve_quotation_pc', 'send_quotation_client',
     'view_design', 'approve_design_pc',
     'view_projects', 'create_project', 'edit_project',
     'view_tasks', 'add_task', 'edit_task', 'complete_task', 'add_subtask',

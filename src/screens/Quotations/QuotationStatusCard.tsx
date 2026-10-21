@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { QUOTATION_STATUS_LABEL, quotationWorkflowInfo, fmtCurrency } from './QuotationsScreen'
 import { changeQuotationStatus, recordQuotationAdvanceDecision } from './quotationActions'
+import { QuotationPdfActions } from './QuotationPdfActions'
 import type { AuthUser, Lead, Quotation } from '../../types'
 
 // The compact, Lead-page version of QuotationsScreen.tsx's own Status
@@ -98,6 +99,16 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
         <p className="text-xs text-red-600">{quotation.status === 'revision_requested' ? "Client's reason" : 'Revision reason'}: {quotation.rejectionReason}</p>
       )}
       {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
+
+      <QuotationPdfActions quotation={quotation} clientName={lead.name} canEdit={canPc} onChanged={onChanged} />
+
+      {/* Created quotation: the PC sends it to the MD for approval. */}
+      {quotation.status === 'draft' && canPc && (
+        <button disabled={saving} onClick={() => act('internal_review', undefined, 'Sent to MD for approval')}
+          className="w-full py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
+          Send to MD for Approval
+        </button>
+      )}
 
       {quotation.status === 'pending_pc_review' && canPc && !showReject && (
         <div className="flex gap-2">

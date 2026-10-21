@@ -92,9 +92,11 @@ function defaultSiteChecklist(): SiteChecklistItem[] {
   return SITE_CHECKLIST_LABELS.map((label, i) => ({ id: `sitechk_${Date.now()}_${i}`, label, answer: null }))
 }
 
-export default function SiteVisitsScreen() {
+// `embed` = opened from a lead's Update Status sheet: shows only the New Site Visit form over the
+// page the user is already on (no page change), and closes itself when the form is dismissed/saved.
+export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; onClose: (msg?: string) => void } } = {}) {
   const { user } = useAuth()
-  const { leads } = useCRM()
+  const { leads, updateLead } = useCRM()
   const routerLocation = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -170,11 +172,21 @@ export default function SiteVisitsScreen() {
     return leads.find(l => l.id === id)?.name ?? id
   }
 
+  useEffect(() => {
+    if (!embed) return
+    resetForm()
+    setLeadId(embed.leadId)
+    setShowNew(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Closes a sheet normally, unless this screen was entered via a Lead deep
   // link carrying returnTo — then every dismissal (X, backdrop, Cancel, or a
   // completed save) returns to that origin page instead.
-  function dismiss(closeLocally: () => void) {
-    if (returnTo) {
+  function dismiss(closeLocally: () => void, doneMsg?: string) {
+    if (embed) {
+      embed.onClose(doneMsg)
+    } else if (returnTo) {
       const id = fromLeadId
       const to = returnTo
       setFromLeadId(''); setReturnTo('')
@@ -253,7 +265,12 @@ export default function SiteVisitsScreen() {
     const result = await upsertSiteVisit(visit)
     if (!result.ok) { setFormError(result.error ?? 'Could not save site visit.'); return }
     setVisits(prev => [visit, ...prev])
-    dismiss(() => setShowNew(false))
+    // Submitting the visit is the confirmation — move the lead on to Site Visit Done by itself.
+    const lead = leads.find(l => l.id === leadId)
+    if (lead && (lead.status === 'qualified' || lead.status === 'site_visit_scheduled')) {
+      await updateLead(lead.id, { status: 'site_visit_done' }, 'Site visit recorded')
+    }
+    dismiss(() => setShowNew(false), 'Site visit recorded — lead moved to Site Visit Done.')
     setSnack({ open: true, msg: 'Site visit recorded!', type: 'success' })
   }
 
@@ -319,7 +336,8 @@ export default function SiteVisitsScreen() {
   ]
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24">
+    <div className={embed ? '' : 'min-h-screen bg-slate-50 pb-24'}>
+      {!embed && <>
       <AppHeader />
       <div className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-14 z-20">
         <div className="flex items-center justify-between mb-3">
@@ -387,6 +405,8 @@ export default function SiteVisitsScreen() {
           </div>
         )}
       </div>
+
+      </>}
 
       {/* Site Visit Detail Sheet */}
       <BottomSheet isOpen={!!selected && !showEdit} onClose={() => dismiss(() => setSelected(null))} title={selected ? leadName(selected.leadId) : ''} height="full">

@@ -53,9 +53,11 @@ function lineItemsFromSiteVisit(visit: SiteVisit): RequirementLineItem[] {
   }))
 }
 
-export default function RequirementsScreen() {
+// `embed` = opened from a lead's Update Status sheet: shows only the New Requirement form over the
+// page the user is already on (no page change), and closes itself when the form is dismissed/saved.
+export default function RequirementsScreen({ embed }: { embed?: { leadId: string; onClose: (msg?: string) => void } } = {}) {
   const { user } = useAuth()
-  const { leads } = useCRM()
+  const { leads, updateLead } = useCRM()
   const routerLocation = useLocation()
   const navigate = useNavigate()
 
@@ -117,6 +119,16 @@ export default function RequirementsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routerLocation.state, isLoading])
 
+  useEffect(() => {
+    if (!embed || isLoading) return
+    const visit = siteVisits.filter(v => v.leadId === embed.leadId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    if (!visit) { embed.onClose('Record a site visit first.'); return }
+    resetForm()
+    handleSiteVisitPick(visit.id)
+    setShowNew(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading])
+
   function visitLabel(visit: SiteVisit): string {
     const leadName = leads.find(l => l.id === visit.leadId)?.name ?? visit.leadId
     return `${leadName} — ${fmtDate(visit.visitDate)}`
@@ -141,8 +153,10 @@ export default function RequirementsScreen() {
   // link — then every dismissal (X, backdrop, Cancel, or a completed save)
   // returns to that lead on /leads instead of leaving the bare Requirements
   // list showing underneath.
-  function dismiss(closeLocally: () => void) {
-    if (returnTo) {
+  function dismiss(closeLocally: () => void, doneMsg?: string) {
+    if (embed) {
+      embed.onClose(doneMsg)
+    } else if (returnTo) {
       const id = fromLeadId
       const to = returnTo
       setFromLeadId(''); setReturnTo('')
@@ -192,7 +206,13 @@ export default function RequirementsScreen() {
     const result = await upsertRequirement(req)
     if (!result.ok) { setFormError(result.error ?? 'Could not save requirement.'); return }
     setRequirements(prev => [req, ...prev])
-    dismiss(() => setShowNew(false))
+    // Submitting the requirement is the confirmation — move the lead on to Requirements Captured by itself.
+    const visit = siteVisits.find(v => v.id === siteVisitId)
+    const lead = visit ? leads.find(l => l.id === visit.leadId) : undefined
+    if (lead && lead.status === 'site_visit_done') {
+      await updateLead(lead.id, { status: 'requirements_captured' }, 'Requirements captured')
+    }
+    dismiss(() => setShowNew(false), 'Requirements captured — lead moved to Requirements Captured.')
     setSnack({ open: true, msg: 'Requirement captured!', type: 'success' })
   }
 
@@ -240,7 +260,8 @@ export default function RequirementsScreen() {
   const filtered = requirements.filter(r => !search || requirementLeadName(r).toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24">
+    <div className={embed ? '' : 'min-h-screen bg-slate-50 pb-24'}>
+      {!embed && <>
       <AppHeader />
       <div className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-14 z-20">
         <div className="flex items-center justify-between mb-3">
@@ -276,6 +297,8 @@ export default function RequirementsScreen() {
           </div>
         )}
       </div>
+
+      </>}
 
       {/* Requirement Detail Sheet */}
       <BottomSheet isOpen={!!selected && !showEdit} onClose={() => dismiss(() => setSelected(null))} title={selected ? requirementLeadName(selected) : ''} height="full">

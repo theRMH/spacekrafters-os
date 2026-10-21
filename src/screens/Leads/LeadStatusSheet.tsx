@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Phone, MessageCircle } from 'lucide-react'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
@@ -21,6 +21,11 @@ import { QuotationStatusCard } from '../Quotations/QuotationStatusCard'
 import { changeQuotationStatus } from '../Quotations/quotationActions'
 import { sendNotification } from '../../utils/notifications'
 import type { DesignPackage, Lead, LeadStatus, ManagedUser, Quotation } from '../../types'
+
+// Lazy: these screens import LeadStatusSheet themselves, so a static import would be circular.
+const SiteVisitsScreen = lazy(() => import('../SiteVisits/SiteVisitsScreen'))
+const RequirementsScreen = lazy(() => import('../Requirements/RequirementsScreen'))
+const QuotationsScreen = lazy(() => import('../Quotations/QuotationsScreen'))
 
 function todayStr(): string {
   const d = new Date()
@@ -125,6 +130,14 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   const [saving, setSaving] = useState(false)
   const [showReassign, setShowReassign] = useState(false)
   const [reassignTo, setReassignTo] = useState('')
+  // Which form is open over the current page (no navigation) — see EmbeddedForm below.
+  const [embed, setEmbed] = useState<'site' | 'req' | 'quote' | null>(null)
+
+  function closeEmbed(msg?: string) {
+    setEmbed(null)
+    onClose()
+    if (msg) onDone(msg)
+  }
 
   useEffect(() => {
     if (!isOpen) return
@@ -213,12 +226,6 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
 
   async function submitQualified() {
     await save('qualified', 'Lead qualified')
-  }
-
-  // Qualified -> Go to Site: the site visit itself is recorded in Site Visits; this
-  // just confirms the trip so the lead moves to Site Visit Scheduled.
-  async function submitGoToSite() {
-    await save('site_visit_scheduled', 'Go to site confirmed — site visit scheduled')
   }
 
   async function submitSiteVisitScheduled() {
@@ -331,71 +338,73 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
             </button>
           </div>
         )
+      // Site visit, requirements and quotation are each ONE step: the form opens right here (no page
+      // change) and submitting it moves the lead on by itself. The "Mark … Done" fallbacks below only
+      // show for a record that already exists but whose lead never advanced.
       case 'qualified':
-        return (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">
-              {hasSiteVisit ? 'A site visit is on record. Confirm to move this lead to Site Visit.' : 'Plan the trip to site — record it in Site Visits first.'}
-            </p>
-            {hasSiteVisit ? (
-              <button disabled={saving} onClick={submitGoToSite} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-                Confirm Go to Site
-              </button>
-            ) : (
-              <button onClick={() => { onClose(); navigate('/site-visits', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
-                Go to Site →
-              </button>
-            )}
-          </div>
-        )
       case 'site_visit_scheduled':
         return (
           <div className="space-y-3">
-            {hasSiteVisit && <p className="text-sm text-slate-600">Site visit is on record.</p>}
             {hasSiteVisit ? (
               canCompleteSiteVisit ? (
-                <button disabled={saving} onClick={submitSiteVisitScheduled} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-                  Mark Site Visit Done
-                </button>
+                <>
+                  <p className="text-sm text-slate-600">Site visit is on record.</p>
+                  <button disabled={saving} onClick={submitSiteVisitScheduled} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                    Mark Site Visit Done
+                  </button>
+                </>
               ) : (
                 <p className="text-sm text-slate-500 text-center py-4">
                   Waiting on {effectiveAssigneeName ?? 'Not Assigned'} to mark the Site Visit done.
                 </p>
               )
             ) : (
-              <button onClick={() => { onClose(); navigate('/site-visits', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
-                Go to Site Visits →
-              </button>
+              <>
+                <p className="text-sm text-slate-600">Fill in the site visit — submitting it completes this step.</p>
+                <button onClick={() => setEmbed('site')} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                  Add Site Visit
+                </button>
+              </>
             )}
           </div>
         )
       case 'site_visit_done':
         return (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">{hasRequirement ? 'Requirements are on record.' : 'No requirements captured yet — add them in the Requirements screen first.'}</p>
             {hasRequirement ? (
-              <button disabled={saving} onClick={submitSiteVisitDone} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-                Mark Requirements Captured
-              </button>
+              <>
+                <p className="text-sm text-slate-600">Requirements are on record.</p>
+                <button disabled={saving} onClick={submitSiteVisitDone} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                  Mark Requirements Captured
+                </button>
+              </>
             ) : (
-              <button onClick={() => { onClose(); navigate('/requirements', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
-                Go to Requirements →
-              </button>
+              <>
+                <p className="text-sm text-slate-600">Fill in the requirements — submitting them completes this step.</p>
+                <button onClick={() => setEmbed('req')} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                  Add Requirements
+                </button>
+              </>
             )}
           </div>
         )
       case 'requirements_captured':
         return (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">{quotation ? 'A quotation has been drafted.' : 'No quotation drafted yet — draft one in the Quotations screen first.'}</p>
             {quotation ? (
-              <button disabled={saving} onClick={submitQuotationDrafted} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-                Confirm Quotation Drafted
-              </button>
+              <>
+                <p className="text-sm text-slate-600">A quotation has been created.</p>
+                <button disabled={saving} onClick={submitQuotationDrafted} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                  Confirm Quotation Created
+                </button>
+              </>
             ) : (
-              <button onClick={() => { onClose(); navigate('/quotations', { state: { leadId: lead.id, returnTo: '/leads' } }) }} className={secondaryBtn}>
-                Go to Quotations →
-              </button>
+              <>
+                <p className="text-sm text-slate-600">Create the quotation — submitting it completes this step.</p>
+                <button onClick={() => setEmbed('quote')} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+                  Create Quotation
+                </button>
+              </>
             )}
           </div>
         )
@@ -743,7 +752,15 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   const soloCall = lead.status === 'new' || lead.status === 'contacted' || lead.status === 'qualified' || lead.status === 'site_visit_done'
 
   return (
-    <BottomSheet isOpen={isOpen} onClose={onClose} title={`Update Status — ${LEAD_STATUS_LABEL[lead.status]}`} height="full">
+    <>
+    {isOpen && embed && (
+      <Suspense fallback={null}>
+        {embed === 'site' && <SiteVisitsScreen embed={{ leadId: lead.id, onClose: closeEmbed }} />}
+        {embed === 'req' && <RequirementsScreen embed={{ leadId: lead.id, onClose: closeEmbed }} />}
+        {embed === 'quote' && <QuotationsScreen embed={{ leadId: lead.id, onClose: closeEmbed }} />}
+      </Suspense>
+    )}
+    <BottomSheet isOpen={isOpen && !embed} onClose={onClose} title={`Update Status — ${LEAD_STATUS_LABEL[lead.status]}`} height="full">
       <div className="space-y-4">
         {user?.role === 'owner' && (
           <MdOverrideCard noun="status" title="lead status" saving={saving} onApply={submitMdOverride}
@@ -824,5 +841,6 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
         <button onClick={onClose} className={secondaryBtn}>Cancel</button>
       </div>
     </BottomSheet>
+    </>
   )
 }

@@ -7,7 +7,6 @@ import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
-import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Snackbar } from '../../components/feedback/Snackbar'
@@ -22,6 +21,7 @@ import { addAuditLog } from '../../services/auditLogService'
 import { downloadQuotationPdf, generateAndUploadQuotationPdf } from '../../utils/quotationPdf'
 import { QuotationPrintTemplate } from './QuotationPrintTemplate'
 import { QuotationTemplateFields } from './QuotationTemplateFields'
+import { QuotationPdfActions } from './QuotationPdfActions'
 import { defaultTemplateData } from '../../data/quotationTemplate'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { sendNotification } from '../../utils/notifications'
@@ -69,13 +69,13 @@ export const QUOTATION_STATUS_LABEL: Record<QuotationStatus, string> = {
 // stuck on "Choose an advance payment option" forever, even after it was chosen.
 export function quotationWorkflowInfo(q: Pick<Quotation, 'status' | 'advanceStatus' | 'advancePaymentReceived'>): { responsible: string; next: string } {
   switch (q.status) {
-    case 'draft':               return { responsible: 'QS',      next: 'Send to PC for review' }
+    case 'draft':               return { responsible: 'PC',      next: 'Send to MD for approval' }
     case 'pending_pc_review':   return { responsible: 'PC',      next: 'PC approves or rejects' }
     case 'pc_rejected':         return { responsible: 'QS',      next: 'Revise and resubmit for PC review' }
     case 'internal_review':     return { responsible: 'MD',      next: 'MD approves or rejects' }
     case 'md_rejected':         return { responsible: 'PC',      next: 'Resubmit to MD, or revise first' }
-    case 'internally_approved': return { responsible: 'PC / MD', next: 'Send to client' }
-    case 'sent_to_client':      return { responsible: 'Client',  next: 'Record the client\'s decision: Approved or Rejected' }
+    case 'internally_approved': return { responsible: 'PC',      next: 'Send to client' }
+    case 'sent_to_client':      return { responsible: 'PC',      next: 'Update the client\'s decision: Approved or Rejected' }
     case 'revision_requested':  return { responsible: 'MD',      next: 'MD decides: resend to PC to redo it, or drop the lead' }
     case 'client_approved':
       if (q.advanceStatus || q.advancePaymentReceived) return { responsible: '—', next: 'Quotation complete — proceed in Design Center' }
@@ -165,7 +165,9 @@ function computeAdvanceTerm(netAmount: number, option: AdvanceTermOption | '', t
   }
 }
 
-export default function QuotationsScreen() {
+// `embed` = opened from a lead's Update Status sheet: shows only the Create Quotation form over the
+// page the user is already on (no page change), and closes itself when the form is dismissed/saved.
+export default function QuotationsScreen({ embed }: { embed?: { leadId: string; onClose: (msg?: string) => void } } = {}) {
   const { user, can } = useAuth()
   const { leads, updateLead } = useCRM()
   const routerLocation = useLocation()
@@ -232,13 +234,6 @@ export default function QuotationsScreen() {
     await sendNotification(mdIds, 'Quotation Pending MD Approval', `${leadName(q.leadId)} — ${fmtCurrency(q.netAmount)}. ${what}`, '/approval')
   }
 
-  // Same, for the new PC review step ahead of MD. PC doesn't have access to
-  // /approval (owner-only) — deep-link straight to this exact quotation.
-  async function notifyPcPending(q: Quotation, what: string) {
-    const pcIds = (await getManagedUsersDirectory()).filter(u => u.role === 'project_coordinator' && u.id !== user?.id).map(u => u.id)
-    await sendNotification(pcIds, 'Quotation Pending PC Review', `${leadName(q.leadId)} — ${fmtCurrency(q.netAmount)}. ${what}`, `/quotations?quotationId=${q.id}`)
-  }
-
   async function refresh() {
     setIsLoading(true)
     const [reqs, visits, quotes, projs] = await Promise.all([getAllRequirements(), getAllSiteVisits(), getAllQuotations(), getAllProjects()])
@@ -281,6 +276,16 @@ export default function QuotationsScreen() {
     navigate(routerLocation.pathname, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routerLocation.state, isLoading])
+
+  useEffect(() => {
+    if (!embed || isLoading) return
+    resetForm()
+    setLeadId(embed.leadId)
+    const req = requirementsForLead(embed.leadId)[0]
+    if (req) handleRequirementPick(req.id)
+    setShowNew(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading])
 
   // Deep-link from the Approval page's "Review" on a PC-pending quotation, or
   // from a bell notification's url (?quotationId=... — a plain link can't
@@ -329,8 +334,10 @@ export default function QuotationsScreen() {
   // Closes a sheet normally, unless this screen was entered via a Lead deep
   // link carrying returnTo — then every dismissal (X, backdrop, Cancel, or a
   // completed save) returns to that origin page instead.
-  function dismiss(closeLocally: () => void) {
-    if (returnTo) {
+  function dismiss(closeLocally: () => void, doneMsg?: string) {
+    if (embed) {
+      embed.onClose(doneMsg)
+    } else if (returnTo) {
       const id = fromLeadId
       const to = returnTo
       setFromLeadId(''); setReturnTo('')
@@ -434,9 +441,9 @@ export default function QuotationsScreen() {
     const quotation: Quotation = {
       id: `quo_${Date.now()}`,
       leadId, requirementId: requirementId || undefined,
-      // A new quotation never goes straight to MD: it starts out waiting for PC review.
-      version: 1, status: 'pending_pc_review',
-      statusHistory: [makeHistory('pending_pc_review', 'Created — sent to PC for review')],
+      // A new quotation starts as a draft; the PC then sends it to the MD for approval.
+      version: 1, status: 'draft',
+      statusHistory: [makeHistory('draft', 'Quotation created')],
       sections: valid, totalAmount, taxAmount, taxableAmount, transportCost: transportCost || undefined,
       discountType, discountValue, discountAmount, netAmount,
       ...advanceTerm,
@@ -450,9 +457,13 @@ export default function QuotationsScreen() {
     setGenerating(false)
     if (!result.ok) { setFormError(result.error ?? 'Could not save quotation.'); return }
     setQuotations(prev => [pdf.quotation, ...prev])
-    dismiss(() => setShowNew(false))
-    setSnack({ open: true, msg: pdf.error ? `Quotation created and sent to PC for review, but the PDF could not be generated/uploaded: ${pdf.error}` : 'Quotation created, PDF generated and uploaded, sent to PC for review.', type: pdf.error ? 'error' : 'success' })
-    notifyPcPending(pdf.quotation, 'New quotation created.')
+    // Creating the quotation is the confirmation — move the lead on to Quotation Drafted by itself.
+    const lead = leads.find(l => l.id === leadId)
+    if (lead && lead.status === 'requirements_captured') {
+      await updateLead(lead.id, { status: 'quotation_drafted' }, 'Quotation created')
+    }
+    dismiss(() => setShowNew(false), 'Quotation created — send it to the MD for approval.')
+    setSnack({ open: true, msg: pdf.error ? `Quotation created, but the PDF could not be generated/uploaded: ${pdf.error}` : 'Quotation created and PDF generated. Send it to the MD for approval.', type: pdf.error ? 'error' : 'success' })
   }
 
   async function handleUpdateQuotation() {
@@ -476,9 +487,9 @@ export default function QuotationsScreen() {
       documentFiles: documentFiles.length > 0 ? documentFiles : undefined,
       template: tpl,
       ...(needsReapproval ? {
-        status: 'pending_pc_review' as const,
+        status: 'draft' as const,
         rejectionReason: undefined,
-        statusHistory: [...(selected.statusHistory ?? []), makeHistory('pending_pc_review', 'Edited — resubmitted for PC review')],
+        statusHistory: [...(selected.statusHistory ?? []), makeHistory('draft', 'Edited — send to MD for approval again')],
       } : {}),
       updatedAt: new Date().toISOString(),
     }
@@ -489,9 +500,8 @@ export default function QuotationsScreen() {
     if (!result.ok) { setFormError(result.error ?? 'Could not update quotation.'); return }
     setQuotations(prev => prev.map(q => (q.id === pdf.quotation.id ? pdf.quotation : q)))
     dismiss(() => { setShowEdit(false); setSelected(null) })
-    const base = needsReapproval ? 'Quotation updated and sent back to PC for review' : 'Quotation updated'
-    setSnack({ open: true, msg: pdf.error ? `${base}, but the PDF could not be generated/uploaded: ${pdf.error}` : `${base}; PDF regenerated and uploaded.`, type: pdf.error ? 'error' : 'success' })
-    if (needsReapproval) notifyPcPending(pdf.quotation, 'Quotation was edited and needs review again.')
+    const base = needsReapproval ? 'Quotation updated — send it to the MD for approval again' : 'Quotation updated'
+    setSnack({ open: true, msg: pdf.error ? `${base}, but the PDF could not be generated/uploaded: ${pdf.error}` : `${base}; PDF regenerated.`, type: pdf.error ? 'error' : 'success' })
   }
 
   // Delegates the actual transition + history + notify + Lead-advance to
@@ -636,7 +646,8 @@ export default function QuotationsScreen() {
   const formTotals = computeTotals(sections, discountType, discountValue, transportCost)
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24">
+    <div className={embed ? '' : 'min-h-screen bg-slate-50 pb-24'}>
+      {!embed && <>
       <AppHeader />
       <div className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-14 z-20">
         <div className="flex items-center justify-between mb-3">
@@ -682,6 +693,8 @@ export default function QuotationsScreen() {
           </div>
         )}
       </div>
+
+      </>}
 
       {/* Quotation Detail Sheet */}
       <BottomSheet isOpen={!!selected && !showEdit} onClose={() => dismiss(() => setSelected(null))} title={selected ? leadName(selected.leadId) : ''} height="full">
@@ -785,12 +798,13 @@ export default function QuotationsScreen() {
               </div>
             )}
 
-            {selected.documentFiles && selected.documentFiles.length > 0 && (
-              <div>
-                <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quotation Document</p>
-                <MultiFileUploadField label="" files={selected.documentFiles} onChange={() => {}} readOnly />
-              </div>
-            )}
+            <div>
+              <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quotation PDF</p>
+              <QuotationPdfActions
+                quotation={selected} clientName={leadName(selected.leadId)} canEdit={can('create_quotation')}
+                onChanged={updated => { setQuotations(prev => prev.map(x => (x.id === updated.id ? updated : x))); setSelected(updated) }}
+              />
+            </div>
 
             {(selected.terms || selected.paymentTerms) && (
               <div className="space-y-2">
@@ -806,11 +820,11 @@ export default function QuotationsScreen() {
             <div className="space-y-2">
               <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Status Actions</p>
               <div className="flex flex-wrap gap-2">
-                {/* Quotations created before the PC/approval flow was enforced can still be sitting in Draft. */}
-                {selected.status === 'draft' && can('create_quotation') && (
-                  <button onClick={() => handleStatusChange(selected, 'pending_pc_review')}
-                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
-                    Send to PC for Review
+                {/* Created quotation: the PC sends it to the MD for approval. */}
+                {selected.status === 'draft' && (can('create_quotation') || can('approve_quotation_pc')) && (
+                  <button onClick={() => handleStatusChange(selected, 'internal_review', undefined, 'Sent to MD for approval')}
+                    className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
+                    Send to MD for Approval
                   </button>
                 )}
 
@@ -1031,7 +1045,7 @@ export default function QuotationsScreen() {
       <BottomSheet
         isOpen={showNew || showEdit}
         onClose={() => dismiss(() => { setShowNew(false); setShowEdit(false) })}
-        title={showEdit ? 'Edit Quotation' : 'New Quotation'}
+        title={showEdit ? 'Edit Quotation' : 'Create Quotation'}
         height="full"
       >
         <div className="space-y-3.5">
@@ -1167,11 +1181,6 @@ export default function QuotationsScreen() {
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-indigo-400" />
           </div>
 
-          <div>
-            <MultiFileUploadField label="Quotation Documents (PDF)" files={documentFiles} onChange={setDocumentFiles}
-              accept="application/pdf,.pdf" uploadButtonLabel="Upload PDFs" />
-          </div>
-
           <div className="bg-slate-50 rounded-2xl p-3.5 space-y-1.5">
             <div className="flex justify-between text-sm"><span className="text-slate-500">Material Cost</span><span className="font-semibold text-slate-700">{fmtCurrency(formTotals.totalAmount)}</span></div>
             <div className="flex justify-between text-sm">
@@ -1194,7 +1203,7 @@ export default function QuotationsScreen() {
             className="w-full text-white rounded-xl py-3 text-base font-bold active:opacity-90 disabled:opacity-60"
             style={{ background: '#C9A24B' }}
           >
-            {generating ? 'Generating PDF…' : showEdit ? 'Save & Regenerate Quotation PDF' : 'Generate Quotation PDF'}
+            {generating ? 'Generating PDF…' : showEdit ? 'Save & Regenerate Quotation PDF' : 'Create Quotation'}
           </button>
         </div>
       </BottomSheet>

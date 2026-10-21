@@ -1,5 +1,20 @@
 ## 2026-10-15
 
+## 2026-10-21
+
+### Changed: one-step lead updates, forms open in place, simpler quotation flow (PC → MD → PC → client)
+**Commit:** Uncommitted  ·  ⚠ DEPLOY `supabase/pc-send-quotation-to-client.sql`
+- **Changed:** `SiteVisitsScreen.tsx`, `RequirementsScreen.tsx`, `QuotationsScreen.tsx` — new optional `embed` prop: shows only the form over the current page (no route change) and closes itself when saved/dismissed. Submitting the form moves the lead on by itself (site visit → Site Visit Done, requirements → Requirements Captured, quotation → Quotation Drafted).
+- **Changed:** `LeadStatusSheet.tsx` — the "Go to Site / Confirm Go to Site / Mark Site Visit Done" chain is now one **Add Site Visit** step; **Add Requirements** and **Create Quotation** open the form in place instead of navigating. Sheet closes after the form is saved. Old "Mark … Done" buttons remain only for records that exist but whose lead never advanced.
+- **Changed:** `QuotationsScreen.tsx` — form titled **Create Quotation** (button: Create Quotation), upload-PDF field removed (only the PDF template fields remain); new quotations start as `draft`; PC clicks **Send to MD for Approval**; edits of approved/rejected quotations go back to `draft`. PC-review step no longer used for new quotations (legacy `pending_pc_review` records still work). Workflow labels: PC is responsible for send-to-client and for updating the client's decision.
+- **Added:** `QuotationPdfActions.tsx` — View / Download / Remove (Generate PDF again after remove) for the quotation PDF; shown on the quotation detail sheet and on the Lead page quotation card (`QuotationStatusCard.tsx`, which also gets the **Send to MD for Approval** button).
+- **Changed:** `data/permissions.ts` — project coordinator now has `send_quotation_client`.
+- **Added:** `supabase/pc-send-quotation-to-client.sql` — RLS update so the PC can write `sent_to_client` / `client_approved` / `revision_requested`; MD approval and drop-lead stay owner-only ⚠ DEPLOY
+
+### Docs: Master PRD updated to match the live app
+**Commit:** Uncommitted
+- **Changed:** `SpaceKrafters_Final_Master_PRD.md` — added a "Change Notes — 21 Oct 2026" block and updated the flow line, CRM, Site Visits, Quotation and data-model sections (Appointment replaced by Go to Site, client decision flow, MD override, quotation PDF). The `.docx` copy was NOT regenerated.
+
 ### Changed: quotation PDF is now generated and auto-uploaded; header fields are dropdowns
 **Commit:** Uncommitted  ·  new dependencies: `jspdf`, `html2canvas` (loaded lazily, only when a PDF is generated)
 - **Added:** `src/utils/quotationPdf.ts` — renders the template off-screen, captures each page and lays it onto A4 pages, cutting only between table rows; `generateAndUploadQuotationPdf()` uploads through the normal `storeFile()` upload; `downloadQuotationPdf()` saves locally.
