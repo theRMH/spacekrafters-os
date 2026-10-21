@@ -18,7 +18,7 @@ import { getAllQuotations, upsertQuotation, deleteQuotation } from '../../servic
 import { changeQuotationStatus, recordQuotationAdvanceDecision } from './quotationActions'
 import { getAllProjects, upsertProject } from '../../services/projectService'
 import { addAuditLog } from '../../services/auditLogService'
-import { downloadQuotationPdf, generateAndUploadQuotationPdf } from '../../utils/quotationPdf'
+import { downloadQuotationPdf, generateAndUploadQuotationPdf, PDF_LAYOUT_VERSION } from '../../utils/quotationPdf'
 import { QuotationPrintTemplate } from './QuotationPrintTemplate'
 import { QuotationTemplateFields } from './QuotationTemplateFields'
 import { QuotationPdfActions } from './QuotationPdfActions'
@@ -420,7 +420,7 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
   async function attachGeneratedPdf(q: Quotation): Promise<{ quotation: Quotation; error?: string }> {
     try {
       const url = await generateAndUploadQuotationPdf(q, q.template ?? tpl, leadName(q.leadId))
-      return { quotation: { ...q, documentFiles: [url] } }
+      return { quotation: { ...q, documentFiles: [url], pdfLayout: PDF_LAYOUT_VERSION } }
     } catch (err) {
       return { quotation: q, error: err instanceof Error ? err.message : 'unknown error' }
     }

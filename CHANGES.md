@@ -2,6 +2,10 @@
 
 ## 2026-10-21
 
+### Fixed: View kept opening the old stored PDF
+**Commit:** Uncommitted
+- **Changed:** `QuotationPdfActions.tsx` — **View** now rebuilds the PDF first when the stored one was made with an older layout, saves it, then opens it (window opened inside the click so it isn't blocked). `utils/quotationPdf.ts` — new `PDF_LAYOUT_VERSION` (bump it whenever the layout changes); `types/index.ts` — `Quotation.pdfLayout`; `QuotationsScreen.tsx` stamps `pdfLayout` when it generates a PDF. Existing quotations have no stamp, so their old PDF is refreshed on the next View.
+
 ### Added: edit the record behind a stage from Update Status (e.g. after an MD override)
 **Commit:** Uncommitted
 - **Changed:** `LeadStatusSheet.tsx` — new "Edit this stage" buttons (Edit Site Visit / Edit Requirements / Edit Quotation) shown when the lead's current stage has that record; they open the record's edit form over the current page. Gated by `edit_site_visit` / `add_requirements` / `create_quotation`.

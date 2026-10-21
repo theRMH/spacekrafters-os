@@ -8,6 +8,9 @@ import type { Quotation, QuotationTemplateData } from '../types'
 // is rendered off-screen, each of its pages is captured, and the capture is laid onto A4 pages
 // — cutting only between table rows so a line of text is never sliced in half.
 
+// Bump when the PDF layout changes: stored PDFs built with an older layout are rebuilt the next time they are viewed.
+export const PDF_LAYOUT_VERSION = 2
+
 const A4_W_MM = 210
 const A4_H_MM = 297
 const MARGIN_MM = 10

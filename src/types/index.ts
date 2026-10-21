@@ -469,6 +469,8 @@ export interface Quotation {
   // quotation — array-typed to match this app's other file-list fields, but
   // the form caps it at one file.
   documentFiles?: string[]
+  // Layout version of the stored generated PDF (PDF_LAYOUT_VERSION in utils/quotationPdf.ts); older ones are rebuilt on View.
+  pdfLayout?: number
   terms?: string
   paymentTerms?: string
   // Text blocks for the generated PDF; absent on quotations saved before the template existed.
