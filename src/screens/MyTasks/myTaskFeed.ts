@@ -122,6 +122,8 @@ export function buildMyTaskFeed(opts: {
       // reassigned to someone else mid-pipeline.
       person: l.assignedToName ?? l.ownerName,
       linkTo: `/leads/${l.id}`,
+      // Update Status opens the lead's status sheet in place instead of navigating to the lead page.
+      leadAction: { leadId: l.id },
       leadId: l.id,
     })
   }
@@ -288,15 +290,16 @@ export function buildMyTaskFeed(opts: {
   // not a separate approval surface — this is just discoverability.
   if (role === 'project_coordinator') {
     for (const q of quotations ?? []) {
-      if (q.status !== 'pending_pc_review' && q.status !== 'md_rejected') continue
+      if (q.status !== 'draft' && q.status !== 'pending_pc_review' && q.status !== 'md_rejected') continue
       const lead = leadById.get(q.leadId)
       items.push({
         key: `quo-pc-${q.id}`, at: q.updatedAt,
-        title: q.status === 'md_rejected' ? 'Quotation Rejected by MD — Resubmit' : 'Review Quotation', badge: 'Quotation', badgeCls: 'bg-blue-50 text-blue-700',
+        title: q.status === 'md_rejected' ? 'Quotation Rejected by MD — Resubmit' : q.status === 'draft' ? 'Send Quotation to MD for Approval' : 'Review Quotation', badge: 'Quotation', badgeCls: 'bg-blue-50 text-blue-700',
         subjectLabel: 'Lead', subject: lead?.name ?? q.leadId,
         meta: [lead?.leadNumber ? `ID: ${lead.leadNumber}` : '', `v${q.version}`, fmtCurrency(q.netAmount)].filter(Boolean),
         note: q.status === 'md_rejected' ? q.rejectionReason : undefined,
         linkTo: '/quotations',
+        leadAction: { leadId: q.leadId },
         leadId: q.leadId,
       })
     }

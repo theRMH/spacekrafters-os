@@ -2,6 +2,11 @@
 
 ## 2026-10-21
 
+### Fixed: Update Status on My Tasks / Approval no longer navigates to another page
+**Commit:** Uncommitted
+- **Changed:** `myTaskFeed.ts` — lead cards and the PC quotation cards now set `leadAction`, so **Update Status** opens the lead's status sheet in place (it used to navigate to `/leads/:id` or `/quotations`). The PC queue also lists quotations in `draft` ("Send Quotation to MD for Approval").
+- **Changed:** `ApprovalSection.tsx` — PC-level quotation entries (md_rejected / legacy PC review) open the lead's Update Status sheet in place instead of navigating to `/quotations`. Design entries still navigate. Bell-notification links are unchanged.
+
 ### Changed: quotation actions live in the one Update Status sheet (no second screen)
 **Commit:** Uncommitted
 - **Changed:** `QuotationStatusCard.tsx` — now shows the quotation itself (sections, items, discount, tax, transport, net) above the PDF actions and approve/send/client-decision buttons; the "Open full Quotation" button is optional and no longer used by the Lead sheet.

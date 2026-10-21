@@ -12,6 +12,7 @@ import { decideRescheduleAndAdvanceLead } from '../Appointments/appointmentActio
 import { ApprovalReviewSheets, fmtCurrency, fmtDateTime } from './ApprovalReviewSheets'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
+import { LeadStatusSheet } from '../Leads/LeadStatusSheet'
 import { MRFDetailBody, resolveLeadOwner } from '../MRF/MRFPanel'
 import { inRange, type DateRange } from '../Dashboard/dashboardDateUtils'
 import type { Quotation, DesignPackage, DesignVersion, Project, MaterialRequestForm, Appointment, Lead } from '../../types'
@@ -39,6 +40,8 @@ interface PendingEntry {
   // Quotations/Design Center screens themselves, not in this page's own
   // review sheet — so these entries navigate there instead of opening a sheet.
   navigateTo?: { path: string; state: Record<string, string> }
+  // Opens the lead's Update Status sheet right here instead of navigating away.
+  leadAction?: string
 }
 
 // MD-only "Approval" queue: every quotation, design and MRF currently waiting
@@ -59,6 +62,7 @@ export function ApprovalSection({ onDecided, range, onPendingCount }: {
   const { user } = useAuth()
   const { leads, updateLead } = useCRM()
   const navigate = useNavigate()
+  const [quickStatusLeadId, setQuickStatusLeadId] = useState<string | null>(null)
 
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [packages, setPackages] = useState<DesignPackage[]>([])
@@ -185,7 +189,7 @@ export function ApprovalSection({ onDecided, range, onPendingCount }: {
         owner: lead?.ownerName, amountLabel: 'Quotation Amount', amountValue: fmtCurrency(q.netAmount),
         uploadedAt: q.statusHistory?.[q.statusHistory.length - 1]?.at ?? q.updatedAt,
         site: lead?.city, siteUrl: mapsUrl(lead),
-        navigateTo: { path: '/quotations', state: { quotationId: q.id } },
+        leadAction: q.leadId,
       }
     }),
     ...pendingDesignsPcAll.map((p): PendingEntry => {
@@ -283,7 +287,7 @@ export function ApprovalSection({ onDecided, range, onPendingCount }: {
               {e.siteUrl ? <a href={e.siteUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">{e.site}</a> : e.site}
             </p>
           )}
-          <button onClick={() => (e.navigateTo ? navigate(e.navigateTo.path, { state: e.navigateTo.state }) : openEntry(e))}
+          <button onClick={() => (e.leadAction ? setQuickStatusLeadId(e.leadAction) : e.navigateTo ? navigate(e.navigateTo.path, { state: e.navigateTo.state }) : openEntry(e))}
             className="w-full mt-3 py-3 rounded-xl text-sm font-bold text-white active:opacity-90" style={{ background: '#0F2A4A' }}>
             Review · Approve / Reject →
           </button>
@@ -413,6 +417,18 @@ export function ApprovalSection({ onDecided, range, onPendingCount }: {
         onPrev={() => openEntry(visibleEntries[selectedIndex - 1])}
         onNext={() => openEntry(visibleEntries[selectedIndex + 1])}
       />
+
+      {quickStatusLeadId && (() => {
+        const quickStatusLead = leads.find(l => l.id === quickStatusLeadId)
+        return quickStatusLead ? (
+          <LeadStatusSheet
+            isOpen
+            onClose={() => setQuickStatusLeadId(null)}
+            lead={quickStatusLead}
+            onDone={() => onDecided?.()}
+          />
+        ) : null
+      })()}
     </section>
   )
 }
