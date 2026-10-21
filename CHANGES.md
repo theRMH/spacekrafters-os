@@ -2,6 +2,10 @@
 
 ## 2026-10-21
 
+### Added: delete button on every client card
+**Commit:** Uncommitted
+- **Changed:** `ClientMasterScreen.tsx` — owner (MD) sees a red trash button on each client in the list, with a confirmation naming the client. A client that still has projects can't be deleted (projects reference their client in the database) — it shows "still has N projects — remove or reassign them first" instead. The existing Delete link inside the client's Profile tab uses the same check. No DB change (the owner-only delete policy already exists).
+
 ### Reverted: flat MAIN + REPORTING menu → back to four groups
 **Commit:** Uncommitted
 - **Changed:** `components/navigation/navItems.ts` — the flat MAIN + REPORTING menu (pushed in `2f5fd2a`) is undone. Menu is again: **Main** (Dashboard, Task, Projects, Clients), **Site & Design** (Leads, Site Visits, Site Visit Report, Quotations, Design Center), **Projects & Tasks** (Tasks, Gantt, Daily Diary, Daily Task, Daily Report), **Admin** (User Management, Attendance Settings, Settings, Audit Log). Procurement, Finance, Personal Finance, HR and Reports/Files stay out of the menu (pages still exist).

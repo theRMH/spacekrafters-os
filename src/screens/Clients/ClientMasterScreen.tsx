@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
@@ -47,7 +47,8 @@ export default function ClientMasterScreen() {
   const [tab, setTab] = useState<Tab>('profile')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<Client>(emptyClient())
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  // The client the delete confirmation is open for (from a list card or from the detail sheet).
+  const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   useEffect(() => {
@@ -102,22 +103,33 @@ export default function ClientMasterScreen() {
     setSnack({ open: true, msg: 'Client saved.', type: 'success' })
   }
 
+  function askDelete(client: Client) {
+    // Projects point at their client, so a client that still has projects cannot be removed.
+    const count = projects.filter(p => p.clientId === client.id).length
+    if (count > 0) {
+      setSnack({ open: true, msg: `${client.name} still has ${count} project${count !== 1 ? 's' : ''} — remove or reassign them first.`, type: 'error' })
+      return
+    }
+    setDeleteTarget(client)
+  }
+
   async function confirmDelete() {
-    if (!selected) return
-    const result = await deleteClient(selected.id)
-    setShowDeleteDialog(false)
+    if (!deleteTarget) return
+    const target = deleteTarget
+    const result = await deleteClient(target.id)
+    setDeleteTarget(null)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete client.', type: 'error' }); return }
     if (user) {
       addAuditLog({
         id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         action: 'client_deleted',
-        description: `Client "${selected.name}" deleted.`,
+        description: `Client "${target.name}" deleted.`,
         createdBy: user.name,
         createdByRole: user.role,
         createdAt: new Date().toISOString(),
       })
     }
-    setClients(prev => prev.filter(c => c.id !== selected.id))
+    setClients(prev => prev.filter(c => c.id !== target.id))
     setSelected(null)
     setSnack({ open: true, msg: 'Client deleted.', type: 'success' })
   }
@@ -146,14 +158,22 @@ export default function ClientMasterScreen() {
         {!isLoading && filtered.map(client => {
           const clientProjects = projects.filter(p => p.clientId === client.id)
           return (
-            <button key={client.id} onClick={() => openDetail(client)}
-              className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50">
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <span className="font-bold text-sm text-slate-800">{client.name}</span>
-              </div>
-              <p className="text-xs text-slate-500">{client.phone}</p>
-              <p className="text-[12px] text-slate-400 mt-1">{clientProjects.length} project{clientProjects.length !== 1 ? 's' : ''}</p>
-            </button>
+            <div key={client.id} className="relative">
+              <button onClick={() => openDetail(client)}
+                className="w-full text-left bg-white rounded-2xl p-4 pr-14 shadow-sm border border-slate-100 active:bg-slate-50">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <span className="font-bold text-sm text-slate-800">{client.name}</span>
+                </div>
+                <p className="text-xs text-slate-500">{client.phone}</p>
+                <p className="text-[12px] text-slate-400 mt-1">{clientProjects.length} project{clientProjects.length !== 1 ? 's' : ''}</p>
+              </button>
+              {user?.role === 'owner' && (
+                <button onClick={() => askDelete(client)} aria-label={`Delete ${client.name}`}
+                  className="absolute top-3 right-3 w-9 h-9 rounded-xl flex items-center justify-center text-red-500 bg-red-50 active:bg-red-100">
+                  <Trash2 size={16} />
+                </button>
+              )}
+            </div>
           )
         })}
 
@@ -222,7 +242,7 @@ export default function ClientMasterScreen() {
                   </button>
                 </PermissionGate>
                 {user?.role === 'owner' && (
-                  <button onClick={() => setShowDeleteDialog(true)}
+                  <button onClick={() => askDelete(selected)}
                     className="w-full text-center text-xs font-semibold text-red-500 py-2">
                     Delete Client
                   </button>
@@ -253,10 +273,10 @@ export default function ClientMasterScreen() {
       </BottomSheet>
 
       <Dialog
-        isOpen={showDeleteDialog}
-        onClose={() => setShowDeleteDialog(false)}
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
         title="Delete Client"
-        message="Are you sure you want to delete this client? This cannot be undone."
+        message={`Are you sure you want to delete ${deleteTarget?.name ?? 'this client'}? This cannot be undone.`}
         confirmLabel="Delete"
         onConfirm={confirmDelete}
         variant="danger"
