@@ -27,21 +27,8 @@ export function getMainItems(): NavItem[] {
   ]
 }
 
-// Lead Sort / Project Sort: each entry opens the Leads / Projects list
-// pre-filtered. Lead keys match the bucket chips in LeadsScreen; project keys
-// are ProjectStage values (plus 'active' = every stage except closed).
-const LEAD_SORT: [string, string][] = [
-  ['active', 'Active'], ['contacted', 'Contacted'], ['qualified', 'Qualified'],
-  ['site_visit', 'Site Visit'], ['requirements', 'Requirements'],
-  ['quotation', 'Quotation'], ['negotiation', 'Negotiation'], ['won', 'Won'], ['lost', 'Lost'],
-]
+// Site Visit Sort: each entry opens the Site Visits list filtered by status.
 const SITE_VISIT_SORT: [string, string][] = [['scheduled', 'Scheduled'], ['done', 'Done']]
-const PROJECT_SORT: [string, string][] = [
-  ['active', 'Active'], ['advance_payment', 'Advance Payment'], ['designing', 'Designing'],
-  ['execution', 'Execution'], ['procurement', 'Procurement'], ['handover_prep', 'Handover Prep'],
-  ['final_payment', 'Final Payment'], ['reconciliation', 'Reconciliation'], ['closed', 'Closed'],
-]
-
 export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
     label: 'CRM',
@@ -50,14 +37,6 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { icon: ClipboardList, label: 'Follow-ups',   path: '/follow-ups',   permission: 'view_activity'     },
       { icon: ShieldCheck,   label: 'Approval',     path: '/approval',    permission: 'view_md_tasks'     },
     ],
-  },
-  {
-    label: 'Lead Sort',
-    items: LEAD_SORT.map(([key, label]) => ({ icon: Circle, label, path: `/leads?bucket=${key}`, permission: 'view_leads' as Permission })),
-  },
-  {
-    label: 'Project Sort',
-    items: PROJECT_SORT.map(([key, label]) => ({ icon: Circle, label, path: `/projects?stage=${key}`, permission: 'view_projects' as Permission })),
   },
   {
     label: 'Site Visit Sort',

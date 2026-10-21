@@ -2,6 +2,10 @@
 
 ## 2026-10-21
 
+### Removed: Lead Sort and Project Sort from the menu
+**Commit:** Uncommitted
+- **Changed:** `components/navigation/navItems.ts` — the Lead Sort and Project Sort sections (and their now-unused lists) are gone from the sidebar and the mobile menu. Site Visit Sort stays. The Leads/Projects pages still accept `?bucket=` / `?stage=` in the URL; only the menu entries were removed.
+
 ### Fixed: Update Status on My Tasks / Approval no longer navigates to another page
 **Commit:** Uncommitted
 - **Changed:** `myTaskFeed.ts` — lead cards and the PC quotation cards now set `leadAction`, so **Update Status** opens the lead's status sheet in place (it used to navigate to `/leads/:id` or `/quotations`). The PC queue also lists quotations in `draft` ("Send Quotation to MD for Approval").
