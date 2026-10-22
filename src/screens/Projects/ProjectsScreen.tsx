@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Download, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -75,6 +75,86 @@ function emptyProject(): Project {
   }
 }
 
+type DateRange = 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'
+const DATE_CHIPS: { value: DateRange; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'week', label: 'This Week' },
+  { value: 'month', label: 'This Month' },
+  { value: 'custom', label: 'Custom' },
+]
+
+type SortKey = 'default' | 'newest' | 'oldest' | 'name' | 'value' | 'handover'
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: 'default', label: 'Sort: Default' },
+  { value: 'newest', label: 'Sort: Newest first' },
+  { value: 'oldest', label: 'Sort: Oldest first' },
+  { value: 'name', label: 'Sort: Name A–Z' },
+  { value: 'value', label: 'Sort: Value high–low' },
+  { value: 'handover', label: 'Sort: Handover soonest' },
+]
+
+function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+function inDateRange(createdAt: string, range: DateRange, from: string, to: string): boolean {
+  if (range === 'all') return true
+  const created = new Date(createdAt)
+  if (isNaN(created.getTime())) return false
+  const today = startOfDay(new Date())
+  const day = startOfDay(created)
+  if (range === 'today') return day.getTime() === today.getTime()
+  if (range === 'yesterday') return day.getTime() === today.getTime() - 86400000
+  if (range === 'week') {
+    const monday = new Date(today)
+    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7))
+    return day >= monday
+  }
+  if (range === 'month') return day.getFullYear() === today.getFullYear() && day.getMonth() === today.getMonth()
+  if (from && day < startOfDay(new Date(from))) return false
+  if (to && day > startOfDay(new Date(to))) return false
+  return true
+}
+
+function fmtShort(val?: string): string {
+  if (!val) return ''
+  const d = new Date(val)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
+
+// Days until handover (negative = overdue). Closed/cancelled projects have no due state.
+function dueInfo(p: Project): { text: string; tone: 'ok' | 'warn' | 'late' } | null {
+  if (!p.expectedHandoverDate || p.stage === 'closed' || p.status === 'closed' || p.status === 'cancelled') return null
+  const due = new Date(p.expectedHandoverDate)
+  if (isNaN(due.getTime())) return null
+  const diff = Math.round((startOfDay(due).getTime() - startOfDay(new Date()).getTime()) / 86400000)
+  if (diff === 0) return { text: 'Due today', tone: 'warn' }
+  if (diff < 0) return { text: `${-diff}d overdue`, tone: 'late' }
+  return { text: `${diff}d left`, tone: 'ok' }
+}
+
+function ProgressRing({ pct }: { pct: number }) {
+  const r = 20
+  const c = 2 * Math.PI * r
+  return (
+    <div className="relative w-[50px] h-[50px] flex-shrink-0">
+      <svg width="50" height="50" viewBox="0 0 50 50" className="-rotate-90">
+        <circle cx="25" cy="25" r={r} fill="none" stroke="#e2e8f0" strokeWidth="4" />
+        <circle cx="25" cy="25" r={r} fill="none" stroke={pct === 100 ? '#16a34a' : '#f59e0b'} strokeWidth="4"
+          strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-700">{pct}%</span>
+    </div>
+  )
+}
+
+function csvCell(v: string | number | undefined): string {
+  return `"${String(v ?? '').replace(/"/g, '""')}"`
+}
+
 const inp = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400'
 const label = 'block text-xs font-semibold text-slate-500 mb-1'
 
@@ -89,6 +169,10 @@ export default function ProjectsScreen() {
   const [newClient, setNewClient] = useState({ name: '', phone: '', email: '' })
   const [coordinators, setCoordinators] = useState<ManagedUser[]>([])
   const [search, setSearch] = useState('')
+  const [dateRange, setDateRange] = useState<DateRange>('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [sortKey, setSortKey] = useState<SortKey>('default')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<Project>(emptyProject())
   const [selected, setSelected] = useState<Project | null>(null)
@@ -355,20 +439,52 @@ export default function ProjectsScreen() {
   // Sidebar "Project Sort": ?stage=<ProjectStage> or ?stage=active (not closed).
   const stageParam = searchParams.get('stage')
   const stageFilter = stageParam === 'active' || STAGE_OPTIONS.some(o => o.value === stageParam) ? stageParam : null
-  const stageChips = [
-    { value: 'all', label: 'All' },
-    { value: 'active', label: 'Active' },
-    ...STAGE_OPTIONS,
-  ]
-
-  const filtered = projects.filter(p => {
+  // Search + date filters first; stage chip counts come from this set so each
+  // chip shows how many projects it would list right now.
+  const baseList = projects.filter(p => {
     if (p.type === 'product_sale') return false
-    if (stageFilter === 'active' && p.stage === 'closed') return false
-    if (stageFilter && stageFilter !== 'active' && p.stage !== stageFilter) return false
+    if (!inDateRange(p.createdAt, dateRange, dateFrom, dateTo)) return false
     if (!search) return true
     const q = search.toLowerCase()
     return p.name.toLowerCase().includes(q) || p.clientName.toLowerCase().includes(q)
   })
+
+  const stageChips = [
+    { value: 'all', label: 'All', count: baseList.length },
+    { value: 'active', label: 'Active', count: baseList.filter(p => p.stage !== 'closed').length },
+    ...STAGE_OPTIONS.map(o => ({ ...o, count: baseList.filter(p => p.stage === o.value).length })),
+  ]
+
+  const filtered = baseList
+    .filter(p => {
+      if (stageFilter === 'active') return p.stage !== 'closed'
+      if (stageFilter) return p.stage === stageFilter
+      return true
+    })
+    .sort((a, b) => {
+      switch (sortKey) {
+        case 'newest': return b.createdAt.localeCompare(a.createdAt)
+        case 'oldest': return a.createdAt.localeCompare(b.createdAt)
+        case 'name': return a.name.localeCompare(b.name)
+        case 'value': return (b.contractValue ?? 0) - (a.contractValue ?? 0)
+        case 'handover': return (a.expectedHandoverDate ?? '9999').localeCompare(b.expectedHandoverDate ?? '9999')
+        default: return 0
+      }
+    })
+
+  function exportCsv() {
+    const header = ['Project', 'Client', 'Stage', 'Status', 'Contract Value', 'Created', 'Expected Handover']
+    const rows = filtered.map(p => [
+      p.name, p.clientName, PROJECT_STAGE_LABEL[p.stage], p.status, p.contractValue, fmtShort(p.createdAt), fmtShort(p.expectedHandoverDate),
+    ])
+    const csv = [header, ...rows].map(r => r.map(csvCell).join(',')).join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'projects.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const canDelete = user?.role === 'owner'
   const isEditingExisting = projects.some(p => p.id === form.id)
@@ -381,6 +497,10 @@ export default function ProjectsScreen() {
         <h1 className="text-lg font-extrabold text-slate-800 mb-3">Projects</h1>
         <div className="flex items-center gap-2">
           <SearchBar value={search} onChange={setSearch} placeholder="Search projects…" className="flex-1" />
+          <button onClick={exportCsv} aria-label="Export projects" disabled={filtered.length === 0}
+            className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 active:bg-slate-50 disabled:opacity-40 flex-shrink-0">
+            <Download size={17} />
+          </button>
           <PermissionGate permission="create_project">
             <button onClick={openCreate} aria-label="New project"
               className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-fab active:bg-indigo-700 flex-shrink-0">
@@ -394,26 +514,63 @@ export default function ProjectsScreen() {
           onChange={v => setSearchParams(v === 'all' ? {} : { stage: v }, { replace: true })}
           className="mt-3"
         />
+        <div className="mt-2 flex items-center gap-2">
+          <div className="flex-1 flex gap-2 overflow-x-auto scrollbar-hide">
+            {DATE_CHIPS.map(c => (
+              <button key={c.value} onClick={() => setDateRange(c.value)}
+                className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-semibold ${
+                  dateRange === c.value ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <select value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)} aria-label="Sort projects"
+            className="flex-shrink-0 bg-slate-100 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 focus:outline-none max-w-[150px]">
+            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+        {dateRange === 'custom' && (
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <DateField value={dateFrom} onChange={setDateFrom} />
+            <DateField value={dateTo} min={dateFrom || undefined} onChange={setDateTo} />
+          </div>
+        )}
       </div>
 
       <div className="px-4 pt-4 space-y-3">
         {filtered.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-10">No projects yet.</p>
+          <p className="text-sm text-slate-400 text-center py-10">No projects found.</p>
         ) : (
-          filtered.map(project => (
-            <button key={project.id} onClick={() => setSelected(project)}
-              className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50">
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <span className="font-bold text-sm text-slate-800">{project.name}</span>
-                <StatusBadge status={project.status} />
-              </div>
-              <p className="text-xs text-slate-500 mb-2">{project.clientName}</p>
-              <div className="flex items-center justify-between">
-                <StatusBadge status={project.stage} />
-                <span className="text-xs font-semibold text-slate-600">{fmtCurrency(project.contractValue)}</span>
-              </div>
-            </button>
-          ))
+          filtered.map(project => {
+            const idx = PROJECT_STAGE_ORDER.indexOf(project.stage)
+            const pct = Math.round(((idx + 1) / PROJECT_STAGE_ORDER.length) * 100)
+            const due = dueInfo(project)
+            const dueTone = due?.tone === 'late' ? 'text-red-600' : due?.tone === 'warn' ? 'text-orange-600' : 'text-emerald-600'
+            return (
+              <button key={project.id} onClick={() => setSelected(project)}
+                className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50 flex items-center gap-3">
+                <ProgressRing pct={pct} />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm text-slate-800 truncate">{project.name}</p>
+                  <p className="text-xs text-slate-500 truncate">{project.clientName}</p>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <StatusBadge status={project.stage} />
+                    {project.status !== 'active' && <StatusBadge status={project.status} />}
+                    {due && <span className={`text-[11px] font-semibold ${dueTone}`}>{due.text}</span>}
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5 text-[11px] text-slate-400">
+                    <span>Created {fmtShort(project.createdAt)}</span>
+                    <span className="flex items-center gap-3">
+                      {project.contractValue != null && <span className="font-semibold text-slate-600">{fmtCurrency(project.contractValue)}</span>}
+                      {project.expectedHandoverDate && <span>Due {fmtShort(project.expectedHandoverDate)}</span>}
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
+              </button>
+            )
+          })
         )}
       </div>
 

@@ -1,3 +1,24 @@
+## 2026-10-22
+
+### Changed: Dashboard layout restyled to the new reference mockups
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Dashboard/DashboardScreen.tsx` — presentation only: summary boxes are tinted cards with an icon tile (4-up on wide screens, progress bar replaces the ring); Revenue Overview and Outstanding Payment sit side by side on desktop; Sales Team Performance cards flow in two columns on desktop; larger page title and wider side padding. All data, calculations, filters, click handlers and navigation are unchanged. No new sections added.
+
+### Changed: Dashboard summary boxes, sales team list and Outstanding Payment
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Dashboard/DashboardScreen.tsx` — summary boxes are now Lead, Project, Collection, Completion (Installation box removed; each opens a detail sheet). Lead = leads created in the period still between Lead and Negotiate (won/lost excluded); Completion = projects whose status history records the move to Closed in the period. The separate violet "Leads" box is removed. Sales Team Performance also lists every User Management member even with no leads (same card layout). Outstanding Payment now shows the last four calendar months in one divided card (Fenster format), months with nothing outstanding show ₹0, and the "No due date" group is gone (records without a due date are no longer listed here; nothing deleted).
+- **Changed:** `src/screens/Dashboard/salesPerformance.ts` — `buildSalesPerformance` takes an optional `extraNames` list; existing callers unaffected.
+
+### Changed: Dashboard "Revenue Overview" card restyled to match Fenster
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Dashboard/DashboardScreen.tsx` — Revenue Overview card only: larger card/title, subtitle "Last N days · collected revenue" (or "All time"), zero-filled daily chart (at least the last 3 days up to the range end) so it draws even when a period has no collections, taller chart with hover tooltips on points. Header total and trend % still come from the unchanged `revenueSeries` / `revenueTrend` calculations. Filter chips, summary cards, Leads and Sales Team sections untouched.
+
+## 2026-10-21
+
+### Changed: Projects page list UI restyled to match Fenster
+**Commit:** Uncommitted
+- **Changed:** `src/screens/Projects/ProjectsScreen.tsx` — list/filter area only: stage chips now show counts (sidebar `?stage=` still works), added date chips (Today / Yesterday / This Week / This Month / Custom range on created date), a Sort dropdown, a CSV export button, and cards with a stage-progress ring, due/overdue text, created and due dates, and a chevron. Create/edit, detail sheet, status sheet and delete flows are untouched. No other files changed.
+
 ## 2026-10-15
 
 ## 2026-10-21

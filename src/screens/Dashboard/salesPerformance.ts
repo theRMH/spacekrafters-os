@@ -28,7 +28,7 @@ function emptyBucket(): SalesBucket { return { count: 0, value: 0, records: [] }
 // Pure — shared by DashboardScreen (the summary list) and SalesPersonDetailScreen
 // (the drill-down page), so both are guaranteed to agree with each other and
 // there's only one place that ever reads leads/projects into this shape.
-export function buildSalesPerformance(leads: Lead[], projects: Project[]): SalesPersonPerf[] {
+export function buildSalesPerformance(leads: Lead[], projects: Project[], extraNames: string[] = []): SalesPersonPerf[] {
   const projectByLeadId = new Map<string, Project>()
   for (const p of projects) if (p.leadId) projectByLeadId.set(p.leadId, p)
 
@@ -37,6 +37,8 @@ export function buildSalesPerformance(leads: Lead[], projects: Project[]): Sales
     if (!byPerson.has(name)) byPerson.set(name, { name, active: emptyBucket(), negotiation: emptyBucket(), production: emptyBucket(), done: emptyBucket() })
     return byPerson.get(name)!
   }
+
+  for (const name of extraNames) ensure(name)
 
   for (const lead of leads) {
     const name = lead.ownerName || 'Unassigned'
