@@ -3,6 +3,7 @@ import { QUOTATION_STATUS_LABEL, quotationWorkflowInfo, fmtCurrency } from './Qu
 import { changeQuotationStatus, recordQuotationAdvanceDecision } from './quotationActions'
 import { QuotationPdfActions } from './QuotationPdfActions'
 import { CHANNEL_LABEL, type SendChannel } from './sendToClient'
+import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import type { AuthUser, Lead, Quotation } from '../../types'
 
 // The compact, Lead-page version of QuotationsScreen.tsx's own Status
@@ -29,6 +30,7 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
   const [showAdvanceForm, setShowAdvanceForm] = useState(false)
   const [advanceAmount, setAdvanceAmount] = useState('')
   const [advanceRef, setAdvanceRef] = useState('')
+  const [advanceFiles, setAdvanceFiles] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -54,7 +56,7 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
     })
     setSaving(false)
     if (!result.ok || !result.updated) { setError(result.error ?? 'Could not save.'); return }
-    setShowAdvanceForm(false); setAdvanceAmount(''); setAdvanceRef(''); setError('')
+    setShowAdvanceForm(false); setAdvanceAmount(''); setAdvanceRef(''); setAdvanceFiles([]); setError('')
     onChanged(result.updated)
   }
 
@@ -65,7 +67,7 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
     recordAdvance(
       {
         advanceStatus: 'with_advance', advancePaymentReceived: true,
-        advancePaymentAmount: amount, advancePaymentRef: advanceRef.trim() || undefined, advancePaymentAt: new Date().toISOString(),
+        advancePaymentAmount: amount, advancePaymentRef: advanceRef.trim() || undefined, advancePaymentFiles: advanceFiles.length ? advanceFiles : undefined, advancePaymentAt: new Date().toISOString(),
       },
       'Proceeding with advance payment',
       `Advance received (${detail})`,
@@ -252,11 +254,12 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
             <input value={advanceRef} onChange={e => setAdvanceRef(e.target.value)} placeholder="UTR / cheque no."
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
+          <MultiFileUploadField label="Payment Proof (optional)" files={advanceFiles} onChange={setAdvanceFiles} uploadButtonLabel="Upload Payment Proof" />
           <button disabled={saving} onClick={handleRecordAdvancePayment}
             className="w-full py-3 rounded-xl text-sm font-bold text-white active:opacity-90 disabled:opacity-50" style={{ background: '#0F2A4A' }}>
             Save Advance Payment
           </button>
-          <button onClick={() => { setShowAdvanceForm(false); setAdvanceAmount(''); setAdvanceRef(''); setError('') }}
+          <button onClick={() => { setShowAdvanceForm(false); setAdvanceAmount(''); setAdvanceRef(''); setAdvanceFiles([]); setError('') }}
             className="w-full py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600">
             Back
           </button>

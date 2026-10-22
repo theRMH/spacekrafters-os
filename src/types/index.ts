@@ -495,6 +495,8 @@ export interface Quotation {
   advancePaymentReceived?: boolean
   advancePaymentAmount?: number
   advancePaymentRef?: string
+  // Optional proof of the advance payment (screenshot / receipt).
+  advancePaymentFiles?: string[]
   advancePaymentAt?: string
   createdBy: string
   createdAt: string
@@ -661,6 +663,8 @@ export interface Project {
   status: 'active' | 'on_hold' | 'closed' | 'cancelled'
   startDate?: string
   expectedHandoverDate?: string
+  // Free-text notes entered when the lead was converted to this project.
+  notes?: string
   handoverSignedAt?: string
   handoverSignedBy?: string
   assignedRole?: UserRole

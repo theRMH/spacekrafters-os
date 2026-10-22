@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Phone, MessageCircle } from 'lucide-react'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
@@ -15,7 +14,8 @@ import { getAllSiteVisits } from '../../services/siteVisitService'
 import { getAllRequirements } from '../../services/requirementService'
 import { QuotationStatusCard } from '../Quotations/QuotationStatusCard'
 import { sendNotification } from '../../utils/notifications'
-import { Dialog } from '../../components/feedback/Dialog'
+import { DateField } from '../../components/forms/DateField'
+import { convertLeadToProject } from '../Projects/convertLeadToProject'
 import { PIPELINE, coreStatus, statusToSyncFromQuotation } from './leadPipeline'
 import type { Lead, LeadStatus, ManagedUser, Quotation } from '../../types'
 
@@ -80,7 +80,6 @@ interface Props {
 export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged }: Props) {
   const { user, can } = useAuth()
   const { updateLead } = useCRM()
-  const navigate = useNavigate()
 
   const [users, setUsers] = useState<ManagedUser[]>([])
   const [hasSiteVisit, setHasSiteVisit] = useState(false)
@@ -88,6 +87,11 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   const [quotation, setQuotation] = useState<Quotation | null>(null)
 
   const [showConvert, setShowConvert] = useState(false)
+  const [convertName, setConvertName] = useState('')
+  const [convertDue, setConvertDue] = useState('')
+  const [convertNotes, setConvertNotes] = useState('')
+  const [convertError, setConvertError] = useState('')
+  const [converting, setConverting] = useState(false)
   const [showLostReason, setShowLostReason] = useState(false)
   const [lostReason, setLostReason] = useState('')
   const [saving, setSaving] = useState(false)
@@ -139,6 +143,27 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     } else {
       onDone(result.error ?? 'Could not update status.')
     }
+  }
+
+  function openConvert() {
+    const d = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    setConvertName(`${lead.name} - ${lead.city} Project`)
+    setConvertDue(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`)
+    setConvertNotes('')
+    setConvertError('')
+    setShowConvert(true)
+  }
+
+  // Creates the project from the popup, then marks the lead Project Created.
+  async function submitConvert() {
+    setConverting(true)
+    setConvertError('')
+    const result = await convertLeadToProject({ lead, quotation, name: convertName, dueDate: convertDue, notes: convertNotes, user })
+    setConverting(false)
+    if (!result.ok) { setConvertError(result.error ?? 'Could not create the project.'); return }
+    setShowConvert(false)
+    await save('won', `Converted to a project: ${convertName.trim()}`)
   }
 
   // MD-only: force the lead to any stage (forward or back). The reason is mandatory and goes into the activity log.
@@ -283,7 +308,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
             <div className="space-y-3">
               <QuotationStatusCard quotation={quotation} can={can} user={user} lead={lead} updateLead={updateLead} onChanged={setQuotation} />
               {(quotation.advancePaymentReceived || quotation.advanceStatus === 'without_advance') && (
-                <button disabled={saving} onClick={() => setShowConvert(true)} className={primaryBtn} style={navy}>
+                <button disabled={saving} onClick={openConvert} className={primaryBtn} style={navy}>
                   Convert to Project
                 </button>
               )}
@@ -420,25 +445,31 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
       </div>
     </BottomSheet>
 
-    <Dialog
-      isOpen={showConvert}
-      onClose={() => setShowConvert(false)}
-      title="Convert to Project"
-      message={`Convert ${lead.name} to a project?`}
-      confirmLabel="Yes, Convert"
-      onConfirm={async () => {
-        setShowConvert(false)
-        await save('won', quotation?.advancePaymentReceived ? 'Advance received — converted to a project' : 'Proceeding without advance — converted to a project')
-        navigate(`/projects?leadId=${lead.id}`)
-      }}
-    >
-      {quotation && (
-        <div className="bg-slate-50 rounded-xl p-3 text-xs space-y-1 text-left">
-          <div className="flex justify-between"><span className="text-slate-500">Quotation amount</span><span className="font-bold text-slate-800">₹{Math.round(quotation.netAmount).toLocaleString('en-IN')}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Advance</span><span className="font-bold text-slate-800">{quotation.advancePaymentReceived ? `₹${Math.round(quotation.advancePaymentAmount ?? 0).toLocaleString('en-IN')} received` : 'Without advance'}</span></div>
+    {/* Convert to Project popup: name + due date (+ notes), then the project is created right here. */}
+    <BottomSheet isOpen={showConvert} onClose={() => !converting && setShowConvert(false)}>
+      <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-5 space-y-4">
+        <p className="text-xs font-extrabold text-emerald-700 uppercase tracking-wide">Convert to Project</p>
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Project Name <span className="text-red-500">*</span></label>
+          <input value={convertName} onChange={e => setConvertName(e.target.value)}
+            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500" />
         </div>
-      )}
-    </Dialog>
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Project Due Date <span className="text-red-500">*</span></label>
+          <DateField value={convertDue} onChange={setConvertDue} />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Notes <span className="font-normal text-slate-300">(optional)</span></label>
+          <textarea value={convertNotes} onChange={e => setConvertNotes(e.target.value)} rows={3} placeholder="Any additional notes…"
+            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 resize-none" />
+        </div>
+        {convertError && <p className="text-xs text-red-600 font-semibold">{convertError}</p>}
+        <button disabled={converting || !convertName.trim() || !convertDue} onClick={submitConvert}
+          className="w-full py-4 rounded-2xl text-sm font-bold text-white bg-emerald-700 active:bg-emerald-800 disabled:opacity-50">
+          {converting ? "Converting…" : "✓ Convert to Project"}
+        </button>
+      </div>
+    </BottomSheet>
     </>
   )
 }

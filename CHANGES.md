@@ -2,6 +2,12 @@
 
 ## 2026-10-21
 
+### Changed: Convert to Project is a popup form (project name, due date, notes) that creates the project right there
+**Commit:** Uncommitted
+- **Added:** `Projects/convertLeadToProject.ts` — creates the project from a lead: client record (reused by phone or added), the project at Advance Payment (contract value from the quotation, due date = expected handover date, notes), the lead's design packages and the quotation linked to it, and the payment milestone + receipt for any advance already received.
+- **Changed:** `LeadStatusSheet.tsx` — the confirmation dialog is replaced by a green "CONVERT TO PROJECT" popup: **Project Name \*** (prefilled `<client> - <city> Project`), **Project Due Date \*** (today by default), **Notes** (optional) and a green **✓ Convert to Project** button. It creates the project, marks the lead Project Created and closes — no jump to the Projects page.
+- **Changed:** `QuotationStatusCard.tsx` — the advance form has an optional **Payment Proof** upload (`Quotation.advancePaymentFiles`); `types/index.ts` — `Project.notes`, `Quotation.advancePaymentFiles`.
+
 ### Changed: after client approval — Proceed with / without Advance, then Convert to Project (asks first)
 **Commit:** Uncommitted
 - **Changed:** `QuotationStatusCard.tsx`, `QuotationsScreen.tsx` — two buttons again: **Proceed with Advance** (opens the advance amount/ref entry, then saves) and **Proceed without Advance** (recorded straight away). `quotationActions.ts` copies the choice (and any payment) onto the lead; `types/index.ts` — `Lead.advanceStatus`.
