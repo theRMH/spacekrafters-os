@@ -1,6 +1,21 @@
 ## 2026-10-15
 
-## 2026-10-21
+## 2026-10-23
+
+### Added: Project ID in the Convert to Project popup (follows the lead's number)
+**Commit:** Uncommitted  ·  no DB changes (`projectNumber` lives in the project's JSON; older projects simply show no ID)
+- **Added:** `types/index.ts` — optional `Project.projectNumber`.
+- **Changed:** `Projects/convertLeadToProject.ts` — `projectNumberForLead()` builds the ID from the lead (lead `SK-0012` → project `PRJ-SK-0012`) and saves it on the new project.
+- **Changed:** `LeadStatusSheet.tsx` — the Convert popup shows the read-only Project ID above the editable Project Name; the button now says **Continue**.
+- **Changed:** `ProjectsScreen.tsx` — the project card shows the Project ID next to the client name.
+
+### Changed: site visit is two steps (Plan, then Record); Requirements height; WhatsApp on send; Convert popup trimmed
+**Commit:** Uncommitted  ·  no DB changes (the new `SiteVisit.status` lives in the visit's JSON; older visits count as done)
+- **Changed:** `SiteVisitsScreen.tsx`, `types/index.ts` (`SiteVisit.status: 'scheduled' | 'done'`) — **Step 1, Plan Site Visit:** lead, visit type, date and team only; saves the visit as *planned* and moves the lead to Site Visit Planned. **Step 2, Record Site Visit:** opens the planned visit's form with rooms, measurements and the checklist; saving marks it done and moves the lead to Site Visit Done. List/detail show Planned vs Done (chips: All / Planned / Done), planned visits have a Record Site Visit button.
+- **Changed:** `LeadStatusSheet.tsx`, `leadPipeline.ts`, `LeadsScreen.tsx`, `RequirementsScreen.tsx`, `LeadDetailScreen.tsx`, `utils/projectJourney.ts` — the sheet shows Plan Site Visit → (planned date + team) Record Site Visit; My Tasks says "Plan Site Visit" / "Record Site Visit"; a planned visit sits in the Site Visit stage/filter; Requirements only uses recorded visits.
+- **Changed:** `RequirementsScreen.tsx` — a line item's total is Length × Width in sq.ft only; Height is recorded and shown under the total (old cu.ft totals recompute).
+- **Changed:** `Quotations/sendToClient.ts`, `QuotationStatusCard.tsx`, `QuotationsScreen.tsx` — **Send via WhatsApp** opens the WhatsApp chat with the message and PDF link ready, and records the send; **Send via Email** only records.
+- **Changed:** `LeadStatusSheet.tsx`, `convertLeadToProject.ts` — the Convert to Project popup now has only **Project Name** and **Project Due Date** (Notes removed).
 
 ### Changed: Convert to Project is a popup form (project name, due date, notes) that creates the project right there
 **Commit:** Uncommitted

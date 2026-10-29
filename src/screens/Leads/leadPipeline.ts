@@ -61,6 +61,7 @@ export function advanceDecided(lead: { advanceStatus?: string; advancePaymentAmo
 
 export function leadNextAction(lead: { status: LeadStatus; advanceStatus?: string; advancePaymentAmount?: number }): string {
   switch (lead.status) {
+    case 'site_visit_scheduled': return 'Record Site Visit'
     case 'sent_to_md': return 'Waiting for MD Approval'
     case 'md_rejected': case 'client_rejected': return 'Edit Quotation and Send Again'
     case 'internally_approved': return 'Send Quotation to Client'
@@ -68,7 +69,7 @@ export function leadNextAction(lead: { status: LeadStatus; advanceStatus?: strin
   }
   switch (coreStatus(lead.status)) {
     case 'new': return 'Contact Lead'
-    case 'contacted': return 'Add Site Visit'
+    case 'contacted': return 'Plan Site Visit'
     case 'site_visit_done': return 'Add Requirements'
     case 'requirements_captured': return 'Create Quotation'
     case 'quotation_drafted': return 'Send Quotation to MD'

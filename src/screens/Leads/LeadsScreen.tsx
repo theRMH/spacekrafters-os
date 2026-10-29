@@ -52,6 +52,7 @@ const BUCKET_LABEL: Record<LeadBucket, string> = {
 // A brand-new lead has not been contacted yet, so it has no bucket of its own —
 // it only shows under Active until "Mark Contacted" moves it to Contacted.
 function leadBucket(lead: Lead): LeadBucket | 'new' {
+  if (lead.status === 'site_visit_scheduled') return 'site_visit' // a planned visit is already in the Site Visit stage
   switch (coreStatus(lead.status)) {
     case 'new': return 'new'
     case 'site_visit_done': return 'site_visit'

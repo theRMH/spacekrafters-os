@@ -22,7 +22,7 @@ import { downloadQuotationPdf, generateAndUploadQuotationPdf, PDF_LAYOUT_VERSION
 import { QuotationPrintTemplate } from './QuotationPrintTemplate'
 import { QuotationTemplateFields } from './QuotationTemplateFields'
 import { QuotationPdfActions } from './QuotationPdfActions'
-import { CHANNEL_LABEL, type SendChannel } from './sendToClient'
+import { CHANNEL_LABEL, openWhatsApp, type SendChannel } from './sendToClient'
 import { statusToSyncFromQuotation } from '../Leads/leadPipeline'
 import { defaultTemplateData } from '../../data/quotationTemplate'
 import { getManagedUsersDirectory } from '../../services/userService'
@@ -875,7 +875,11 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
                   <>
                     {(Object.keys(CHANNEL_LABEL) as SendChannel[]).map(ch => (
                       <button key={ch}
-                        onClick={() => handleStatusChange(selected, 'sent_to_client', undefined, `Quotation sent via ${CHANNEL_LABEL[ch]}`)}
+                        onClick={() => {
+                          const lead = leads.find(l => l.id === selected.leadId)
+                          if (ch === 'whatsapp' && lead) openWhatsApp(lead, selected)
+                          handleStatusChange(selected, 'sent_to_client', undefined, `Quotation sent via ${CHANNEL_LABEL[ch]}`)
+                        }}
                         className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 active:bg-blue-100">
                         Send via {CHANNEL_LABEL[ch]}
                       </button>

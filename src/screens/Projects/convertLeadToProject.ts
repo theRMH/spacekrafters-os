@@ -8,6 +8,11 @@ import type { AuthUser, Client, Lead, PaymentMilestone, Project, Quotation, Rece
 
 const newId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 
+// The project's display ID follows the lead it comes from: lead SK-0012 becomes project PRJ-SK-0012.
+export function projectNumberForLead(lead: Pick<Lead, 'id' | 'leadNumber'>): string {
+  return `PRJ-${lead.leadNumber ?? lead.id}`
+}
+
 // Creates the project for a lead whose quotation the client approved — the same things the Projects page does when
 // a project is created from a lead: the client record, the project itself (starting at Advance Payment), the lead's
 // design packages and quotation linked to it, and the payment milestone (with the advance already received, if any).
@@ -16,10 +21,9 @@ export async function convertLeadToProject(params: {
   quotation: Quotation | null
   name: string
   dueDate: string
-  notes?: string
   user: AuthUser | null
 }): Promise<{ ok: boolean; error?: string; project?: Project }> {
-  const { lead, quotation, name, dueDate, notes, user } = params
+  const { lead, quotation, name, dueDate, user } = params
   const now = new Date().toISOString()
 
   // The client: reuse the one with the same phone, otherwise add it.
@@ -33,6 +37,7 @@ export async function convertLeadToProject(params: {
 
   const project: Project = {
     id: newId('prj'),
+    projectNumber: projectNumberForLead(lead),
     name: name.trim(),
     leadId: lead.id,
     quotationId: quotation?.id,
@@ -45,7 +50,6 @@ export async function convertLeadToProject(params: {
     status: 'active',
     contractValue: quotation?.netAmount,
     expectedHandoverDate: dueDate,
-    notes: notes?.trim() || undefined,
     statusHistory: user ? [{ stage: 'advance_payment', note: 'Project created from lead', updatedBy: user.name, updatedRole: user.role, updatedAt: now }] : undefined,
     createdAt: now,
     updatedAt: now,

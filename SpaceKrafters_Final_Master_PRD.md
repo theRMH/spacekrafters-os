@@ -42,6 +42,40 @@ integration change is explicitly specified.
 
 | --- \|
 
+## Change Notes — 21 Oct 2026 (confirmed decisions, now live)
+
+These supersede any older wording elsewhere in this document.
+
+-   **Appointment step removed.** The lead flow no longer has an
+    Appointment stage or screen. Qualified leads go to **Go to Site**
+    (recorded in Site Visits). Existing appointment data is kept read-only
+    for history; nothing new can be created.
+
+-   **Lead flow:** New -> Contacted -> Qualified -> Go to Site (Site
+    Visit Scheduled) -> Site Visit Done -> Requirements Captured ->
+    Quotation (PC review -> MD approval) -> Send to Client -> Client
+    decision -> Advance -> Design -> Won (Create Project).
+
+-   **Client decision on a quotation:** after MD approval and Send to
+    Client the quotation shows "Waiting for Client Approval" with
+    **Client Approved** / **Client Rejected** (reason required). On
+    rejection the MD sees the reason and chooses **Resend Quotation**
+    (back to PC, then MD approval, then to the client again) or **Drop
+    Lead** (lead moves to Lost with the reason).
+
+-   **MD override:** the Owner/MD can set any status or stage (forward or
+    back, reason optional) on leads, projects, product sales and MRFs,
+    and can edit records across Procurement, Finance, Daily Diary, Daily
+    Tasks and task details. Every override/edit is written to the audit
+    log. Financial records can be corrected but not deleted.
+
+-   **Lead sorting:** the Leads list and the sidebar share one set of
+    sorts (Lead Sort, Project Sort, Site Visit Sort); a new lead appears
+    only under Active until it is marked Contacted.
+
+-   **Quotation PDF:** generated from the quotation form (see 8.1) and
+    uploaded automatically as the quotation's document.
+
 ## Source of Truth Hierarchy
 
 1.  Confirmed decisions in the latest discovery conversation.
@@ -177,7 +211,7 @@ Personal Finance workspace and an Owner-only Combined Financial View.
 
 -   My Work
 
--   CRM: Leads, Lead Detail, Appointments, Follow-ups
+-   CRM: Leads, Lead Detail, Follow-ups
 
 -   Site Visits & Requirements
 
@@ -256,7 +290,7 @@ Personal Finance workspace and an Owner-only Combined Financial View.
 
 # 4. End-to-End Operating Flow
 
-| Primary business flow`<br>`{=html}Lead -\> Appointment -\> Site Visit
+| Primary business flow`<br>`{=html}Lead -\> Go to Site -\> Site Visit
   -\> Measurements / Requirements -\> Proposal / BOQ / Quotation -\>
   Design -\> Client Approval -\> Advance / Payment Milestone -\> Project
   Creation / Execution -\> Tasks & Gantt -\> Procurement / Expense
@@ -304,7 +338,7 @@ Personal Finance workspace and an Owner-only Combined Financial View.
 -   Project Snapshot: active/delayed projects, stage delays, project
     margin/budget alerts.
 
--   CRM Snapshot: active leads, follow-ups, appointments, conversion and
+-   CRM Snapshot: active leads, follow-ups, site visits, conversion and
     SLA breaches.
 
 -   Team Snapshot: overdue tasks, late updates, workload and
@@ -331,23 +365,33 @@ designed for private use.
 
 -   Activity log for calls, notes, messages and changes.
 
--   Appointments and follow-ups.
+-   Follow-ups (the Appointment step has been replaced by Go to Site —
+    see Change Notes).
+
+-   Lead status sheet with one clear next action per stage; the MD can
+    override a lead's status at any time.
 
 -   SLA rules and breach alerts.
 
--   Lead conversion into client/project.
+-   Lead conversion into client/project (Mark Won -> Create Project,
+    with client and contract value prefilled from the quotation).
 
 -   Search, filters, saved views and owner reporting.
 
 # 7. Site Visits & Requirements
 
--   Schedule and assign site visits.
+-   Go to Site: schedule and assign site visits. Each visit records a
+    **Visit Type** (With customer / Without customer).
 
 -   Measurements, observations, room-wise requirements and checklists.
+    A room's total is Length x Width in sq.ft; Height is recorded and
+    shown beneath the total but is not part of the calculation. The
+    visit checklist is a single list of tick boxes.
 
 -   Photos, attachments and evidence.
 
--   Visit status and history.
+-   Visit status and history; Site Visits can be sorted by Scheduled /
+    Done.
 
 -   Convert approved site information into project requirements/BOQ
     inputs.
@@ -364,14 +408,23 @@ designed for private use.
 -   Client/project details, sections, line items, specification,
     quantity, unit, rate, taxes, discounts, terms and payment terms.
 
--   Draft, internal approval, sent, client approved, revision requested
-    and accepted states.
+-   Draft, PC review, MD approval, sent, client approved / client
+    rejected (reason) and accepted states, with Resend / Drop decided by
+    the MD after a client rejection.
 
 -   Version history and change trace.
 
--   Generate printable branded PDF.
+-   Generate the branded quotation PDF from the form ("Generate Quotation
+    PDF"): letterhead, QUOTATION header block (Kind Attn., Site, Project
+    Type, Date, Project MD / Lead / QS), BOQ table, totals, amount in
+    words, payment notes, sign-off and a Terms & Conditions page. The
+    per-project blocks (Payment Notes, Note, Terms & Conditions 1-6,
+    payment-stage table) are note boxes in the quotation form, prefilled
+    with default wording, and are placed into the template. Each item's
+    Description becomes the PDF description. The PDF is uploaded
+    automatically and attached to the quotation.
 
--   Download Excel.
+-   Excel download has been replaced by the PDF download.
 
 -   Email quotation from CRM with sent history.
 
@@ -985,7 +1038,8 @@ restricted to personal data.
 
 -   users, roles, permissions
 
--   leads, lead_activities, appointments, followups, site_visits
+-   leads, lead_activities, appointments (legacy, read-only), followups,
+    site_visits (with visit type)
 
 -   clients, vendors, parties
 

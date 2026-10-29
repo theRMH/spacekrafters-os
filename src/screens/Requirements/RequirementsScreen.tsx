@@ -32,12 +32,11 @@ function newLineItem(roomName = ''): RequirementLineItem {
   }
 }
 
-// Length×Width = area (sq.ft); adding Height upgrades it to volume (cu.ft).
+// Length × Width = area (sq.ft). Height is recorded but is not part of the calculation (same rule as Site Visits).
 // Blank/non-numeric inputs just produce no total yet, not an error.
-function calcLineItemTotal(length?: string, width?: string, height?: string): string {
-  const l = parseFloat(length ?? ''), w = parseFloat(width ?? ''), h = parseFloat(height ?? '')
+function calcLineItemTotal(length?: string, width?: string, _height?: string): string {
+  const l = parseFloat(length ?? ''), w = parseFloat(width ?? '')
   if (isNaN(l) || isNaN(w)) return ''
-  if (!isNaN(h) && h > 0) return `${(l * w * h).toLocaleString('en-IN', { maximumFractionDigits: 2 })} cu.ft`
   return `${(l * w).toLocaleString('en-IN', { maximumFractionDigits: 2 })} sq.ft`
 }
 
@@ -122,14 +121,14 @@ export default function RequirementsScreen({ embed }: { embed?: { leadId: string
   useEffect(() => {
     if (!embed || isLoading) return
     if (embed.edit) {
-      const visitIds = new Set(siteVisits.filter(v => v.leadId === embed.leadId).map(v => v.id))
+      const visitIds = new Set(siteVisits.filter(v => v.leadId === embed.leadId && v.status !== 'scheduled').map(v => v.id))
       const req = requirements.filter(r => visitIds.has(r.siteVisitId)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
       if (!req) { embed.onClose('No requirements to edit.'); return }
       setSelected(req)
       openEdit(req)
       return
     }
-    const visit = siteVisits.filter(v => v.leadId === embed.leadId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    const visit = siteVisits.filter(v => v.leadId === embed.leadId && v.status !== 'scheduled').sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     if (!visit) { embed.onClose('Record a site visit first.'); return }
     resetForm()
     handleSiteVisitPick(visit.id)
@@ -331,9 +330,10 @@ export default function RequirementsScreen({ embed }: { embed?: { leadId: string
                       <span className="text-xs font-semibold text-slate-600">{item.quantity} {item.unit}</span>
                     </div>
                     <p className="text-[12px] text-slate-500 mt-0.5">{item.description}</p>
-                    {item.calculatedTotal && (
-                      <p className="text-[12px] font-semibold text-indigo-600 mt-0.5">Total: {item.calculatedTotal}</p>
+                    {(calcLineItemTotal(item.lengthFt, item.widthFt) || item.calculatedTotal) && (
+                      <p className="text-[12px] font-semibold text-indigo-600 mt-0.5">Total: {calcLineItemTotal(item.lengthFt, item.widthFt) || item.calculatedTotal}</p>
                     )}
+                    {item.heightFt && <p className="text-[12px] text-slate-500">Height: {item.heightFt} ft</p>}
                   </div>
                 ))}
               </div>
@@ -381,7 +381,7 @@ export default function RequirementsScreen({ embed }: { embed?: { leadId: string
             ) : (
               <SearchableSelect
                 value={siteVisitId} onChange={handleSiteVisitPick}
-                options={siteVisits.map(v => ({ value: v.id, label: visitLabel(v) }))}
+                options={siteVisits.filter(v => v.status !== 'scheduled').map(v => ({ value: v.id, label: visitLabel(v) }))}
                 placeholder="Select a site visit…" searchPlaceholder="Search site visits…"
               />
             )}
@@ -433,6 +433,7 @@ export default function RequirementsScreen({ embed }: { embed?: { leadId: string
                   {item.calculatedTotal && (
                     <p className="text-xs font-semibold text-indigo-600">Total: {item.calculatedTotal}</p>
                   )}
+                  {item.heightFt && <p className="text-xs text-slate-500 -mt-1">Height: {item.heightFt} ft</p>}
                   <div className="flex items-center gap-2">
                     <input type="number" min="0" step="0.01" value={item.quantity || ''}
                       onChange={e => updateLineItem(item.id, { quantity: parseFloat(e.target.value) || 0 })}

@@ -15,9 +15,9 @@ import { getAllRequirements } from '../../services/requirementService'
 import { QuotationStatusCard } from '../Quotations/QuotationStatusCard'
 import { sendNotification } from '../../utils/notifications'
 import { DateField } from '../../components/forms/DateField'
-import { convertLeadToProject } from '../Projects/convertLeadToProject'
+import { convertLeadToProject, projectNumberForLead } from '../Projects/convertLeadToProject'
 import { PIPELINE, coreStatus, statusToSyncFromQuotation } from './leadPipeline'
-import type { Lead, LeadStatus, ManagedUser, Quotation } from '../../types'
+import type { Lead, LeadStatus, ManagedUser, Quotation, SiteVisit } from '../../types'
 
 // Lazy: these screens import LeadStatusSheet themselves, so a static import would be circular.
 const SiteVisitsScreen = lazy(() => import('../SiteVisits/SiteVisitsScreen'))
@@ -38,7 +38,7 @@ export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
   new:                    'New',
   contacted:              'Contacted',
   qualified:              'Qualified',
-  site_visit_scheduled:   'Site Visit Scheduled',
+  site_visit_scheduled:   'Site Visit Planned',
   site_visit_done:        'Site Visit Done',
   requirements_captured:  'Requirements Done',
   quotation_drafted:      'Quotation Created',
@@ -82,14 +82,14 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   const { updateLead } = useCRM()
 
   const [users, setUsers] = useState<ManagedUser[]>([])
-  const [hasSiteVisit, setHasSiteVisit] = useState(false)
+  // The lead's latest site visit: planned (date + team, nothing recorded yet) or recorded.
+  const [siteVisit, setSiteVisit] = useState<SiteVisit | null>(null)
   const [hasRequirement, setHasRequirement] = useState(false)
   const [quotation, setQuotation] = useState<Quotation | null>(null)
 
   const [showConvert, setShowConvert] = useState(false)
   const [convertName, setConvertName] = useState('')
   const [convertDue, setConvertDue] = useState('')
-  const [convertNotes, setConvertNotes] = useState('')
   const [convertError, setConvertError] = useState('')
   const [converting, setConverting] = useState(false)
   const [showLostReason, setShowLostReason] = useState(false)
@@ -114,7 +114,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     setReassignTo('')
     setShowLostReason(false)
     getManagedUsersDirectory().then(setUsers)
-    getAllSiteVisits().then(v => setHasSiteVisit(v.some(sv => sv.leadId === lead.id)))
+    getAllSiteVisits().then(v => setSiteVisit(v.filter(sv => sv.leadId === lead.id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null))
     getAllRequirements().then(async reqs => {
       const visits = await getAllSiteVisits()
       const myVisitIds = new Set(visits.filter(v => v.leadId === lead.id).map(v => v.id))
@@ -150,7 +150,6 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     const pad = (n: number) => String(n).padStart(2, '0')
     setConvertName(`${lead.name} - ${lead.city} Project`)
     setConvertDue(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`)
-    setConvertNotes('')
     setConvertError('')
     setShowConvert(true)
   }
@@ -159,7 +158,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   async function submitConvert() {
     setConverting(true)
     setConvertError('')
-    const result = await convertLeadToProject({ lead, quotation, name: convertName, dueDate: convertDue, notes: convertNotes, user })
+    const result = await convertLeadToProject({ lead, quotation, name: convertName, dueDate: convertDue, user })
     setConverting(false)
     if (!result.ok) { setConvertError(result.error ?? 'Could not create the project.'); return }
     setShowConvert(false)
@@ -211,7 +210,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
 
   // "Edit this stage": reopen the record behind the current stage (e.g. after the MD overrides the lead back to it).
   const editOptions: { kind: 'site-edit' | 'req-edit' | 'quote-edit'; label: string }[] = []
-  if (hasSiteVisit && can('edit_site_visit') && (stage === 'contacted' || stage === 'site_visit_done')) editOptions.push({ kind: 'site-edit', label: 'Edit Site Visit' })
+  if (siteVisit && siteVisit.status !== 'scheduled' && can('edit_site_visit') && (stage === 'contacted' || stage === 'site_visit_done')) editOptions.push({ kind: 'site-edit', label: 'Edit Site Visit' })
   if (hasRequirement && can('add_requirements') && (stage === 'site_visit_done' || stage === 'requirements_captured')) editOptions.push({ kind: 'req-edit', label: 'Edit Requirements' })
   if (quotation && can('create_quotation') && ['requirements_captured', 'quotation_drafted', 'client_approved'].includes(stage)) editOptions.push({ kind: 'quote-edit', label: 'Edit Quotation' })
 
@@ -239,17 +238,24 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
       case 'contacted':
         return (
           <div className="space-y-3">
-            {hasSiteVisit ? (
+            {/* Two steps: PLAN the visit (date + team), then RECORD it (rooms, measurements, checklist). */}
+            {!siteVisit ? (
+              <>
+                <p className="text-sm text-slate-600">Step 1 — plan the site visit: pick the date and who is going.</p>
+                <button onClick={() => setEmbed('site')} className={primaryBtn} style={navy}>Plan Site Visit</button>
+              </>
+            ) : siteVisit.status === 'scheduled' ? (
+              <>
+                <p className="text-sm text-slate-600">Site visit planned for <span className="font-bold text-slate-800">{new Date(siteVisit.visitDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>{siteVisit.teamMemberNames?.length ? ` · ${siteVisit.teamMemberNames.join(', ')}` : ''}.</p>
+                <p className="text-xs text-slate-400">Step 2 — after the visit, record the rooms, measurements and checklist.</p>
+                <button onClick={() => setEmbed('site-edit')} className={primaryBtn} style={navy}>Record Site Visit</button>
+              </>
+            ) : (
               <>
                 <p className="text-sm text-slate-600">Site visit is on record.</p>
                 <button disabled={saving} onClick={() => save('site_visit_done', 'Site visit completed')} className={primaryBtn} style={navy}>
                   Mark Site Visit Done
                 </button>
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-slate-600">Fill in the site visit — submitting it completes this step.</p>
-                <button onClick={() => setEmbed('site')} className={primaryBtn} style={navy}>Add Site Visit</button>
               </>
             )}
           </div>
@@ -325,7 +331,8 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   // Call takes the full row, solid green.
   const soloCall = stage === 'new' || stage === 'contacted' || stage === 'site_visit_done'
   const canLose = canAct && stage !== 'won' && stage !== 'lost'
-  const currentIdx = PIPELINE.findIndex(p => p.status === stage)
+  // A planned visit already counts as being in the Site Visit stage.
+  const currentIdx = PIPELINE.findIndex(p => p.status === (lead.status === 'site_visit_scheduled' ? 'site_visit_done' : stage))
 
   return (
     <>
@@ -445,10 +452,15 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
       </div>
     </BottomSheet>
 
-    {/* Convert to Project popup: name + due date (+ notes), then the project is created right here. */}
+    {/* Convert to Project popup: just the project name and the date, then the project is created right here. */}
     <BottomSheet isOpen={showConvert} onClose={() => !converting && setShowConvert(false)}>
       <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-5 space-y-4">
         <p className="text-xs font-extrabold text-emerald-700 uppercase tracking-wide">Convert to Project</p>
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Project ID</label>
+          <input value={projectNumberForLead(lead)} readOnly
+            className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-600" />
+        </div>
         <div>
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Project Name <span className="text-red-500">*</span></label>
           <input value={convertName} onChange={e => setConvertName(e.target.value)}
@@ -458,15 +470,10 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Project Due Date <span className="text-red-500">*</span></label>
           <DateField value={convertDue} onChange={setConvertDue} />
         </div>
-        <div>
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Notes <span className="font-normal text-slate-300">(optional)</span></label>
-          <textarea value={convertNotes} onChange={e => setConvertNotes(e.target.value)} rows={3} placeholder="Any additional notes…"
-            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 resize-none" />
-        </div>
         {convertError && <p className="text-xs text-red-600 font-semibold">{convertError}</p>}
         <button disabled={converting || !convertName.trim() || !convertDue} onClick={submitConvert}
           className="w-full py-4 rounded-2xl text-sm font-bold text-white bg-emerald-700 active:bg-emerald-800 disabled:opacity-50">
-          {converting ? "Converting…" : "✓ Convert to Project"}
+          {converting ? "Converting…" : "Continue"}
         </button>
       </div>
     </BottomSheet>

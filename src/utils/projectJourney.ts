@@ -33,7 +33,7 @@ export function buildJourney(opts: {
     events.push({ key: `appt-${appt.id}`, label: 'Appointment Scheduled', note: appt.location, by: appt.coordinatorName, at: appt.createdAt })
   }
   for (const sv of siteVisits) {
-    events.push({ key: `sv-${sv.id}`, label: 'Site Visit', note: `${sv.rooms.length} room(s) measured`, by: sv.teamMemberNames?.join(', '), at: sv.visitDate })
+    events.push({ key: `sv-${sv.id}`, label: sv.status === 'scheduled' ? 'Site Visit Planned' : 'Site Visit', note: sv.status === 'scheduled' ? undefined : `${sv.rooms.length} room(s) measured`, by: sv.teamMemberNames?.join(', '), at: sv.visitDate })
   }
   if (quotation) {
     events.push({ key: 'quote-created', label: 'Quotation Created', by: quotation.createdBy, at: quotation.createdAt })

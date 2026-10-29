@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { coreStatus, leadStatusForQuotation, statusToSyncFromQuotation } from './leadPipeline'
+import { coreStatus, leadNextAction, leadStatusForQuotation, statusToSyncFromQuotation } from './leadPipeline'
 import type { Quotation } from '../../types'
 
 function quotation(status: Quotation['status']): Quotation {
@@ -71,4 +71,13 @@ describe('coreStatus', () => {
     'stage %s is unchanged', status => {
       expect(coreStatus(status)).toBe(status)
     })
+})
+
+// The site visit is two steps (plan, then record) and the My Tasks heading says which one is next.
+describe('leadNextAction for the site visit', () => {
+  it('contacted -> plan it, planned -> record it, recorded -> requirements', () => {
+    expect(leadNextAction({ status: 'contacted' })).toBe('Plan Site Visit')
+    expect(leadNextAction({ status: 'site_visit_scheduled' })).toBe('Record Site Visit')
+    expect(leadNextAction({ status: 'site_visit_done' })).toBe('Add Requirements')
+  })
 })

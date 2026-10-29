@@ -312,6 +312,8 @@ export interface SiteVisit {
   leadId: string
   projectId?: string
   appointmentId?: string
+  // 'scheduled' = planned (date + team set, nothing measured yet); 'done' = recorded. Absent on older visits = done.
+  status?: 'scheduled' | 'done'
   // Go to Site: was the customer present at the visit. Optional — absent on older visits.
   customerPresence?: 'with_customer' | 'without_customer'
   visitDate: string
@@ -647,6 +649,7 @@ export interface DailyReport {
 
 export interface Project {
   id: string
+  projectNumber?: string
   name: string
   leadId?: string
   quotationId?: string

@@ -407,7 +407,7 @@ export default function ProjectsScreen() {
                 <span className="font-bold text-sm text-slate-800">{project.name}</span>
                 <StatusBadge status={project.status} />
               </div>
-              <p className="text-xs text-slate-500 mb-2">{project.clientName}</p>
+              <p className="text-xs text-slate-500 mb-2">{project.projectNumber ? `${project.projectNumber} · ` : ''}{project.clientName}</p>
               <div className="flex items-center justify-between">
                 <StatusBadge status={project.stage} />
                 <span className="text-xs font-semibold text-slate-600">{fmtCurrency(project.contractValue)}</span>

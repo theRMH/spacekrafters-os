@@ -251,14 +251,14 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
     setSiteChecklist(prev => prev.map(c => (c.id === id ? { ...c, answer: c.answer === 'yes' ? null : 'yes' } : c)))
   }
 
+  // Step 1 — PLAN the visit: the lead, the date and who goes. The rooms and measurements come later (recordVisit).
   async function handleAddVisit() {
-    const validRooms = rooms.filter(r => r.name.trim())
-    if (!leadId || !visitDate || validRooms.length === 0 || teamMemberIds.length === 0) {
-      setFormError('Lead, visit date, team members, and at least one named room are required.')
+    if (!leadId || !visitDate || teamMemberIds.length === 0) {
+      setFormError('Lead, visit date and team members are required.')
       return
     }
     if (visitDate < todayStr()) {
-      setFormError('Cannot log a site visit for a past date.')
+      setFormError('Cannot plan a site visit for a past date.')
       return
     }
     const now = new Date().toISOString()
@@ -266,23 +266,26 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
       id: `sv_${Date.now()}`,
       leadId, visitDate: new Date(visitDate).toISOString(), customerPresence,
       teamMemberIds, teamMemberNames: namesFor(teamMemberIds),
-      rooms: validRooms, checklist, siteChecklist, notes: notes.trim() || undefined,
+      status: 'scheduled',
+      rooms: [], checklist, siteChecklist, notes: notes.trim() || undefined,
       createdAt: now, updatedAt: now,
     }
     const result = await upsertSiteVisit(visit)
     if (!result.ok) { setFormError(result.error ?? 'Could not save site visit.'); return }
     setVisits(prev => [visit, ...prev])
-    // Submitting the visit is the confirmation — move the lead on to Site Visit Done by itself.
+    // Planning the visit moves the lead to Site Visit Planned.
     const lead = leads.find(l => l.id === leadId)
-    if (lead && ['new', 'contacted', 'qualified', 'site_visit_scheduled'].includes(lead.status)) {
-      await updateLead(lead.id, { status: 'site_visit_done' }, 'Site visit recorded')
+    if (lead && ['new', 'contacted', 'qualified'].includes(lead.status)) {
+      await updateLead(lead.id, { status: 'site_visit_scheduled' }, `Site visit planned for ${fmtDate(visit.visitDate)}`)
     }
-    dismiss(() => setShowNew(false), 'Site visit recorded — lead moved to Site Visit Done.')
-    setSnack({ open: true, msg: 'Site visit recorded!', type: 'success' })
+    dismiss(() => setShowNew(false), `Site visit planned for ${fmtDate(visit.visitDate)}.`)
+    setSnack({ open: true, msg: 'Site visit planned.', type: 'success' })
   }
 
+  // Step 2 — RECORD the planned visit (rooms, measurements, checklist), or edit one that is already recorded.
   async function handleUpdateVisit() {
     if (!selected) return
+    const recording = selected.status === 'scheduled'
     const validRooms = rooms.filter(r => r.name.trim())
     if (!visitDate || validRooms.length === 0 || teamMemberIds.length === 0) {
       setFormError('Visit date, team members, and at least one named room are required.')
@@ -291,14 +294,23 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
     const updated: SiteVisit = {
       ...selected, leadId, visitDate: new Date(visitDate).toISOString(), customerPresence,
       teamMemberIds, teamMemberNames: namesFor(teamMemberIds),
+      status: 'done',
       rooms: validRooms, checklist, siteChecklist, notes: notes.trim() || undefined,
       updatedAt: new Date().toISOString(),
     }
     const result = await upsertSiteVisit(updated)
     if (!result.ok) { setFormError(result.error ?? 'Could not update site visit.'); return }
     setVisits(prev => prev.map(v => (v.id === updated.id ? updated : v)))
-    dismiss(() => { setShowEdit(false); setSelected(null) }, 'Site visit updated.')
-    setSnack({ open: true, msg: 'Site visit updated.', type: 'success' })
+    if (recording) {
+      // Recording the planned visit moves the lead on to Site Visit Done by itself.
+      const lead = leads.find(l => l.id === updated.leadId)
+      if (lead && ['new', 'contacted', 'qualified', 'site_visit_scheduled'].includes(lead.status)) {
+        await updateLead(lead.id, { status: 'site_visit_done' }, 'Site visit recorded')
+      }
+    }
+    const doneMsg = recording ? 'Site visit recorded — lead moved to Site Visit Done.' : 'Site visit updated.'
+    dismiss(() => { setShowEdit(false); setSelected(null) }, doneMsg)
+    setSnack({ open: true, msg: recording ? 'Site visit recorded!' : 'Site visit updated.', type: 'success' })
   }
 
   async function confirmDelete() {
@@ -335,11 +347,14 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
     (!search || l.name.toLowerCase().includes(search.toLowerCase())))
   const showScheduled = view !== 'done'
   const showDone = view !== 'scheduled'
-  const nothingToShow = (!showScheduled || scheduledLeads.length === 0) && (!showDone || filtered.length === 0)
+  // Planned = visits with a date and team but nothing recorded yet; Done = recorded visits.
+  const plannedVisits = filtered.filter(v => v.status === 'scheduled')
+  const doneVisits = filtered.filter(v => v.status !== 'scheduled')
+  const nothingToShow = (!showScheduled || scheduledLeads.length + plannedVisits.length === 0) && (!showDone || doneVisits.length === 0)
   const statusChips = [
     { value: 'all' as const, label: 'All', count: scheduledLeads.length + filtered.length },
-    { value: 'scheduled' as const, label: 'Scheduled', count: scheduledLeads.length },
-    { value: 'done' as const, label: 'Done', count: filtered.length },
+    { value: 'scheduled' as const, label: 'Planned', count: scheduledLeads.length + plannedVisits.length },
+    { value: 'done' as const, label: 'Done', count: doneVisits.length },
   ]
 
   return (
@@ -374,14 +389,32 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
               <span className="text-slate-300 text-xs">|</span>
               <span className="text-xs text-slate-500">{lead.city}</span>
             </div>
-            <p className="text-xs text-slate-600">Site visit scheduled — not recorded yet</p>
+            <p className="text-xs text-slate-600">Site visit planned — not recorded yet</p>
             <button onClick={() => setQuickStatusLeadId(lead.id)}
               className="w-full mt-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 active:bg-blue-100">
               Update Status
             </button>
           </div>
         ))}
-        {!isLoading && showDone && filtered.map(visit => {
+        {!isLoading && showScheduled && plannedVisits.map(visit => (
+          <div key={visit.id} onClick={() => setSelected(visit)}
+            className="w-full text-left bg-white rounded-2xl shadow-card border border-slate-100 p-4 active:scale-[0.98] transition-transform cursor-pointer">
+            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+              <span className="text-sm font-bold text-slate-800">{leadName(visit.leadId)}</span>
+              <span className="text-slate-300 text-xs">|</span>
+              <span className="text-xs text-slate-500">{fmtDate(visit.visitDate)}</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700">Planned</span>
+            </div>
+            <p className="text-xs text-slate-600">{visit.customerPresence === 'without_customer' ? 'Without customer' : 'With customer'}{visit.teamMemberNames?.length ? ` · ${visit.teamMemberNames.join(', ')}` : ''}</p>
+            <PermissionGate permission="edit_site_visit">
+              <button onClick={e => { e.stopPropagation(); setSelected(visit); openEdit(visit) }}
+                className="w-full mt-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-xs font-bold text-blue-700 active:bg-blue-100">
+                Record Site Visit
+              </button>
+            </PermissionGate>
+          </div>
+        ))}
+        {!isLoading && showDone && doneVisits.map(visit => {
           const checked = visit.checklist.filter(c => c.checked).length
           return (
             <div key={visit.id} onClick={() => setSelected(visit)}
@@ -423,8 +456,11 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
               <span className="text-xs font-semibold text-slate-500">{fmtDate(selected.visitDate)}</span>
               <PermissionGate permission="edit_site_visit">
                 <button onClick={() => openEdit(selected)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
-                  Edit
+                  className={selected.status === 'scheduled'
+                    ? 'px-3 py-1.5 rounded-xl text-xs font-bold text-white active:opacity-90'
+                    : 'px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50'}
+                  style={selected.status === 'scheduled' ? { background: '#0F2A4A' } : undefined}>
+                  {selected.status === 'scheduled' ? 'Record Site Visit' : 'Edit'}
                 </button>
               </PermissionGate>
             </div>
@@ -508,7 +544,7 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
       <BottomSheet
         isOpen={showNew || showEdit}
         onClose={() => dismiss(() => { setShowNew(false); setShowEdit(false) })}
-        title={showEdit ? 'Edit Site Visit' : 'New Site Visit'}
+        title={showEdit ? (selected?.status === 'scheduled' ? 'Record Site Visit' : 'Edit Site Visit') : 'Plan Site Visit'}
         height="full"
       >
         <div className="space-y-3">
@@ -561,6 +597,8 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
             </div>
           </div>
 
+          {/* Planning only needs the lead, date and team — rooms, measurements and the checklist are filled in when the visit is recorded. */}
+          {!showNew && <>
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-semibold text-slate-500">Rooms *</label>
@@ -637,6 +675,8 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
             </div>
           </div>
 
+          </>}
+
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Notes</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
@@ -647,7 +687,7 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
             className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
             style={{ background: '#C9A24B' }}
           >
-            {showEdit ? 'Save Changes' : 'Record Site Visit'}
+            {showEdit ? (selected?.status === 'scheduled' ? 'Save & Complete Site Visit' : 'Save Changes') : 'Plan Site Visit'}
           </button>
         </div>
       </BottomSheet>

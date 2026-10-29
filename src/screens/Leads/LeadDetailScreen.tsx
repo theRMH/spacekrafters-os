@@ -202,10 +202,16 @@ export default function LeadDetailScreen() {
             {!isLoading && siteVisits.map(v => (
               <div key={v.id} className="bg-white rounded-2xl border border-slate-100 p-4">
                 <p className="text-sm font-bold text-slate-800">{fmtDate(v.visitDate)}</p>
-                <p className="text-xs text-slate-600 mt-1">{v.rooms.length} room{v.rooms.length !== 1 ? 's' : ''} measured</p>
-                <p className="text-[12px] text-slate-400 mt-0.5">
-                  {v.checklist.filter(c => c.checked).length}/{v.checklist.length} checklist items done
-                </p>
+                {v.status === 'scheduled' ? (
+                  <p className="text-xs text-violet-700 font-semibold mt-1">Planned — not recorded yet</p>
+                ) : (
+                  <>
+                    <p className="text-xs text-slate-600 mt-1">{v.rooms.length} room{v.rooms.length !== 1 ? 's' : ''} measured</p>
+                    <p className="text-[12px] text-slate-400 mt-0.5">
+                      {v.checklist.filter(c => c.checked).length}/{v.checklist.length} checklist items done
+                    </p>
+                  </>
+                )}
               </div>
             ))}
             {!isLoading && siteVisits.length === 0 && (

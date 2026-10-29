@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { QUOTATION_STATUS_LABEL, quotationWorkflowInfo, fmtCurrency } from './QuotationsScreen'
 import { changeQuotationStatus, recordQuotationAdvanceDecision } from './quotationActions'
 import { QuotationPdfActions } from './QuotationPdfActions'
-import { CHANNEL_LABEL, type SendChannel } from './sendToClient'
+import { CHANNEL_LABEL, openWhatsApp, type SendChannel } from './sendToClient'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import type { AuthUser, Lead, Quotation } from '../../types'
 
@@ -178,13 +178,13 @@ export function QuotationStatusCard({ quotation, can, user, lead, updateLead, on
         </button>
       )}
 
-      {/* The PC records how the approved quotation went to the client (WhatsApp or Email) — in the quotation history
-          and the lead's activity. Nothing is opened or sent from here. */}
+      {/* The PC sends the approved quotation to the client and records how (WhatsApp or Email) in the quotation history
+          and the lead's activity. WhatsApp also opens the chat with the message ready; Email only records. */}
       {quotation.status === 'internally_approved' && canSendClient && (
         <div className="grid grid-cols-2 gap-2">
           {(Object.keys(CHANNEL_LABEL) as SendChannel[]).map(ch => (
             <button key={ch} disabled={saving}
-              onClick={() => act('sent_to_client', undefined, `Quotation sent via ${CHANNEL_LABEL[ch]}`)}
+              onClick={() => { if (ch === 'whatsapp') openWhatsApp(lead, quotation); act('sent_to_client', undefined, `Quotation sent via ${CHANNEL_LABEL[ch]}`) }}
               className="py-3 rounded-xl text-sm font-bold border border-blue-200 bg-blue-50 text-blue-700 active:bg-blue-100 disabled:opacity-50">
               Send via {CHANNEL_LABEL[ch]}
             </button>
