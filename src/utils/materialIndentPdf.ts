@@ -12,7 +12,7 @@ const PAD = 1.6
 
 // S.No · Category · Description · Specification / Brand · Unit · Qty Required · Remarks
 const COLS = [12, 26, 52, 38, 16, 18, 28]
-const HEADS = ['S.No', 'Category', 'Description', 'Specification / Brand', 'Unit', 'Qty Required', 'Remarks']
+const HEADS = ['S.No', 'Category', 'Description', 'Specification / Brand', 'Unit', 'Qty', 'Remarks']
 const CENTERED = new Set([0, 4, 5])
 
 function fmtDate(iso: string): string {

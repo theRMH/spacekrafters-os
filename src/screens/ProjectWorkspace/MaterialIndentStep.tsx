@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Plus, Trash2, Eye, Download, FileText } from 'lucide-react'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { FilePreviewModal } from '../../components/feedback/FilePreviewModal'
-import { MATERIAL_CATEGORIES } from '../../data/materialCategories'
+import { MATERIAL_CATEGORIES, MATERIAL_UNITS } from '../../data/materialCategories'
 import { generateAndUploadIndentPdf } from '../../utils/materialIndentPdf'
 import { deleteRemoteFile } from '../../utils/fileStorage'
 import { sendNotification } from '../../utils/notifications'
@@ -30,7 +30,7 @@ interface Props {
 const newId = () => `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 const today = () => new Date().toISOString().slice(0, 10)
 const fmtAt = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-const blankItem = (): IndentItem => ({ id: newId(), category: '', description: '', spec: '', unit: 'Nos', qty: '', remarks: '' })
+const blankItem = (): IndentItem => ({ id: newId(), category: '', description: '', spec: '', unit: '', qty: '', remarks: '' })
 
 const btn = 'w-full py-3 rounded-xl text-sm font-bold active:opacity-90 disabled:opacity-50'
 const input = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400'
@@ -245,6 +245,18 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
       <input type={type} value={form[key]} onChange={e => edit({ [key]: e.target.value })} className={input} />
     </div>
   )
+  // Prepared / Checked / Approved By: pick from everyone (the name is what prints on the PDF).
+  const names = [...new Set(users.map(u => u.fullName))].sort((a, b) => a.localeCompare(b))
+  const personField = (text: string, key: 'preparedBy' | 'checkedBy' | 'approvedBy') => (
+    <div>
+      <label className={label}>{text}</label>
+      <select value={form[key]} onChange={e => edit({ [key]: e.target.value })} className={input}>
+        <option value="">— Select —</option>
+        {[...names, ...(form[key] && !names.includes(form[key]) ? [form[key]] : [])].map(n => <option key={n} value={n}>{n}</option>)}
+      </select>
+    </div>
+  )
+
 
   return (
     <div className="space-y-4">
@@ -292,10 +304,13 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={label}>Unit *</label>
-                <input value={it.unit} onChange={e => editItem(it.id, { unit: e.target.value })} className={input} />
+                <select value={it.unit} onChange={e => editItem(it.id, { unit: e.target.value })} className={input}>
+                  <option value="">— Select —</option>
+                  {[...MATERIAL_UNITS, ...(it.unit && !MATERIAL_UNITS.includes(it.unit) ? [it.unit] : [])].map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
               </div>
               <div>
-                <label className={label}>Qty Required *</label>
+                <label className={label}>Qty *</label>
                 <input value={it.qty} onChange={e => editItem(it.id, { qty: e.target.value })} inputMode="decimal" className={input} />
               </div>
             </div>
@@ -311,9 +326,9 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
       </div>
 
       <div className="space-y-3">
-        {field('Prepared By', 'preparedBy')}
-        {field('Checked By', 'checkedBy')}
-        {field('Approved By', 'approvedBy')}
+        {personField('Prepared By', 'preparedBy')}
+        {personField('Checked By', 'checkedBy')}
+        {personField('Approved By', 'approvedBy')}
       </div>
 
       {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
