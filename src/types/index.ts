@@ -507,9 +507,13 @@ export interface Quotation {
 
 export type ProjectStage =
   | 'advance_payment'
-  | 'designing'
-  | 'execution'
+  | 'design_center'
+  | 'shop_drawing'
+  | 'mrf'
+  | 'material_intent'
   | 'procurement'
+  | 'waiting_for_delivery'
+  | 'execution'
   | 'handover_prep'
   | 'final_payment'
   | 'reconciliation'

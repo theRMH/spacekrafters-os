@@ -8,7 +8,6 @@ import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
 import { FilterChips } from '../../components/forms/FilterChips'
 import { DateField } from '../../components/forms/DateField'
-import { LocationPicker } from '../../components/forms/LocationPicker'
 import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Dialog } from '../../components/feedback/Dialog'
@@ -974,11 +973,11 @@ export default function LeadsScreen() {
             <input value={email} onChange={e => setEmail(e.target.value)} placeholder="optional"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
           </div>
-          <LocationPicker
-            city={city} onCityChange={setCity}
-            latitude={latitude} longitude={longitude}
-            onLocationChange={(lat, lng) => { setLatitude(lat); setLongitude(lng) }}
-          />
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Location / City *</label>
+            <input value={city} onChange={e => setCity(e.target.value)} placeholder="e.g. Anna Nagar, Chennai"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400" />
+          </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Company / Business Division <span className="font-normal text-slate-400">(optional)</span></label>
             <SearchableSelect value={businessDivision} onChange={onBusinessDivisionChange} options={BUSINESS_DIVISION_OPTIONS} />

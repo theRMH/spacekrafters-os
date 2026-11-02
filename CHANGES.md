@@ -1,5 +1,19 @@
 ## 2026-10-15
 
+## 2026-11-02
+
+### Removed: Pin My Location on the lead form
+**Commit:** Uncommitted  ·  no DB changes
+- **Changed:** `Leads/LeadsScreen.tsx` — the New/Edit Lead form no longer has the Location Pin button; Location / City is a plain text field. Coordinates already saved on older leads are kept.
+- **Removed:** `components/forms/LocationPicker.tsx` — only the lead form used it.
+
+### Changed: new project stages (Design Center, Shop Drawing, MRF, Material Intent, Procurement, Waiting for Delivery)
+**Commit:** Uncommitted  ·  no DB changes (the stage lives in the project's JSON)
+- **Changed:** `types/index.ts`, `ProjectWorkspace/ProjectStatusSheet.tsx` — stage order is now Advance Payment → Design Center → Shop Drawing → MRF → Material Intent → Procurement → Waiting for Delivery → Execution → Handover Prep → Final Payment → Reconciliation → Closed. `designing` is replaced by `design_center`. Responsible roles: Design Center = designer, Shop Drawing = QS, MRF = site engineer, Material Intent = QS, Procurement and Waiting for Delivery = purchase. The four new stages only have a "Submit for MD Approval" step for now; their detailed screens are not built.
+- **Changed:** `components/badges/StatusBadge.tsx` — labels and colours for the new stages.
+- **Changed:** `services/projectService.ts` — projects saved at the old `designing` stage are read as Design Center.
+- The Projects page stage chips and Project Sort pick the new stages up from the stage list automatically.
+
 ## 2026-10-23
 
 ### Added: Project ID in the Convert to Project popup (follows the lead's number)

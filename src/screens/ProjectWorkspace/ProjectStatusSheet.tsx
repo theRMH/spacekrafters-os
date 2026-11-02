@@ -19,9 +19,13 @@ import type { Project, ProjectStage, ManagedUser, UserRole, StatusHistoryItem } 
 // (the manual stage picker) should be kept in the same order.
 export const PROJECT_STAGE_ORDER: ProjectStage[] = [
   'advance_payment',
-  'designing',
-  'execution',
+  'design_center',
+  'shop_drawing',
+  'mrf',
+  'material_intent',
   'procurement',
+  'waiting_for_delivery',
+  'execution',
   'handover_prep',
   'final_payment',
   'reconciliation',
@@ -35,9 +39,13 @@ export function nextProjectStage(from: ProjectStage): ProjectStage {
 
 export const ROLE_FOR_PROJECT_STAGE: Partial<Record<ProjectStage, UserRole>> = {
   advance_payment:    'accounts',
-  designing:          'designer',
-  execution:          'site_engineer',
+  design_center:      'designer',
+  shop_drawing:       'qs',
+  mrf:                'site_engineer',
+  material_intent:    'qs',
   procurement:        'purchase',
+  waiting_for_delivery: 'purchase',
+  execution:          'site_engineer',
   handover_prep:      'project_coordinator',
   final_payment:      'accounts',
   reconciliation:     'accounts',
@@ -46,9 +54,13 @@ export const ROLE_FOR_PROJECT_STAGE: Partial<Record<ProjectStage, UserRole>> = {
 
 export const PROJECT_STAGE_LABEL: Record<ProjectStage, string> = {
   advance_payment:   'Advance Payment',
-  designing:         'Designing',
-  execution:         'Execution',
+  design_center:     'Design Center',
+  shop_drawing:      'Shop Drawing',
+  mrf:               'MRF',
+  material_intent:   'Material Intent',
   procurement:       'Procurement',
+  waiting_for_delivery: 'Waiting for Delivery',
+  execution:         'Execution',
   handover_prep:     'Handover Prep',
   final_payment:     'Final Payment',
   reconciliation:    'Reconciliation',
@@ -198,8 +210,15 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
   }
 
   async function submitDesigning() {
-    const next = nextProjectStage('designing')
+    const next = nextProjectStage('design_center')
     await submitForApproval(next, `Design finalized, ready to move to ${PROJECT_STAGE_LABEL[next]}`)
+  }
+
+  // Shop Drawing, MRF, Material Intent and Waiting for Delivery: their detailed screens are not built yet, so these
+  // only confirm the stage is done and ask to move on.
+  async function submitStageDone(stage: ProjectStage) {
+    const next = nextProjectStage(stage)
+    await submitForApproval(next, `${PROJECT_STAGE_LABEL[stage]} complete, ready to move to ${PROJECT_STAGE_LABEL[next]}`)
   }
 
   async function submitExecution() {
@@ -304,11 +323,23 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
             </button>
           </div>
         )
-      case 'designing':
+      case 'design_center':
         return (
           <div className="space-y-3">
             <p className="text-sm text-slate-600">Design is in progress — track it in the Design Center tab. Confirm here once the design is finalized and construction can begin.</p>
             <button disabled={saving} onClick={submitDesigning} className={primaryBtn} style={{ background: '#0F2A4A' }}>
+              Submit for MD Approval
+            </button>
+          </div>
+        )
+      case 'shop_drawing':
+      case 'mrf':
+      case 'material_intent':
+      case 'waiting_for_delivery':
+        return (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">Confirm {PROJECT_STAGE_LABEL[project.stage]} is complete and the project is ready to move to {PROJECT_STAGE_LABEL[nextProjectStage(project.stage)]}.</p>
+            <button disabled={saving} onClick={() => submitStageDone(project.stage)} className={primaryBtn} style={{ background: '#0F2A4A' }}>
               Submit for MD Approval
             </button>
           </div>

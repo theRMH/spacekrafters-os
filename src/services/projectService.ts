@@ -7,7 +7,11 @@ export async function getAllProjects(): Promise<Project[]> {
   if (!supabase) return []
   const { data, error } = await supabase.from(TABLE).select('data').order('created_at', { ascending: false })
   if (error || !data) return []
-  return data.map(r => r.data as Project)
+  // 'designing' was renamed Design Center; projects saved before that are read as Design Center.
+  return data.map(r => {
+    const project = r.data as Project
+    return (project.stage as string) === 'designing' ? { ...project, stage: 'design_center' } : project
+  })
 }
 
 export async function upsertProject(project: Project): Promise<{ ok: boolean; error?: string }> {
