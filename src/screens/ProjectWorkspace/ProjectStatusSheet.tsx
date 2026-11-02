@@ -10,6 +10,7 @@ import { getAllPunchListItems } from '../../services/punchListService'
 import { upsertProject } from '../../services/projectService'
 import { sendNotification } from '../../utils/notifications'
 import { StageWorkStep, isWorkStage } from './StageWorkStep'
+import { MaterialIndentStep } from './MaterialIndentStep'
 import type { Project, ProjectStage, ManagedUser, UserRole, StatusHistoryItem } from '../../types'
 
 // Single source of truth for stage sequence — the client will share their
@@ -299,6 +300,11 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
       return <StageWorkStep project={project} stage={project.stage} users={users} user={user} saving={saving} persist={persist} />
     }
 
+    // Material Intent: the QS fills in the indent, the PC approves or rejects it — same loop, open to both.
+    if (project.stage === 'material_intent') {
+      return <MaterialIndentStep project={project} users={users} user={user} saving={saving} persist={persist} />
+    }
+
     if (!canAct) {
       return (
         <p className="text-sm text-slate-500 py-6 text-center">
@@ -309,7 +315,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
 
     switch (project.stage) {
       case 'mrf':
-      case 'material_intent':
       case 'waiting_for_delivery':
         return (
           <div className="space-y-3">
@@ -396,7 +401,7 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title={`Update Status — ${PROJECT_STAGE_LABEL[project.stage]}`}>
       <div className="space-y-4">
-        {!project.pendingStageRequest && canAct && project.stage !== 'closed' && !isWorkStage(project.stage) && (
+        {!project.pendingStageRequest && canAct && project.stage !== 'closed' && project.stage !== 'material_intent' && !isWorkStage(project.stage) && (
           <p className="text-xs text-slate-400 -mt-2">Moving to the next stage needs MD approval before it takes effect.</p>
         )}
         {renderBody()}

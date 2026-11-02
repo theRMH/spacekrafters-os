@@ -672,6 +672,35 @@ export interface DesignWork {
   submissions: DesignSubmission[]
 }
 
+// One line of a Material Indent Form.
+export interface IndentItem {
+  id: string
+  category: string
+  description: string
+  spec: string
+  unit: string
+  qty: string
+  remarks: string
+}
+
+export interface IndentForm {
+  companyName: string
+  projectName: string
+  siteLocation: string
+  date: string            // yyyy-mm-dd
+  indentNo: string
+  preparedBy: string
+  checkedBy: string
+  approvedBy: string
+  items: IndentItem[]
+}
+
+// A Material Indent the QS sent to the PC: the form, its generated PDF (in `files`), and the PC's decision.
+export interface IndentSubmission extends DesignSubmission {
+  indent: IndentForm
+  submittedById: string
+}
+
 export interface Project {
   id: string
   projectNumber?: string
@@ -703,6 +732,8 @@ export interface Project {
   designWork?: DesignWork
   // The Shop Drawing stage: same loop, with a QS uploading the 2D drawing.
   shopDrawingWork?: DesignWork
+  // The Material Intent stage: the QS prepares the indent PDF for the PC to approve or send back.
+  materialIndents?: IndentSubmission[]
   // A stage-advance request the responsible role has submitted, sitting at
   // the current stage until the MD approves (moves to toStage) or rejects
   // (cleared, stage unchanged) — same pattern as MRF/Quotation/Design approval.

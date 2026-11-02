@@ -2,6 +2,14 @@
 
 ## 2026-11-02
 
+### Added: Material Intent stage — QS fills a Material Indent Form, makes a PDF, PC approves or rejects
+**Commit:** Uncommitted  ·  no DB changes (`Project.materialIndents` lives in the project's JSON)
+- **Added:** `ProjectWorkspace/MaterialIndentStep.tsx` — the QS enters the indent details (company, project, site location, date, indent no, prepared/checked/approved by) and material lines (Category picker, Description, Specification/Brand, Unit, Qty, Remarks), creates the PDF (View / Download / Delete), and sends it to the PC. The PC approves or rejects with a reason; a rejected indent comes back pre-filled for the QS to fix and resend. Approval does not move the stage — the PC then clicks **Move to Procurement** (the PC holds Procurement until it is assigned). Every version is kept in a history; the QS and PC get notifications.
+- **Added:** `utils/materialIndentPdf.ts` — draws the form on A4 with jsPDF (no watermark; column headings repeat on each page, signature block at the end).
+- **Added:** `data/materialCategories.ts` — Hardware, Plywood, False Ceiling, Electrical, Glass, Plumbing, Lights, Flooring (one list, easy to change).
+- **Changed:** `types/index.ts` — `IndentItem`, `IndentForm`, `IndentSubmission`, `Project.materialIndents`; `ProjectWorkspace/ProjectStatusSheet.tsx` — Material Intent renders this flow; `ProjectWorkspace/StageWorkStep.tsx` — My Tasks title for Material Intent (Prepare / Review / Revise Material Indent, Move to Procurement).
+
+
 ### Changed: Design Center approval no longer auto-moves; Shop Drawing runs the same flow with a QS
 **Commit:** Uncommitted  ·  no DB changes (`Project.shopDrawingWork` lives in the project's JSON)
 - **Added:** `ProjectWorkspace/StageWorkStep.tsx` (replaces `DesignCenterStep.tsx`) — one component for both stages. Design Center: PC assigns → architect uploads → PC approves/rejects (reason required, loops) → on approval the architect is told it is approved and the PC then clicks **Move to Shop Drawing**. Shop Drawing: PC assigns a QS, who is sent the approved design files from Design Center along with the request, uploads the 2D drawing, same approve/reject loop; after approval the PC picks a QS and clicks **Assign QS & Move to Material Intent**.
