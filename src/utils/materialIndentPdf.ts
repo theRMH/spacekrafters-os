@@ -48,6 +48,7 @@ export async function generateIndentPdf(form: IndentForm): Promise<Blob> {
   const info: [string, string][] = [
     ['Company Name', form.companyName], ['Project Name', form.projectName], ['Site Location', form.siteLocation],
     ['Date', fmtDate(form.date)], ['Indent No', form.indentNo],
+    ...(form.estimatedAmount ? [['Estimated Amount', 'Rs. ' + form.estimatedAmount] as [string, string]] : []),
   ]
   doc.setFontSize(10.5)
   for (const [label, value] of info) {

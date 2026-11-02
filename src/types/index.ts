@@ -693,12 +693,55 @@ export interface IndentForm {
   checkedBy: string
   approvedBy: string
   items: IndentItem[]
+  // The QS's estimate of the whole indent, in rupees — decides whether the PC can approve it or the MD must.
+  estimatedAmount?: string
 }
 
 // A Material Indent the QS sent to the PC: the form, its generated PDF (in `files`), and the PC's decision.
 export interface IndentSubmission extends DesignSubmission {
   indent: IndentForm
   submittedById: string
+  // Set when the PC forwarded it to the MD; until the MD decides, the QS can keep revising it.
+  sentToMd?: { by: string; byId: string; at: string }
+}
+
+// One product on a vendor's purchase order.
+export interface VendorLine {
+  id: string
+  category: string
+  description: string
+  spec: string
+  unit: string
+  qty: string
+  rate: string        // per unit, before GST
+  hsn: string
+  gstPercent: string
+}
+
+// One vendor the procurer raised a purchase order for, with its own generated PDF.
+export interface VendorOrder {
+  id: string
+  poNumber: string
+  name: string
+  gstin: string
+  phone: string
+  email: string
+  address: string
+  lines: VendorLine[]
+  pdf?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// The Procurement stage: the PC assigns a procurer, who creates the vendors (one PO PDF each) and sends them to the
+// PC for approval.
+export interface ProcurementWork {
+  procurerId: string
+  procurerName: string
+  assignedBy: string
+  assignedAt: string
+  vendors: VendorOrder[]
+  review?: { status: 'with_pc' | 'approved' | 'rejected'; submittedBy: string; submittedAt: string; decidedBy?: string; decidedAt?: string; reason?: string }
 }
 
 export interface Project {
@@ -734,6 +777,8 @@ export interface Project {
   shopDrawingWork?: DesignWork
   // The Material Intent stage: the QS prepares the indent PDF for the PC to approve or send back.
   materialIndents?: IndentSubmission[]
+  // The Procurement stage: the procurer's vendors and their purchase-order PDFs, for the PC to approve.
+  procurementWork?: ProcurementWork
   // A stage-advance request the responsible role has submitted, sitting at
   // the current stage until the MD approves (moves to toStage) or rejects
   // (cleared, stage unchanged) — same pattern as MRF/Quotation/Design approval.

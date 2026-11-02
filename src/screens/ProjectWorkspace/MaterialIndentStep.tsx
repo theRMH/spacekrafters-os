@@ -3,6 +3,9 @@ import { Plus, Trash2, Eye, Download, FileText } from 'lucide-react'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { FilePreviewModal } from '../../components/feedback/FilePreviewModal'
 import { MATERIAL_CATEGORIES, MATERIAL_UNITS } from '../../data/materialCategories'
+import { MD_APPROVAL_LIMIT } from '../../data/procurementRules'
+import { ROLE_LABELS } from '../../data/permissions'
+import { inr, parseAmount } from '../../utils/purchaseOrderMath'
 import { generateAndUploadIndentPdf } from '../../utils/materialIndentPdf'
 import { deleteRemoteFile } from '../../utils/fileStorage'
 import { sendNotification } from '../../utils/notifications'
@@ -14,8 +17,9 @@ const STAGE: ProjectStage = 'material_intent'
 export function materialIndentTaskTitle(project: Project): string {
   const last = project.materialIndents?.[project.materialIndents.length - 1]
   if (!last) return 'Prepare Material Indent'
-  if (last.decision === 'approved') return 'Move to Procurement'
+  if (last.decision === 'approved') return 'Assign Procurer & Move to Procurement'
   if (last.decision === 'rejected') return 'Revise Material Indent'
+  if (last.sentToMd) return 'Approve Material Indent (over limit)'
   return 'Review Material Indent'
 }
 
@@ -45,9 +49,15 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
   const inReview = !!last && !last.decision
   const rejected = last?.decision === 'rejected'
   const approved = last?.decision === 'approved'
+  // Over the limit the PC cannot approve: it goes to the MD, and the QS keeps working on it until the MD decides.
+  const withMd = inReview && !!last?.sentToMd
+  const amount = parseAmount(last?.indent.estimatedAmount)
+  const overLimit = amount > MD_APPROVAL_LIMIT
 
-  const isPc = user?.role === 'project_coordinator' || user?.role === 'owner'
-  const isQs = user?.role === 'qs' || user?.role === 'owner'
+  const isOwner = user?.role === 'owner'
+  const isPc = user?.role === 'project_coordinator' || isOwner
+  const isQs = user?.role === 'qs' || isOwner
+  const qsRevising = withMd && user?.role === 'qs'
 
   const [form, setForm] = useState<IndentForm>(() => {
     if (last) return { ...last.indent, items: last.indent.items.map(i => ({ ...i })) }
@@ -55,7 +65,7 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
       companyName: 'FGD & Space Krafters',
       projectName: project.projectNumber ? `${project.projectNumber} - ${project.name}` : project.name,
       siteLocation: '', date: today(), indentNo: '1',
-      preparedBy: user?.name ?? '', checkedBy: '', approvedBy: '', items: [blankItem()],
+      preparedBy: user?.name ?? '', checkedBy: '', approvedBy: '', items: [blankItem()], estimatedAmount: '',
     }
   })
   const [pdf, setPdf] = useState<{ url: string; blob: Blob; fileName: string } | null>(null)
@@ -63,6 +73,7 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  const [nextPersonId, setNextPersonId] = useState('')
   const [showReject, setShowReject] = useState(false)
   const [error, setError] = useState('')
 
@@ -73,6 +84,7 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
     if (!form.projectName.trim()) return 'Enter the project name.'
     if (!form.indentNo.trim()) return 'Enter the indent number.'
     if (!form.date) return 'Choose the date.'
+    if (parseAmount(form.estimatedAmount) <= 0) return 'Enter the estimated amount of the indent.'
     if (form.items.length === 0) return 'Add at least one item.'
     const bad = form.items.findIndex(i => !i.category || !i.description.trim() || !i.unit.trim() || !i.qty.trim())
     if (bad >= 0) return `Item ${bad + 1}: choose a category and enter the description, unit and quantity.`
@@ -112,8 +124,24 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
     return { id: pc?.id ?? project.coordinatorId, name: pc?.fullName ?? project.coordinatorName }
   }
 
+  function mdFor(): { id: string; name: string } {
+    const md = users.find(u => u.role === 'owner')
+    return { id: md?.id ?? '', name: md?.fullName ?? 'MD' }
+  }
+
   async function send() {
     if (!user || !pdf || stale) return
+    // The QS revising while the MD decides: the waiting indent is replaced in place and goes back to the MD.
+    if (qsRevising && last) {
+      const md = mdFor()
+      const revised = subs.map(s => s.id === last.id ? { ...s, files: [pdf.url], indent: form, submittedAt: new Date().toISOString() } : s)
+      const updated = await persist(
+        { materialIndents: revised, assignedRole: 'owner', assignedToId: md.id, assignedToName: md.name },
+        `Material indent ${form.indentNo} updated by ${user.name} while with the MD`, STAGE,
+      )
+      if (updated && md.id) await sendNotification([md.id], 'Material Indent Updated', `${project.name} — the QS updated material indent ${form.indentNo}.`, `/projects/${project.id}`)
+      return
+    }
     const submission: IndentSubmission = {
       id: newId(), files: [pdf.url], indent: form, submittedBy: user.name, submittedById: user.id, submittedAt: new Date().toISOString(),
     }
@@ -134,9 +162,25 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
     const pc = pcFor()
     const updated = await persist(
       { materialIndents: decide('approved'), assignedRole: 'project_coordinator', assignedToId: pc.id, assignedToName: pc.name },
-      `PC approved material indent ${last.indent.indentNo}`, STAGE,
+      `${isOwner ? 'MD' : 'PC'} approved material indent ${last.indent.indentNo}`, STAGE,
     )
-    if (updated) await sendNotification([last.submittedById], 'Material Indent Approved', `${project.name} — the PC approved material indent ${last.indent.indentNo}.`, `/my-tasks/project/${project.id}`)
+    if (updated) await sendNotification([last.submittedById], 'Material Indent Approved', `${project.name} — ${isOwner ? 'the MD' : 'the PC'} approved material indent ${last.indent.indentNo}.`, `/my-tasks/project/${project.id}`)
+  }
+
+  // The PC forwards the indent to the MD (required above the limit, optional below it).
+  async function sendToMd() {
+    if (!last || !user) return
+    const md = mdFor()
+    const forwarded = subs.map(s => s.id === last.id ? { ...s, sentToMd: { by: user.name, byId: user.id, at: new Date().toISOString() } } : s)
+    const updated = await persist(
+      { materialIndents: forwarded, assignedRole: 'owner', assignedToId: md.id, assignedToName: md.name },
+      `PC sent material indent ${last.indent.indentNo} to the MD for approval`, STAGE,
+    )
+    if (updated) {
+      const owners = users.filter(u => u.role === 'owner').map(u => u.id)
+      await sendNotification(owners, 'Material Indent Pending MD Approval', `${project.name} — material indent ${last.indent.indentNo} (about Rs. ${inr(amount)}) needs your approval.`, `/projects/${project.id}`)
+      await sendNotification([last.submittedById], 'Material Indent Sent to MD', `${project.name} — the PC sent material indent ${last.indent.indentNo} to the MD. You can keep revising it until the MD decides.`, `/my-tasks/project/${project.id}`)
+    }
   }
 
   async function reject() {
@@ -146,18 +190,23 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
     const qs = users.find(u => u.id === last.submittedById)
     const updated = await persist(
       { materialIndents: decide('rejected', reason), assignedRole: qs?.role ?? 'qs', assignedToId: last.submittedById, assignedToName: qs?.fullName ?? last.submittedBy },
-      `PC rejected material indent ${last.indent.indentNo}: ${reason}`, STAGE,
+      `${isOwner ? 'MD' : 'PC'} rejected material indent ${last.indent.indentNo}: ${reason}`, STAGE,
     )
-    if (updated) await sendNotification([last.submittedById], 'Material Indent Rejected', `${project.name} — PC rejected material indent ${last.indent.indentNo}: ${reason}`, `/my-tasks/project/${project.id}`)
+    if (updated) await sendNotification([last.submittedById], 'Material Indent Rejected', `${project.name} — ${isOwner ? 'MD' : 'PC'} rejected material indent ${last.indent.indentNo}: ${reason}`, `/my-tasks/project/${project.id}`)
   }
 
-  // Procurement is the next stage; the PC holds it until it is assigned, as after Design Center.
+  // The PC picks the procurer and moves the project to Procurement; the approved indent goes along with them.
   async function moveOn() {
-    const pc = pcFor()
-    await persist(
-      { stage: 'procurement', assignedRole: 'project_coordinator', assignedToId: pc.id, assignedToName: pc.name, pendingStageRequest: undefined },
-      'PC moved the project to Procurement', 'procurement',
+    const person = users.find(u => u.id === nextPersonId)
+    if (!person || !user) { setError('Choose the procurer.'); return }
+    const updated = await persist(
+      {
+        stage: 'procurement', assignedRole: person.role, assignedToId: person.id, assignedToName: person.fullName, pendingStageRequest: undefined,
+        procurementWork: { procurerId: person.id, procurerName: person.fullName, assignedBy: user.name, assignedAt: new Date().toISOString(), vendors: [] },
+      },
+      `PC moved the project to Procurement — assigned to ${person.fullName}`, 'procurement',
     )
+    if (updated) await sendNotification([person.id], 'Procurement Assigned', `${project.name} — you have been assigned Procurement. The approved material indent is attached.`, `/my-tasks/project/${project.id}`)
   }
 
   const history = subs.length > 0 && (
@@ -183,25 +232,45 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
     return (
       <div className="space-y-3">
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5">
-          <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Approved by PC</p>
+          <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Approved by {last.decidedBy ?? 'PC'}</p>
           <p className="text-sm text-emerald-700 mt-1">Material indent {last.indent.indentNo} is approved.</p>
         </div>
-        {isPc
-          ? <button disabled={saving} onClick={moveOn} className={`${btn} text-white`} style={{ background: '#059669' }}>Move to Procurement</button>
-          : <p className="text-sm text-slate-500 text-center py-1">Waiting for the PC to move the project to Procurement.</p>}
+        {isPc ? (
+          <>
+            <div>
+              <label className={label}>Procurer *</label>
+              <select value={nextPersonId} onChange={e => setNextPersonId(e.target.value)} className={input}>
+                <option value="">— Select —</option>
+                {[...users].sort((a, b) => a.fullName.localeCompare(b.fullName)).map(u => <option key={u.id} value={u.id}>{u.fullName}{u.role ? ` · ${ROLE_LABELS[u.role] ?? u.role}` : ''}</option>)}
+              </select>
+            </div>
+            {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
+            <button disabled={saving || !nextPersonId} onClick={moveOn} className={`${btn} text-white`} style={{ background: '#059669' }}>Assign Procurer & Move to Procurement</button>
+          </>
+        ) : <p className="text-sm text-slate-500 text-center py-1">Waiting for the PC to assign a procurer and move the project to Procurement.</p>}
         {history}
       </div>
     )
   }
 
-  // Sent — waiting for the PC.
-  if (inReview) {
+  // Sent — waiting for the PC (or, over the limit, the MD). The QS revising for the MD gets the form below instead.
+  if (inReview && !qsRevising) {
+    const mdTurn = withMd && !isOwner
+    const canDecide = isOwner || (isPc && !withMd)
     return (
       <div className="space-y-3">
         {isPc ? (
           <>
-            <p className="text-sm text-slate-600">The QS sent the material indent. Open the PDF below, then approve or reject.</p>
+            <p className="text-sm text-slate-600">The QS sent the material indent. Open the PDF below, then {canDecide ? 'decide' : 'wait for the MD'}.</p>
+            <div className={`rounded-xl border p-3 text-sm ${overLimit ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+              Estimated amount: <span className="font-bold">Rs. {inr(amount)}</span>
+              {overLimit
+                ? ` — above Rs. ${inr(MD_APPROVAL_LIMIT)}, so the MD must approve it.`
+                : ` — Rs. ${inr(MD_APPROVAL_LIMIT)} or less, so the PC can approve it.`}
+              {withMd && <span className="block text-xs mt-1">Sent to the MD by {last?.sentToMd?.by}. The QS can keep revising until the MD decides.</span>}
+            </div>
             {history}
+            {mdTurn && <p className="text-sm text-slate-500 text-center py-1">Waiting for the MD to approve or reject.</p>}
             {showReject ? (
               <div className="space-y-2">
                 <label className={label}>Reason for rejecting *</label>
@@ -212,12 +281,18 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
                   <button onClick={() => { setShowReject(false); setRejectReason(''); setError('') }} className={`flex-1 ${btn} border border-slate-200 bg-white text-slate-600`}>Back</button>
                 </div>
               </div>
-            ) : (
-              <div className="flex gap-2">
-                <button disabled={saving} onClick={approve} className={`flex-1 ${btn} text-white`} style={{ background: '#059669' }}>Approve</button>
-                <button disabled={saving} onClick={() => setShowReject(true)} className={`flex-1 ${btn} border border-red-200 bg-red-50 text-red-700`}>Reject</button>
+            ) : canDecide ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  {(isOwner || !overLimit) && <button disabled={saving} onClick={approve} className={`flex-1 ${btn} text-white`} style={{ background: '#059669' }}>Approve</button>}
+                  {!isOwner && overLimit && <button disabled={saving} onClick={sendToMd} className={`flex-1 ${btn} text-white`} style={{ background: '#0F2A4A' }}>Send to MD for Approval</button>}
+                  <button disabled={saving} onClick={() => setShowReject(true)} className={`flex-1 ${btn} border border-red-200 bg-red-50 text-red-700`}>Reject</button>
+                </div>
+                {!isOwner && !overLimit && (
+                  <button disabled={saving} onClick={sendToMd} className={`${btn} border border-slate-200 bg-white text-slate-600`}>Send to MD for Approval instead</button>
+                )}
               </div>
-            )}
+            ) : null}
           </>
         ) : (
           <>
@@ -229,7 +304,7 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
     )
   }
 
-  // With the QS — first indent, or a revision after a rejection.
+  // With the QS — first indent, a revision after a rejection, or work on it while the MD decides.
   if (!isQs) {
     return (
       <div className="space-y-3">
@@ -266,7 +341,13 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
           <p className="text-sm text-red-700 mt-1">{last.reason}</p>
         </div>
       )}
-      <p className="text-sm text-slate-600">Fill in the material indent, create the PDF, then send it to the PC for approval.</p>
+      {qsRevising && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5">
+          <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">With the MD</p>
+          <p className="text-sm text-amber-800 mt-1">Your indent is waiting for MD approval. You can keep working on it; send the updated PDF to the MD when ready.</p>
+        </div>
+      )}
+      <p className="text-sm text-slate-600">Fill in the material indent, create the PDF, then send it to the {qsRevising ? 'MD' : 'PC'} for approval.</p>
 
       <div className="space-y-3">
         {field('Company Name', 'companyName')}
@@ -275,6 +356,11 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
         <div className="grid grid-cols-2 gap-3">
           {field('Date *', 'date', 'date')}
           {field('Indent No *', 'indentNo')}
+        </div>
+        <div>
+          <label className={label}>Estimated Amount (Rs.) *</label>
+          <input value={form.estimatedAmount ?? ''} onChange={e => edit({ estimatedAmount: e.target.value })} inputMode="decimal" className={input} />
+          <p className="text-[11px] text-slate-400 mt-1">Above Rs. {inr(MD_APPROVAL_LIMIT)} the MD must approve the indent; otherwise the PC can.</p>
         </div>
       </div>
 
@@ -353,7 +439,7 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
         {busy ? 'Creating PDF…' : pdf ? 'Create PDF Again' : 'Create PDF'}
       </button>
       <button disabled={saving || busy || !pdf || stale} onClick={send} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
-        Send to PC for Approval
+        {qsRevising ? 'Send Updated Indent to MD' : 'Send to PC for Approval'}
       </button>
       {history}
     </div>

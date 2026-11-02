@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { materialIndentTaskTitle } from './MaterialIndentStep'
+import { procurementTaskTitle } from './ProcurementStep'
 import { sendNotification } from '../../utils/notifications'
 import { ROLE_LABELS } from '../../data/permissions'
 import type { AuthUser, DesignSubmission, DesignWork, ManagedUser, Project, ProjectStage } from '../../types'
@@ -30,6 +31,7 @@ function lastSubmission(work?: DesignWork): DesignSubmission | undefined { retur
 // The title a project shows in My Tasks while it sits in one of these stages (it follows whose turn it is).
 export function stageTaskTitle(project: Project): string | null {
   if (project.stage === 'material_intent') return materialIndentTaskTitle(project)
+  if (project.stage === 'procurement') return procurementTaskTitle(project)
   if (!isWorkStage(project.stage)) return null
   const cfg = STAGE_WORK[project.stage]
   const work = project[cfg.key]

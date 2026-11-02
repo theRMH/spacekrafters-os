@@ -4,13 +4,13 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { MdOverrideCard, withReason } from '../../components/forms/MdOverrideCard'
 import { useAuth } from '../../context/AuthContext'
 import { getManagedUsersDirectory } from '../../services/userService'
-import { getAllPurchaseOrders, getAllVendorBills } from '../../services/procurementService'
-import { getAllPayables, getAllPaymentMilestones } from '../../services/financeService'
+import { getAllPaymentMilestones } from '../../services/financeService'
 import { getAllPunchListItems } from '../../services/punchListService'
 import { upsertProject } from '../../services/projectService'
 import { sendNotification } from '../../utils/notifications'
 import { StageWorkStep, isWorkStage } from './StageWorkStep'
 import { MaterialIndentStep } from './MaterialIndentStep'
+import { ProcurementStep } from './ProcurementStep'
 import type { Project, ProjectStage, ManagedUser, UserRole, StatusHistoryItem } from '../../types'
 
 // Single source of truth for stage sequence — the client will share their
@@ -78,7 +78,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
   const navigate = useNavigate()
 
   const [users, setUsers] = useState<ManagedUser[]>([])
-  const [procurementComplete, setProcurementComplete] = useState(false)
   const [unresolvedPunchItems, setUnresolvedPunchItems] = useState(0)
   const [milestonesOutstanding, setMilestonesOutstanding] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -88,12 +87,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
   useEffect(() => {
     if (!isOpen) return
     getManagedUsersDirectory().then(setUsers)
-    Promise.all([getAllPurchaseOrders(), getAllVendorBills(), getAllPayables()]).then(([pos, bills, payables]) => {
-      const projectPoIds = new Set(pos.filter(po => po.projectId === project.id).map(po => po.id))
-      const projectBillIds = new Set(bills.filter(b => b.purchaseOrderId && projectPoIds.has(b.purchaseOrderId)).map(b => b.id))
-      const unpaidPayables = payables.filter(p => p.vendorBillId && projectBillIds.has(p.vendorBillId) && p.status !== 'paid').length
-      setProcurementComplete(projectPoIds.size > 0 && unpaidPayables === 0)
-    })
     getAllPunchListItems().then(items => setUnresolvedPunchItems(items.filter(i => i.projectId === project.id && i.status === 'open').length))
     getAllPaymentMilestones().then(ms => setMilestonesOutstanding(ms.filter(m => m.projectId === project.id && m.status !== 'received').length))
   }, [isOpen, project.id])
@@ -107,13 +100,14 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
     return { role, id: person?.id, name: person?.fullName }
   }
 
-  async function persist(patch: Partial<Project>, historyNote: string, historyStage: ProjectStage): Promise<Project | null> {
+  // `keepOpen` leaves the sheet open after saving; `quiet` skips the status-history entry (for work-in-progress saves).
+  async function persist(patch: Partial<Project>, historyNote: string, historyStage: ProjectStage, opts?: { keepOpen?: boolean; quiet?: boolean }): Promise<Project | null> {
     if (!user) return null
     setSaving(true)
     const historyEntry: StatusHistoryItem = { stage: historyStage, note: historyNote, updatedBy: user.name, updatedRole: user.role, updatedAt: new Date().toISOString() }
     const updated: Project = {
       ...project,
-      statusHistory: [...(project.statusHistory ?? []), historyEntry],
+      statusHistory: opts?.quiet ? project.statusHistory : [...(project.statusHistory ?? []), historyEntry],
       updatedAt: new Date().toISOString(),
       ...patch,
     }
@@ -121,7 +115,7 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
     setSaving(false)
     if (!result.ok) { onDone(result.error ?? 'Could not update status.'); return null }
     onDone(historyNote)
-    onClose()
+    if (!opts?.keepOpen) onClose()
     return updated
   }
 
@@ -215,11 +209,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
     await submitForApproval(next, `Ready to move to ${PROJECT_STAGE_LABEL[next]}`)
   }
 
-  async function submitProcurement() {
-    const next = nextProjectStage('procurement')
-    await submitForApproval(next, `Procurement complete, ready to move to ${PROJECT_STAGE_LABEL[next]}`)
-  }
-
   async function submitHandoverPrep() {
     const next = nextProjectStage('handover_prep')
     await submitForApproval(next, `Handover prepared, ready to move to ${PROJECT_STAGE_LABEL[next]}`)
@@ -305,6 +294,11 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
       return <MaterialIndentStep project={project} users={users} user={user} saving={saving} persist={persist} />
     }
 
+    // Procurement: the PC assigns a procurer, who creates the vendors (one PO PDF each) for the PC to approve.
+    if (project.stage === 'procurement') {
+      return <ProcurementStep project={project} users={users} user={user} saving={saving} persist={persist} />
+    }
+
     if (!canAct) {
       return (
         <p className="text-sm text-slate-500 py-6 text-center">
@@ -331,25 +325,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
             <button disabled={saving} onClick={submitExecution} className={primaryBtn} style={{ background: '#0F2A4A' }}>
               Submit for MD Approval
             </button>
-          </div>
-        )
-      case 'procurement':
-        return (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">
-              {procurementComplete
-                ? 'All purchase orders are billed and paid.'
-                : 'Purchase orders are still open or have unpaid bills.'}
-            </p>
-            {procurementComplete ? (
-              <button disabled={saving} onClick={submitProcurement} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-                Submit for MD Approval
-              </button>
-            ) : (
-              <button onClick={() => { onClose(); navigate('/procurement', { state: { projectId: project.id } }) }} className={secondaryBtn}>
-                Go to Procurement →
-              </button>
-            )}
           </div>
         )
       case 'handover_prep':
@@ -401,7 +376,7 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title={`Update Status — ${PROJECT_STAGE_LABEL[project.stage]}`}>
       <div className="space-y-4">
-        {!project.pendingStageRequest && canAct && project.stage !== 'closed' && project.stage !== 'material_intent' && !isWorkStage(project.stage) && (
+        {!project.pendingStageRequest && canAct && project.stage !== 'closed' && project.stage !== 'material_intent' && project.stage !== 'procurement' && !isWorkStage(project.stage) && (
           <p className="text-xs text-slate-400 -mt-2">Moving to the next stage needs MD approval before it takes effect.</p>
         )}
         {renderBody()}
