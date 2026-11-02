@@ -9,6 +9,7 @@ import { getAllPayables, getAllPaymentMilestones } from '../../services/financeS
 import { getAllPunchListItems } from '../../services/punchListService'
 import { upsertProject } from '../../services/projectService'
 import { sendNotification } from '../../utils/notifications'
+import { DesignCenterStep } from './DesignCenterStep'
 import type { Project, ProjectStage, ManagedUser, UserRole, StatusHistoryItem } from '../../types'
 
 // Single source of truth for stage sequence — the client will share their
@@ -201,11 +202,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
     setRejectReason(''); setShowRejectBox(false)
   }
 
-  async function submitDesigning() {
-    const next = nextProjectStage('design_center')
-    await submitForApproval(next, `Design finalized, ready to move to ${PROJECT_STAGE_LABEL[next]}`)
-  }
-
   // Shop Drawing, MRF, Material Intent and Waiting for Delivery: their detailed screens are not built yet, so these
   // only confirm the stage is done and ask to move on.
   async function submitStageDone(stage: ProjectStage) {
@@ -297,6 +293,12 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
   function renderBody() {
     if (project.pendingStageRequest) return renderPending()
 
+    // Design Center has its own flow (PC assigns the architect, the architect uploads, the PC approves or rejects),
+    // so it is open to the PC and the architect rather than only the stage's responsible role.
+    if (project.stage === 'design_center') {
+      return <DesignCenterStep project={project} users={users} user={user} saving={saving} persist={persist} responsibleFor={nextResponsible} />
+    }
+
     if (!canAct) {
       return (
         <p className="text-sm text-slate-500 py-6 text-center">
@@ -306,15 +308,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
     }
 
     switch (project.stage) {
-      case 'design_center':
-        return (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">Design is in progress — track it in the Design Center tab. Confirm here once the design is finalized and construction can begin.</p>
-            <button disabled={saving} onClick={submitDesigning} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Submit for MD Approval
-            </button>
-          </div>
-        )
       case 'shop_drawing':
       case 'mrf':
       case 'material_intent':
@@ -404,7 +397,7 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title={`Update Status — ${PROJECT_STAGE_LABEL[project.stage]}`}>
       <div className="space-y-4">
-        {!project.pendingStageRequest && canAct && project.stage !== 'closed' && (
+        {!project.pendingStageRequest && canAct && project.stage !== 'closed' && project.stage !== 'design_center' && (
           <p className="text-xs text-slate-400 -mt-2">Moving to the next stage needs MD approval before it takes effect.</p>
         )}
         {renderBody()}

@@ -47,6 +47,10 @@ export async function convertLeadToProject(params: {
     coordinatorId: lead.ownerId ?? user?.id ?? '',
     coordinatorName: lead.ownerName,
     stage: 'design_center',
+    // The PC's turn first: assign the architect and ask for the design.
+    assignedRole: 'project_coordinator',
+    assignedToId: lead.ownerId ?? user?.id,
+    assignedToName: lead.ownerName,
     status: 'active',
     contractValue: quotation?.netAmount,
     expectedHandoverDate: dueDate,

@@ -2,6 +2,13 @@
 
 ## 2026-11-02
 
+### Added: Design Center stage workflow (PC assigns architect → architect uploads → PC approves or rejects with reason)
+**Commit:** Uncommitted  ·  no DB changes (`Project.designWork` lives in the project's JSON)
+- **Added:** `ProjectWorkspace/DesignCenterStep.tsx` — the PC assigns an architect (designer) with an optional brief; the architect uploads the design file(s) and sends it to the PC; the PC approves (project moves straight to Shop Drawing, no MD step) or rejects with a mandatory reason; the architect sees the reason and re-uploads, repeating until approved. Every upload and decision is kept as a version history; the architect and PC get notifications.
+- **Changed:** `ProjectWorkspace/ProjectStatusSheet.tsx` — the Design Center stage renders this flow (open to the PC and the architect) instead of the generic "Submit for MD Approval".
+- **Changed:** `types/index.ts` — `DesignWork`, `DesignSubmission`, `Project.designWork`.
+- **Changed:** `Projects/convertLeadToProject.ts` — a new project starts assigned to the PC; `MyTasks/myTaskFeed.ts` — task titles Assign Architect / Upload Design / Review Design.
+
 ### Removed: Advance Payment project stage — Convert to Project now lands straight in Design Center
 **Commit:** Uncommitted  ·  no DB changes
 - **Changed:** `types/index.ts`, `ProjectWorkspace/ProjectStatusSheet.tsx`, `components/badges/StatusBadge.tsx` — `advance_payment` removed from the stage list, labels, roles and the status sheet. The advance is already taken on the lead, so the flow is Convert to Project → Design Center → Shop Drawing → …
