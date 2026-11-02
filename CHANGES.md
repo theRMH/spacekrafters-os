@@ -2,6 +2,10 @@
 
 ## 2026-11-02
 
+### Added: undo a vendor-order approval clicked by mistake
+**Commit:** Uncommitted  ·  no DB changes
+- **Changed:** `ProjectWorkspace/VendorOrdersPanel.tsx` — while a vendor order is approved (or handed to the procurer) but not yet sent to the vendor, the PC sees **Undo approval**; after a confirmation the order returns to "Waiting for PC approval", the hand-off is withdrawn, the procurer is told not to send it, and the step is logged.
+
 ### Changed: an approved vendor order goes to the procurer first, who then sends it to the vendor
 **Commit:** Uncommitted  ·  no DB changes
 - **Changed:** `ProjectWorkspace/VendorOrdersPanel.tsx` — after the PC approves a vendor order it shows **Approved — send to procurer**: the PC picks the procurer (the stage's procurer by default) and taps **Send to Procurer** (the procurer is notified). Only then does the order read **With procurer — ready to send** and show **Send to Vendor** (WhatsApp / Email, recorded) to that person, who also follows it through Order Placed → In Transit → Delivered. Others see who it is waiting for.

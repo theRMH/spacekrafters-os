@@ -30,6 +30,7 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
   const [reason, setReason] = useState('')
   const [sendingId, setSendingId] = useState<string | null>(null)
   const [handoffTo, setHandoffTo] = useState<Record<string, string>>({})
+  const [undoingId, setUndoingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   if (!work) return null
 
@@ -53,6 +54,17 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
 
   async function approve(v: VendorOrder) {
     await update(v, 'approved', 'PC approved')
+  }
+
+  // The PC takes back an approval made by mistake: the order returns to "Waiting for PC approval" (any hand-off to the
+  // procurer is withdrawn). Not possible once it has been sent to the vendor.
+  async function undoApproval(v: VendorOrder) {
+    const handedTo = v.sendById
+    const updated = await update(v, 'with_pc', 'PC took back the approval', { sendById: undefined, sendByName: undefined })
+    if (updated) {
+      setUndoingId(null)
+      if (handedTo) await sendNotification([handedTo], 'Vendor Order Withdrawn', `${project.name} — ${v.name} (${v.poNumber}) was taken back by the PC; do not send it yet.`, `/my-tasks/project/${project.id}`)
+    }
   }
 
   // The PC hands the approved order to the procurer (or whoever they name), who then sends it to the vendor.
@@ -152,6 +164,18 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
               </div>
             ) : (
               <button disabled={saving} onClick={() => { setSendingId(v.id); setError('') }} className={`${btn} w-full text-white`} style={{ background: '#0F2A4A' }}>Send to Vendor</button>
+            ))}
+            {/* PC: take an approval back (before the order has gone to the vendor). */}
+            {(status === 'approved' || status === 'with_procurer') && isPc && (undoingId === v.id ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 space-y-2">
+                <p className="text-xs text-amber-800">Take the approval back? The order returns to "Waiting for PC approval".</p>
+                <div className="flex gap-2">
+                  <button disabled={saving} onClick={() => undoApproval(v)} className={`${btn} border border-amber-300 bg-white text-amber-800`}>Yes, Undo Approval</button>
+                  <button onClick={() => setUndoingId(null)} className={`${btn} border border-slate-200 bg-white text-slate-600`}>Keep</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => setUndoingId(v.id)} className="text-xs font-semibold text-amber-700 underline">Undo approval</button>
             ))}
             {status === 'with_procurer' && !isSenderOf(v) && <p className="text-xs text-slate-500">Waiting for {senderOf(work, v).name} to send it to the vendor.</p>}
 
