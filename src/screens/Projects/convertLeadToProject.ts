@@ -46,11 +46,11 @@ export async function convertLeadToProject(params: {
     clientPhone: lead.phone,
     coordinatorId: lead.ownerId ?? user?.id ?? '',
     coordinatorName: lead.ownerName,
-    stage: 'advance_payment',
+    stage: 'design_center',
     status: 'active',
     contractValue: quotation?.netAmount,
     expectedHandoverDate: dueDate,
-    statusHistory: user ? [{ stage: 'advance_payment', note: 'Project created from lead', updatedBy: user.name, updatedRole: user.role, updatedAt: now }] : undefined,
+    statusHistory: user ? [{ stage: 'design_center', note: 'Project created from lead', updatedBy: user.name, updatedRole: user.role, updatedAt: now }] : undefined,
     createdAt: now,
     updatedAt: now,
   }

@@ -18,7 +18,6 @@ import type { Project, ProjectStage, ManagedUser, UserRole, StatusHistoryItem } 
 // buttons stay correct automatically. STAGE_OPTIONS in ProjectsScreen.tsx
 // (the manual stage picker) should be kept in the same order.
 export const PROJECT_STAGE_ORDER: ProjectStage[] = [
-  'advance_payment',
   'design_center',
   'shop_drawing',
   'mrf',
@@ -38,7 +37,6 @@ export function nextProjectStage(from: ProjectStage): ProjectStage {
 }
 
 export const ROLE_FOR_PROJECT_STAGE: Partial<Record<ProjectStage, UserRole>> = {
-  advance_payment:    'accounts',
   design_center:      'designer',
   shop_drawing:       'qs',
   mrf:                'site_engineer',
@@ -53,7 +51,6 @@ export const ROLE_FOR_PROJECT_STAGE: Partial<Record<ProjectStage, UserRole>> = {
 }
 
 export const PROJECT_STAGE_LABEL: Record<ProjectStage, string> = {
-  advance_payment:   'Advance Payment',
   design_center:     'Design Center',
   shop_drawing:      'Shop Drawing',
   mrf:               'MRF',
@@ -204,11 +201,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
     setRejectReason(''); setShowRejectBox(false)
   }
 
-  async function submitAdvance() {
-    const next = nextProjectStage('advance_payment')
-    await submitForApproval(next, `Advance payment recorded, ready to move to ${PROJECT_STAGE_LABEL[next]}`)
-  }
-
   async function submitDesigning() {
     const next = nextProjectStage('design_center')
     await submitForApproval(next, `Design finalized, ready to move to ${PROJECT_STAGE_LABEL[next]}`)
@@ -314,15 +306,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
     }
 
     switch (project.stage) {
-      case 'advance_payment':
-        return (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">Advance payment is recorded. Confirm the project is ready to move to {PROJECT_STAGE_LABEL[nextProjectStage('advance_payment')]}.</p>
-            <button disabled={saving} onClick={submitAdvance} className={primaryBtn} style={{ background: '#0F2A4A' }}>
-              Submit for MD Approval
-            </button>
-          </div>
-        )
       case 'design_center':
         return (
           <div className="space-y-3">

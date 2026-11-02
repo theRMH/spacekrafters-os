@@ -2,6 +2,13 @@
 
 ## 2026-11-02
 
+### Removed: Advance Payment project stage — Convert to Project now lands straight in Design Center
+**Commit:** Uncommitted  ·  no DB changes
+- **Changed:** `types/index.ts`, `ProjectWorkspace/ProjectStatusSheet.tsx`, `components/badges/StatusBadge.tsx` — `advance_payment` removed from the stage list, labels, roles and the status sheet. The advance is already taken on the lead, so the flow is Convert to Project → Design Center → Shop Drawing → …
+- **Changed:** `Projects/convertLeadToProject.ts`, `Projects/ProjectsScreen.tsx` — new projects start at Design Center.
+- **Changed:** `services/projectService.ts` — projects saved at Advance Payment (or the old Designing) are read as Design Center, and a pending "move to Design Center" request on them is cleared so there is nothing left to approve.
+- **Changed:** `Tasks/pipelineStage.test.ts` — uses Design Center instead of Advance Payment.
+
 ### Added: Update Status button on each project card
 **Commit:** Uncommitted  ·  no DB changes
 - **Changed:** `Projects/ProjectsScreen.tsx` — each card in the Projects list has an Update Status button (hidden once closed) that opens the same status sheet directly; the card is now a clickable div so the button isn't nested in a button.

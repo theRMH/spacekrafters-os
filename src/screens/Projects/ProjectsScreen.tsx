@@ -68,7 +68,7 @@ function emptyProject(): Project {
     clientName: '',
     clientPhone: '',
     coordinatorName: '',
-    stage: 'advance_payment',
+    stage: 'design_center',
     status: 'active',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

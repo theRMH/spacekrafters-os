@@ -34,7 +34,7 @@ function baseProject(overrides: Partial<Project> = {}): Project {
   return {
     id: 'proj_1', name: 'Test Project', leadId: 'lead_1',
     coordinatorId: 'u1', clientName: 'Test Lead', clientPhone: '9000000000',
-    coordinatorName: 'Raj Kamal', stage: 'advance_payment', status: 'active',
+    coordinatorName: 'Raj Kamal', stage: 'design_center', status: 'active',
     ...overrides,
   } as Project
 }
@@ -117,7 +117,7 @@ describe('pipelineBucket', () => {
     expect(pipelineBucket('requirements_captured')).toBe('requirements_quotation')
     expect(pipelineBucket('client_approved')).toBe('requirements_quotation')
     expect(pipelineBucket('won_pending_project')).toBe('won_pending_project')
-    expect(pipelineBucket('project_advance_payment')).toBe('project')
+    expect(pipelineBucket('project_design_center')).toBe('project')
     expect(pipelineBucket('project_closed')).toBe('project')
     expect(pipelineBucket('lost')).toBe('lost')
   })
@@ -131,7 +131,7 @@ describe('pipelineStageLabel', () => {
   })
 
   it('labels project_<stage> via the real PROJECT_STAGE_LABEL map', () => {
-    expect(pipelineStageLabel('project_advance_payment')).toBe('Advance Payment')
+    expect(pipelineStageLabel('project_design_center')).toBe('Design Center')
     expect(pipelineStageLabel('project_closed')).toBe('Closed')
   })
 

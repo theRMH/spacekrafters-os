@@ -506,7 +506,6 @@ export interface Quotation {
 }
 
 export type ProjectStage =
-  | 'advance_payment'
   | 'design_center'
   | 'shop_drawing'
   | 'mrf'

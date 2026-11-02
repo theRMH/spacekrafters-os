@@ -7,10 +7,14 @@ export async function getAllProjects(): Promise<Project[]> {
   if (!supabase) return []
   const { data, error } = await supabase.from(TABLE).select('data').order('created_at', { ascending: false })
   if (error || !data) return []
-  // 'designing' was renamed Design Center; projects saved before that are read as Design Center.
+  // 'designing' was renamed Design Center and the Advance Payment stage was dropped (the advance is taken on the
+  // lead); projects saved at either are read as Design Center, and a pending move into Design Center is cleared.
   return data.map(r => {
     const project = r.data as Project
-    return (project.stage as string) === 'designing' ? { ...project, stage: 'design_center' } : project
+    const old = project.stage as string
+    if (old !== 'designing' && old !== 'advance_payment') return project
+    const pending = project.pendingStageRequest?.toStage === 'design_center' ? undefined : project.pendingStageRequest
+    return { ...project, stage: 'design_center' as const, pendingStageRequest: pending }
   })
 }
 
