@@ -2,6 +2,10 @@
 
 ## 2026-11-02
 
+### Changed: saving a vendor sends it straight to the PC — one approval, no separate "Send to PC" step
+**Commit:** Uncommitted  ·  no DB changes
+- **Changed:** `ProjectWorkspace/ProcurementStep.tsx` — **Save Vendor & Send to PC** creates the PDF and puts the order with the PC for approval in one go (the PC is notified); an edited rejected order is resubmitted the same way. The separate **Send to PC for Approval** button only appears for old plain-draft vendors. After the PC approves, the procurer sends to the vendor — no second PC approval.
+
 ### Added: per-vendor approval, send to vendor (WhatsApp / Email, recorded), and Order Placed → In Transit → Delivered tracking
 **Commit:** Uncommitted  ·  no DB changes (statuses and the send/track log live on each vendor in the project's JSON; projects saved with the old whole-set review still read correctly)
 - **Added:** `ProjectWorkspace/VendorOrdersPanel.tsx` — each vendor order shows its status and the action open to the viewer: the **PC approves or rejects each vendor** (reason required, procurer fixes and resends); the **sender** (the procurer, or whoever the PC names under "Procurer to send the approved orders") taps **Send to Vendor** and picks **WhatsApp** (opens the vendor's chat with the PO PDF link) or **Email**, both recorded with who/when/how; then **Waiting for vendor response → Vendor Accepted (Order Placed) → Mark In Transit → Mark Delivered**, each step logged. Once every order has been sent the project moves to Waiting for Delivery by itself.

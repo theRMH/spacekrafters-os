@@ -103,8 +103,9 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
         ...draft, name: draft.name.trim(), gstin: draft.gstin.trim().toUpperCase(),
         poNumber: existing?.poNumber ?? `PO-${poBase}-${vendors.length + 1}`,
         createdAt: existing?.createdAt ?? now, updatedAt: now,
-        status: 'draft', rejectionReason: undefined,
-        log: [...(existing?.log ?? []), logEntry('draft', existing ? 'Edited' : 'Created', user?.name ?? 'Unknown')],
+        // Saving a vendor sends its order straight to the PC for approval — there is no separate send step.
+        status: 'with_pc', rejectionReason: undefined,
+        log: [...(existing?.log ?? []), logEntry('draft', existing ? 'Edited' : 'Created', user?.name ?? 'Unknown'), logEntry('with_pc', 'Sent to PC for approval', user?.name ?? 'Unknown')],
       }
       order.pdf = await generateAndUploadPurchaseOrderPdf(order, projectLabel)
       if (existing?.pdf) await deleteRemoteFile(existing.pdf)
@@ -112,9 +113,11 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
       const nextWork = { ...work, vendors: next, review: undefined }
       const updated = await persist(
         { procurementWork: nextWork, ...routeFor(nextWork, project, users) },
-        `${existing ? 'Updated' : 'Added'} vendor ${order.name} (${order.poNumber})`, STAGE, { keepOpen: true, quiet: true },
+        `${existing ? 'Updated' : 'Added'} vendor ${order.name} (${order.poNumber}) — sent to PC for approval`, STAGE, { keepOpen: true },
       )
       if (updated) {
+        const pcId = routeFor(nextWork, project, users).assignedToId
+        if (pcId) await sendNotification([pcId], 'Vendor Order Pending PC Approval', `${project.name} — ${order.name} (${order.poNumber}) is waiting for your approval.`, `/projects/${project.id}`)
         // "Save & add another vendor" opens the next vendor blank.
         setDraft(addAnother ? blankDraft() : null)
         setShowIndentPick(false)
@@ -144,7 +147,8 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
   }
 
   const statusOf = (v: VendorOrder) => work ? vendorStatus(work, v) : 'draft'
-  const toSubmit = vendors.filter(v => (statusOf(v) === 'draft' || statusOf(v) === 'rejected') && v.pdf)
+  // Only vendors saved before orders went to the PC on save can still be waiting as plain drafts.
+  const toSubmit = vendors.filter(v => statusOf(v) === 'draft' && v.pdf)
   const approvedUnsent = vendors.filter(v => statusOf(v) === 'approved')
 
   // The procurer sends the finished orders (drafts and rejected ones) to the PC, who approves or rejects each vendor.
@@ -301,7 +305,7 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
           Save & Add Another Vendor
         </button>
         <button disabled={busy || saving} onClick={() => saveVendor()} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
-          {busy ? 'Creating PDF…' : 'Save Vendor & Create PDF'}
+          {busy ? 'Creating PDF…' : 'Save Vendor & Send to PC'}
         </button>
         <button disabled={busy} onClick={() => { setDraft(null); setError('') }} className={`${btn} border border-slate-200 bg-white text-slate-600`}>Cancel</button>
       </div>
@@ -309,7 +313,7 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
   }
 
   const hint = isProcurer
-    ? 'Add each vendor with its products. A separate purchase-order PDF is made for every vendor. Send them to the PC for approval when ready.'
+    ? 'Add each vendor with its products. A separate purchase-order PDF is made for every vendor, and saving a vendor sends it to the PC for approval.'
     : isPc
       ? 'Approve or reject each vendor order. Approved orders are sent to the vendor by the procurer (or the person you name below).'
       : `Waiting for ${work.procurerName} to create the vendors.`
@@ -331,9 +335,9 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
           <button onClick={() => { setDraft(blankDraft()); setError('') }} className={`${btn} border border-dashed border-indigo-300 text-indigo-600 flex items-center justify-center gap-1.5`}>
             <Plus size={16} /> {vendors.length > 0 ? 'Add Another Vendor' : 'Add Vendor'}{vendors.length > 0 && remainingItems().length > 0 ? ` (${remainingItems().length} items left)` : ''}
           </button>
-          <button disabled={saving || toSubmit.length === 0} onClick={sendToPc} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
-            Send to PC for Approval{toSubmit.length > 0 ? ` (${toSubmit.length})` : ''}
-          </button>
+          {toSubmit.length > 0 && <button disabled={saving} onClick={sendToPc} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
+            Send to PC for Approval ({toSubmit.length})
+          </button>}
         </>
       )}
       {isPc && approvedUnsent.length > 0 && (
