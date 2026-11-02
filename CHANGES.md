@@ -2,6 +2,12 @@
 
 ## 2026-11-02
 
+### Changed: purchase order PDF redrawn to match the sample (logo, header boxes, shaded table)
+**Commit:** Uncommitted  ·  no DB changes
+- **Added:** `public/brand/fgd-logo.png` — the Future Group Distributors logo, taken from the sample PO.
+- **Changed:** `utils/purchaseOrderPdf.ts` — blue letter-spaced title, the logo beside the company details (bold GSTIN / PAN / Mobile / Email labels), PO number / date / place of supply / payment-by boxes, the vendor block under the buyer block, the project in the empty box, the table with plain headings, vertical rules only and every other row shaded, the empty body running down to the totals at the page bottom, Qty as "4 NOS", tax as "3,240.00 (18%)", and "INR … Rupees Only." wording. The logo is skipped if it cannot be loaded.
+- **Changed:** `data/procurementRules.ts` — `PO_COMPANY.logo`.
+
 ### Changed: Procurement vendor form — no GST check, Add Another above Create PDF, new vendors start blank
 **Commit:** Uncommitted  ·  no DB changes
 - **Changed:** `ProjectWorkspace/ProcurementStep.tsx` — the GST number is no longer required or format-checked; **Save & Add Another Vendor** now sits above **Save Vendor & Create PDF**; a new vendor opens with one blank product instead of being pre-filled with the remaining indent items (the "Add from approved indent" picker and the "Still to buy" card remain).

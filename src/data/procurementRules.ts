@@ -7,6 +7,7 @@ export const GST_PERCENT_OPTIONS = ['0', '5', '12', '18', '28']
 
 // The buyer printed at the top of every purchase order (taken from the sample PO). Edit here to change it.
 export const PO_COMPANY = {
+  logo: '/brand/fgd-logo.png',
   name: 'FUTURE GROUP DISTRIBUTORS',
   gstin: '33AJEPN8101A1ZW',
   pan: 'AJEPN8101A',
