@@ -95,6 +95,7 @@ export default function ProjectsScreen() {
   const [showDelete, setShowDelete] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
   const [showStatusSheet, setShowStatusSheet] = useState(false)
+  const [statusProject, setStatusProject] = useState<Project | null>(null)
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [quotationsLoaded, setQuotationsLoaded] = useState(false)
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([])
@@ -401,8 +402,8 @@ export default function ProjectsScreen() {
           <p className="text-sm text-slate-400 text-center py-10">No projects yet.</p>
         ) : (
           filtered.map(project => (
-            <button key={project.id} onClick={() => setSelected(project)}
-              className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50">
+            <div key={project.id} role="button" tabIndex={0} onClick={() => setSelected(project)}
+              className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50 cursor-pointer">
               <div className="flex items-start justify-between gap-2 mb-1">
                 <span className="font-bold text-sm text-slate-800">{project.name}</span>
                 <StatusBadge status={project.status} />
@@ -412,7 +413,14 @@ export default function ProjectsScreen() {
                 <StatusBadge status={project.stage} />
                 <span className="text-xs font-semibold text-slate-600">{fmtCurrency(project.contractValue)}</span>
               </div>
-            </button>
+              {project.status !== 'closed' && (
+                <button onClick={e => { e.stopPropagation(); setStatusProject(project); setShowStatusSheet(true) }}
+                  className="w-full mt-3 py-2.5 rounded-xl text-white text-sm font-bold active:opacity-90"
+                  style={{ background: '#0F2A4A' }}>
+                  Update Status →
+                </button>
+              )}
+            </div>
           ))
         )}
       </div>
@@ -568,7 +576,7 @@ export default function ProjectsScreen() {
                     Responsible: {selected.assignedToName ?? (ROLE_FOR_PROJECT_STAGE[selected.stage] ? ROLE_LABELS[ROLE_FOR_PROJECT_STAGE[selected.stage]!] : '—')}
                   </p>
                 </div>
-                <button onClick={() => setShowStatusSheet(true)}
+                <button onClick={() => { setStatusProject(selected); setShowStatusSheet(true) }}
                   className="w-full py-3.5 rounded-xl text-white text-sm font-bold active:opacity-90"
                   style={{ background: '#0F2A4A' }}>
                   Update Status →
@@ -595,15 +603,16 @@ export default function ProjectsScreen() {
         )}
       </BottomSheet>
 
-      {selected && (
+      {statusProject && (
         <ProjectStatusSheet
           isOpen={showStatusSheet}
           onClose={() => setShowStatusSheet(false)}
-          project={selected}
+          project={statusProject}
           onDone={async (msg) => {
             const updated = await getAllProjects()
             setProjects(updated)
-            setSelected(updated.find(p => p.id === selected.id) ?? null)
+            setStatusProject(updated.find(p => p.id === statusProject.id) ?? null)
+            setSelected(sel => sel ? updated.find(p => p.id === sel.id) ?? null : null)
             setSnack({ open: true, msg, type: 'success' })
           }}
         />

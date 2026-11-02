@@ -2,6 +2,10 @@
 
 ## 2026-11-02
 
+### Added: Update Status button on each project card
+**Commit:** Uncommitted  ·  no DB changes
+- **Changed:** `Projects/ProjectsScreen.tsx` — each card in the Projects list has an Update Status button (hidden once closed) that opens the same status sheet directly; the card is now a clickable div so the button isn't nested in a button.
+
 ### Removed: Pin My Location on the lead form
 **Commit:** Uncommitted  ·  no DB changes
 - **Changed:** `Leads/LeadsScreen.tsx` — the New/Edit Lead form no longer has the Location Pin button; Location / City is a plain text field. Coordinates already saved on older leads are kept.
