@@ -721,6 +721,20 @@ export interface VendorLine {
   gstPercent: string
 }
 
+// Where one vendor's purchase order is: the procurer drafts it, the PC approves it, it is sent to the vendor, the vendor
+// accepts (order placed), and it travels to site. A vendor saved before this existed has no status and reads as the
+// old set-level review (see vendorStatus in utils/vendorOrderFlow.ts).
+export type VendorOrderStatus = 'draft' | 'with_pc' | 'rejected' | 'approved' | 'sent' | 'order_placed' | 'in_transit' | 'delivered'
+
+export interface VendorOrderLogItem {
+  status: VendorOrderStatus
+  label: string
+  by: string
+  at: string
+  note?: string
+  via?: 'whatsapp' | 'email'
+}
+
 // One vendor the procurer raised a purchase order for, with its own generated PDF.
 export interface VendorOrder {
   id: string
@@ -732,6 +746,10 @@ export interface VendorOrder {
   address: string
   lines: VendorLine[]
   pdf?: string
+  status?: VendorOrderStatus
+  rejectionReason?: string
+  // Every step this order has been through (who, when, how it was sent), newest last.
+  log?: VendorOrderLogItem[]
   createdAt: string
   updatedAt: string
 }
@@ -744,6 +762,10 @@ export interface ProcurementWork {
   assignedBy: string
   assignedAt: string
   vendors: VendorOrder[]
+  // Who sends the approved orders to the vendors (the PC can name someone other than the procurer).
+  senderId?: string
+  senderName?: string
+  // Older whole-set review, kept so projects saved before per-vendor approval still read correctly.
   review?: { status: 'with_pc' | 'approved' | 'rejected'; submittedBy: string; submittedAt: string; decidedBy?: string; decidedAt?: string; reason?: string }
 }
 

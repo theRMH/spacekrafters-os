@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { materialIndentTaskTitle } from './MaterialIndentStep'
 import { procurementTaskTitle } from './ProcurementStep'
+import { waitingForDeliveryTaskTitle } from './WaitingForDeliveryStep'
 import { sendNotification } from '../../utils/notifications'
 import { ROLE_LABELS } from '../../data/permissions'
 import type { AuthUser, DesignSubmission, DesignWork, ManagedUser, Project, ProjectStage } from '../../types'
@@ -32,6 +33,7 @@ function lastSubmission(work?: DesignWork): DesignSubmission | undefined { retur
 export function stageTaskTitle(project: Project): string | null {
   if (project.stage === 'material_intent') return materialIndentTaskTitle(project)
   if (project.stage === 'procurement') return procurementTaskTitle(project)
+  if (project.stage === 'waiting_for_delivery') return waitingForDeliveryTaskTitle(project)
   if (!isWorkStage(project.stage)) return null
   const cfg = STAGE_WORK[project.stage]
   const work = project[cfg.key]

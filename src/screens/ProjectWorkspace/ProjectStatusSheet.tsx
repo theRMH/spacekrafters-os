@@ -11,6 +11,7 @@ import { sendNotification } from '../../utils/notifications'
 import { StageWorkStep, isWorkStage } from './StageWorkStep'
 import { MaterialIndentStep } from './MaterialIndentStep'
 import { ProcurementStep } from './ProcurementStep'
+import { WaitingForDeliveryStep } from './WaitingForDeliveryStep'
 import type { Project, ProjectStage, ManagedUser, UserRole, StatusHistoryItem } from '../../types'
 
 // Single source of truth for stage sequence — the client will share their
@@ -299,6 +300,11 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
       return <ProcurementStep project={project} users={users} user={user} saving={saving} persist={persist} />
     }
 
+    // Waiting for Delivery: each vendor order goes Order Placed → In Transit → Delivered; the PC then moves on to Execution.
+    if (project.stage === 'waiting_for_delivery') {
+      return <WaitingForDeliveryStep project={project} users={users} user={user} saving={saving} persist={persist} />
+    }
+
     if (!canAct) {
       return (
         <p className="text-sm text-slate-500 py-6 text-center">
@@ -309,7 +315,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
 
     switch (project.stage) {
       case 'mrf':
-      case 'waiting_for_delivery':
         return (
           <div className="space-y-3">
             <p className="text-sm text-slate-600">Confirm {PROJECT_STAGE_LABEL[project.stage]} is complete and the project is ready to move to {PROJECT_STAGE_LABEL[nextProjectStage(project.stage)]}.</p>
@@ -376,7 +381,7 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title={`Update Status — ${PROJECT_STAGE_LABEL[project.stage]}`}>
       <div className="space-y-4">
-        {!project.pendingStageRequest && canAct && project.stage !== 'closed' && project.stage !== 'material_intent' && project.stage !== 'procurement' && !isWorkStage(project.stage) && (
+        {!project.pendingStageRequest && canAct && project.stage !== 'closed' && project.stage !== 'material_intent' && project.stage !== 'procurement' && project.stage !== 'waiting_for_delivery' && !isWorkStage(project.stage) && (
           <p className="text-xs text-slate-400 -mt-2">Moving to the next stage needs MD approval before it takes effect.</p>
         )}
         {renderBody()}

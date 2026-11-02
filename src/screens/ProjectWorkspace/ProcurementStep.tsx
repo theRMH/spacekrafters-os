@@ -8,6 +8,8 @@ import { generateAndUploadPurchaseOrderPdf } from '../../utils/purchaseOrderPdf'
 import { inr, lineAmounts, orderTotals } from '../../utils/purchaseOrderMath'
 import { deleteRemoteFile } from '../../utils/fileStorage'
 import { sendNotification } from '../../utils/notifications'
+import { logEntry, routeFor, vendorStatus } from '../../utils/vendorOrderFlow'
+import { VendorOrdersPanel } from './VendorOrdersPanel'
 import type { AuthUser, IndentItem, ManagedUser, Project, ProjectStage, VendorLine, VendorOrder } from '../../types'
 
 const STAGE: ProjectStage = 'procurement'
@@ -16,11 +18,12 @@ const STAGE: ProjectStage = 'procurement'
 export function procurementTaskTitle(project: Project): string {
   const work = project.procurementWork
   if (!work) return 'Assign Procurer'
-  const status = work.review?.status
-  if (status === 'with_pc') return 'Review Vendor Orders'
-  if (status === 'approved') return 'Move to Waiting for Delivery'
-  if (status === 'rejected') return 'Revise Vendor Orders'
-  return work.vendors.length > 0 ? 'Send Vendor Orders to PC' : 'Create Vendors'
+  const statuses = work.vendors.map(v => vendorStatus(work, v))
+  if (statuses.length === 0) return 'Create Vendors'
+  if (statuses.includes('with_pc')) return 'Review Vendor Orders'
+  if (statuses.includes('rejected')) return 'Revise Vendor Orders'
+  if (statuses.includes('draft')) return 'Send Vendor Orders to PC'
+  return 'Send Orders to Vendors'
 }
 
 interface Props {
@@ -47,7 +50,6 @@ const blankDraft = (): Draft => ({ id: newId('ven'), name: '', gstin: '', phone:
 export function ProcurementStep({ project, users, user, saving, persist }: Props) {
   const work = project.procurementWork
   const vendors = work?.vendors ?? []
-  const status = work?.review?.status
   const isPc = user?.role === 'project_coordinator' || user?.role === 'owner'
   const isProcurer = !!work && (user?.id === work.procurerId || user?.role === 'owner')
   const projectLabel = project.projectNumber ? `${project.projectNumber} - ${project.name}` : project.name
@@ -58,8 +60,6 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
   const [draft, setDraft] = useState<Draft | null>(null)
   const [busy, setBusy] = useState(false)
   const [personId, setPersonId] = useState('')
-  const [rejectReason, setRejectReason] = useState('')
-  const [showReject, setShowReject] = useState(false)
   const [showIndentPick, setShowIndentPick] = useState(false)
   const [error, setError] = useState('')
 
@@ -70,11 +70,6 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
       {everyone.map(u => <option key={u.id} value={u.id}>{u.fullName}{u.role ? ` · ${ROLE_LABELS[u.role] ?? u.role}` : ''}</option>)}
     </>
   )
-
-  function pcFor(): { id: string; name: string } {
-    const pc = users.find(u => u.id === project.coordinatorId) ?? users.find(u => u.role === 'project_coordinator')
-    return { id: pc?.id ?? project.coordinatorId, name: pc?.fullName ?? project.coordinatorName }
-  }
 
   function editLine(id: string, patch: Partial<VendorLine>) {
     setDraft(d => d && { ...d, lines: d.lines.map(l => l.id === id ? { ...l, ...patch } : l) })
@@ -108,12 +103,15 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
         ...draft, name: draft.name.trim(), gstin: draft.gstin.trim().toUpperCase(),
         poNumber: existing?.poNumber ?? `PO-${poBase}-${vendors.length + 1}`,
         createdAt: existing?.createdAt ?? now, updatedAt: now,
+        status: 'draft', rejectionReason: undefined,
+        log: [...(existing?.log ?? []), logEntry('draft', existing ? 'Edited' : 'Created', user?.name ?? 'Unknown')],
       }
       order.pdf = await generateAndUploadPurchaseOrderPdf(order, projectLabel)
       if (existing?.pdf) await deleteRemoteFile(existing.pdf)
       const next = existing ? vendors.map(v => v.id === order.id ? order : v) : [...vendors, order]
+      const nextWork = { ...work, vendors: next, review: undefined }
       const updated = await persist(
-        { procurementWork: { ...work, vendors: next, review: status === 'rejected' ? undefined : work.review } },
+        { procurementWork: nextWork, ...routeFor(nextWork, project, users) },
         `${existing ? 'Updated' : 'Added'} vendor ${order.name} (${order.poNumber})`, STAGE, { keepOpen: true, quiet: true },
       )
       if (updated) {
@@ -145,85 +143,36 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
     if (updated) await sendNotification([person.id], 'Procurement Assigned', `${project.name} — you have been assigned Procurement.`, `/my-tasks/project/${project.id}`)
   }
 
+  const statusOf = (v: VendorOrder) => work ? vendorStatus(work, v) : 'draft'
+  const toSubmit = vendors.filter(v => (statusOf(v) === 'draft' || statusOf(v) === 'rejected') && v.pdf)
+  const approvedUnsent = vendors.filter(v => statusOf(v) === 'approved')
+
+  // The procurer sends the finished orders (drafts and rejected ones) to the PC, who approves or rejects each vendor.
   async function sendToPc() {
     if (!work || !user) return
-    if (vendors.length === 0 || vendors.some(v => !v.pdf)) { setError('Add at least one vendor — every vendor needs its PDF.'); return }
-    const pc = pcFor()
-    const updated = await persist(
-      {
-        procurementWork: { ...work, review: { status: 'with_pc', submittedBy: user.name, submittedAt: new Date().toISOString() } },
-        assignedRole: 'project_coordinator', assignedToId: pc.id, assignedToName: pc.name,
-      },
-      `Vendor orders (${vendors.length}) sent by ${user.name} to PC for approval`, STAGE,
-    )
-    if (updated) await sendNotification([pc.id], 'Vendor Orders Pending PC Approval', `${project.name} — ${vendors.length} vendor order(s) are waiting for your approval.`, `/projects/${project.id}`)
+    if (toSubmit.length === 0) { setError('Add a vendor first — every vendor needs its PDF.'); return }
+    const ids = new Set(toSubmit.map(v => v.id))
+    const next = {
+      ...work, review: undefined,
+      vendors: vendors.map(v => ids.has(v.id) ? { ...v, status: 'with_pc' as const, rejectionReason: undefined, log: [...(v.log ?? []), logEntry('with_pc', 'Sent to PC for approval', user.name)] } : v),
+    }
+    const route = routeFor(next, project, users)
+    const updated = await persist({ procurementWork: next, ...route }, `Vendor orders (${ids.size}) sent by ${user.name} to PC for approval`, STAGE)
+    if (updated && route.assignedToId) await sendNotification([route.assignedToId], 'Vendor Orders Pending PC Approval', `${project.name} — ${ids.size} vendor order(s) are waiting for your approval.`, `/projects/${project.id}`)
   }
 
-  async function approve() {
-    if (!work || !user) return
-    const pc = pcFor()
-    const updated = await persist(
-      {
-        procurementWork: { ...work, review: { ...work.review!, status: 'approved', decidedBy: user.name, decidedAt: new Date().toISOString(), reason: undefined } },
-        assignedRole: 'project_coordinator', assignedToId: pc.id, assignedToName: pc.name,
-      },
-      'PC approved the vendor orders', STAGE,
-    )
-    if (updated) await sendNotification([work.procurerId], 'Vendor Orders Approved', `${project.name} — the PC approved the vendor orders.`, `/my-tasks/project/${project.id}`)
+  // The PC names who sends the approved orders to the vendors (the procurer by default).
+  async function assignSender() {
+    const person = users.find(u => u.id === personId)
+    if (!person || !work) { setError('Choose who will send the orders.'); return }
+    const next = { ...work, senderId: person.id, senderName: person.fullName }
+    const updated = await persist({ procurementWork: next, ...routeFor(next, project, users) }, `${person.fullName} will send the approved orders to the vendors`, STAGE, { keepOpen: true })
+    if (updated) {
+      await sendNotification([person.id], 'Send Vendor Orders', `${project.name} — you are to send the approved purchase orders to the vendors.`, `/my-tasks/project/${project.id}`)
+      setPersonId('')
+    }
   }
 
-  async function reject() {
-    if (!work || !user) return
-    const reason = rejectReason.trim()
-    if (!reason) { setError('Enter the reason for rejecting.'); return }
-    const procurer = users.find(u => u.id === work.procurerId)
-    const updated = await persist(
-      {
-        procurementWork: { ...work, review: { ...work.review!, status: 'rejected', decidedBy: user.name, decidedAt: new Date().toISOString(), reason } },
-        assignedRole: procurer?.role ?? 'purchase', assignedToId: work.procurerId, assignedToName: work.procurerName,
-      },
-      `PC rejected the vendor orders: ${reason}`, STAGE,
-    )
-    if (updated) await sendNotification([work.procurerId], 'Vendor Orders Rejected', `${project.name} — PC rejected the vendor orders: ${reason}`, `/my-tasks/project/${project.id}`)
-  }
-
-  async function moveOn() {
-    if (!work) return
-    await persist(
-      { stage: 'waiting_for_delivery', assignedRole: 'purchase', assignedToId: work.procurerId, assignedToName: work.procurerName, pendingStageRequest: undefined },
-      'PC moved the project to Waiting for Delivery', 'waiting_for_delivery',
-    )
-  }
-
-  const vendorCards = vendors.length > 0 && (
-    <div className="space-y-2">
-      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Vendors ({vendors.length})</p>
-      {vendors.map(v => {
-        const t = orderTotals(v.lines)
-        const canEdit = isProcurer && status !== 'with_pc' && status !== 'approved'
-        return (
-          <div key={v.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-slate-800 truncate">{v.name}</p>
-                <p className="text-xs text-slate-500">{v.poNumber} · GST {v.gstin}</p>
-              </div>
-              <p className="text-sm font-bold text-slate-800 shrink-0">Rs. {inr(t.total)}</p>
-            </div>
-            <p className="text-xs text-slate-500">{v.lines.length} product{v.lines.length === 1 ? '' : 's'}</p>
-            {v.pdf && <MultiFileUploadField label="" files={[v.pdf]} onChange={() => {}} readOnly />}
-            {canEdit && (
-              <div className="flex gap-2">
-                <button onClick={() => { setDraft({ ...v }); setError('') }} className="flex-1 py-2 rounded-lg text-xs font-bold border border-slate-200 bg-white">Edit</button>
-                <button disabled={saving} onClick={() => removeVendor(v)} className="flex-1 py-2 rounded-lg text-xs font-bold border border-red-200 bg-red-50 text-red-700">Remove</button>
-              </div>
-            )}
-          </div>
-        )
-      })}
-      <p className="text-xs text-slate-500 text-right">All vendors: <span className="font-bold text-slate-800">Rs. {inr(vendors.reduce((s, v) => s + orderTotals(v.lines).total, 0))}</span></p>
-    </div>
-  )
 
   // 1. Nobody assigned (a project that reached Procurement without a procurer) — the PC picks one.
   if (!work) {
@@ -254,69 +203,6 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
       )}
     </div>
   )
-
-  // 2. Approved — the PC moves on to Waiting for Delivery.
-  if (status === 'approved') {
-    return (
-      <div className="space-y-3">
-        {header}
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5">
-          <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Approved by {work.review?.decidedBy ?? 'PC'}</p>
-          <p className="text-sm text-emerald-700 mt-1">The vendor orders are approved.</p>
-        </div>
-        {vendorCards}
-        {isPc
-          ? <button disabled={saving} onClick={moveOn} className={`${btn} text-white`} style={{ background: '#059669' }}>Move to Waiting for Delivery</button>
-          : <p className="text-sm text-slate-500 text-center py-1">Waiting for the PC to move the project to Waiting for Delivery.</p>}
-      </div>
-    )
-  }
-
-  // 3. Sent — waiting for the PC.
-  if (status === 'with_pc') {
-    return (
-      <div className="space-y-3">
-        {header}
-        {vendorCards}
-        {isPc ? (
-          showReject ? (
-            <div className="space-y-2">
-              <label className={label}>Reason for rejecting *</label>
-              <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={3} className={`${input} resize-none`} />
-              {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
-              <div className="flex gap-2">
-                <button disabled={saving} onClick={reject} className={`flex-1 ${btn} border border-red-200 bg-red-50 text-red-700`}>Confirm Reject</button>
-                <button onClick={() => { setShowReject(false); setRejectReason(''); setError('') }} className={`flex-1 ${btn} border border-slate-200 bg-white text-slate-600`}>Back</button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <button disabled={saving} onClick={approve} className={`flex-1 ${btn} text-white`} style={{ background: '#059669' }}>Approve</button>
-              <button disabled={saving} onClick={() => setShowReject(true)} className={`flex-1 ${btn} border border-red-200 bg-red-50 text-red-700`}>Reject</button>
-            </div>
-          )
-        ) : <p className="text-sm text-slate-500 text-center py-1">Sent to the PC — waiting for approval.</p>}
-      </div>
-    )
-  }
-
-  // 4. With the procurer — creating vendors, or revising after a rejection.
-  if (!isProcurer) {
-    return (
-      <div className="space-y-3">
-        {header}
-        <p className="text-sm text-slate-500 text-center py-2">Waiting for {work.procurerName} to create the vendors.</p>
-        {vendorCards}
-        {isPc && (
-          <div className="space-y-2 pt-1">
-            <label className={label}>Change procurer</label>
-            <select value={personId} onChange={e => setPersonId(e.target.value)} className={input}>{personOptions}</select>
-            {personId && <button disabled={saving} onClick={assignProcurer} className={`${btn} border border-slate-200 bg-white text-slate-600`}>Reassign Procurer</button>}
-          </div>
-        )}
-      </div>
-    )
-  }
 
   if (draft) {
     const t = orderTotals(draft.lines)
@@ -422,30 +308,41 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
     )
   }
 
+  const hint = isProcurer
+    ? 'Add each vendor with its products. A separate purchase-order PDF is made for every vendor. Send them to the PC for approval when ready.'
+    : isPc
+      ? 'Approve or reject each vendor order. Approved orders are sent to the vendor by the procurer (or the person you name below).'
+      : `Waiting for ${work.procurerName} to create the vendors.`
   return (
     <div className="space-y-3">
       {header}
-      {status === 'rejected' && work.review?.reason && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-3.5">
-          <p className="text-xs font-bold text-red-700 uppercase tracking-wide">Rejected by PC</p>
-          <p className="text-sm text-red-700 mt-1">{work.review.reason}</p>
-        </div>
-      )}
-      <p className="text-sm text-slate-600">Add each vendor with its products. A separate purchase-order PDF is made for every vendor.</p>
-      {vendorCards}
-      {approvedIndent && vendors.length > 0 && remainingItems().length > 0 && (
+      <p className="text-sm text-slate-600">{hint}</p>
+      <VendorOrdersPanel project={project} users={users} user={user} saving={saving} stage={STAGE} persist={persist}
+        onEdit={v => { setDraft({ ...v }); setError('') }} onRemove={removeVendor} />
+      {isProcurer && approvedIndent && vendors.length > 0 && remainingItems().length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1">
           <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">Still to buy ({remainingItems().length})</p>
           {remainingItems().map(it => <p key={it.id} className="text-xs text-amber-900">{it.description} · {it.qty} {it.unit}</p>)}
         </div>
       )}
       {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
-      <button onClick={() => { setDraft(blankDraft()); setError('') }} className={`${btn} border border-dashed border-indigo-300 text-indigo-600 flex items-center justify-center gap-1.5`}>
-        <Plus size={16} /> {vendors.length > 0 ? 'Add Another Vendor' : 'Add Vendor'}{vendors.length > 0 && remainingItems().length > 0 ? ` (${remainingItems().length} items left)` : ''}
-      </button>
-      <button disabled={saving || vendors.length === 0} onClick={sendToPc} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
-        Send to PC for Approval
-      </button>
+      {isProcurer && (
+        <>
+          <button onClick={() => { setDraft(blankDraft()); setError('') }} className={`${btn} border border-dashed border-indigo-300 text-indigo-600 flex items-center justify-center gap-1.5`}>
+            <Plus size={16} /> {vendors.length > 0 ? 'Add Another Vendor' : 'Add Vendor'}{vendors.length > 0 && remainingItems().length > 0 ? ` (${remainingItems().length} items left)` : ''}
+          </button>
+          <button disabled={saving || toSubmit.length === 0} onClick={sendToPc} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
+            Send to PC for Approval{toSubmit.length > 0 ? ` (${toSubmit.length})` : ''}
+          </button>
+        </>
+      )}
+      {isPc && approvedUnsent.length > 0 && (
+        <div className="border border-slate-200 rounded-xl p-3 space-y-2">
+          <label className={label}>Procurer to send the approved orders{work.senderName ? ` (now: ${work.senderName})` : ` (now: ${work.procurerName})`}</label>
+          <select value={personId} onChange={e => setPersonId(e.target.value)} className={input}>{personOptions}</select>
+          {personId && <button disabled={saving} onClick={assignSender} className={`${btn} border border-slate-200 bg-white text-slate-600`}>Assign to Send</button>}
+        </div>
+      )}
     </div>
   )
 }

@@ -2,6 +2,13 @@
 
 ## 2026-11-02
 
+### Added: per-vendor approval, send to vendor (WhatsApp / Email, recorded), and Order Placed → In Transit → Delivered tracking
+**Commit:** Uncommitted  ·  no DB changes (statuses and the send/track log live on each vendor in the project's JSON; projects saved with the old whole-set review still read correctly)
+- **Added:** `ProjectWorkspace/VendorOrdersPanel.tsx` — each vendor order shows its status and the action open to the viewer: the **PC approves or rejects each vendor** (reason required, procurer fixes and resends); the **sender** (the procurer, or whoever the PC names under "Procurer to send the approved orders") taps **Send to Vendor** and picks **WhatsApp** (opens the vendor's chat with the PO PDF link) or **Email**, both recorded with who/when/how; then **Waiting for vendor response → Vendor Accepted (Order Placed) → Mark In Transit → Mark Delivered**, each step logged. Once every order has been sent the project moves to Waiting for Delivery by itself.
+- **Added:** `ProjectWorkspace/WaitingForDeliveryStep.tsx` — the Waiting for Delivery stage: the vendor orders with the same tracking buttons and a delivered count; when all are delivered the PC moves the project to Execution.
+- **Added:** `utils/vendorOrderFlow.ts` (+ test) — status labels, who the project is assigned to at each point, the WhatsApp link, and reading old vendors.
+- **Changed:** `ProjectWorkspace/ProcurementStep.tsx` — the procurer sends finished orders (drafts and rejected ones) to the PC; the PC picks the sender; task titles follow the vendor statuses. `ProjectStatusSheet.tsx`, `StageWorkStep.tsx` — wire in the Waiting for Delivery step. `types/index.ts` — `VendorOrderStatus`, `VendorOrder.status/log/rejectionReason`, `ProcurementWork.senderId/senderName`.
+
 ### Changed: purchase order PDF redrawn to match the sample (logo, header boxes, shaded table)
 **Commit:** Uncommitted  ·  no DB changes
 - **Added:** `public/brand/fgd-logo.png` — the Future Group Distributors logo, taken from the sample PO.
