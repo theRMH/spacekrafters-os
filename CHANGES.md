@@ -2,6 +2,11 @@
 
 ## 2026-11-02
 
+### Changed: an approved vendor order goes to the procurer first, who then sends it to the vendor
+**Commit:** Uncommitted  ·  no DB changes
+- **Changed:** `ProjectWorkspace/VendorOrdersPanel.tsx` — after the PC approves a vendor order it shows **Approved — send to procurer**: the PC picks the procurer (the stage's procurer by default) and taps **Send to Procurer** (the procurer is notified). Only then does the order read **With procurer — ready to send** and show **Send to Vendor** (WhatsApp / Email, recorded) to that person, who also follows it through Order Placed → In Transit → Delivered. Others see who it is waiting for.
+- **Changed:** `utils/vendorOrderFlow.ts` (+ test) — new status `with_procurer`; the project is with the PC until the hand-off is done, then with the person it was handed to. `types/index.ts` — `VendorOrder.sendById/sendByName` replace the stage-wide sender; `ProcurementStep.tsx` / `WaitingForDeliveryStep.tsx` — the stage-wide "who sends" picker is removed.
+
 ### Changed: saving a vendor sends it straight to the PC — one approval, no separate "Send to PC" step
 **Commit:** Uncommitted  ·  no DB changes
 - **Changed:** `ProjectWorkspace/ProcurementStep.tsx` — **Save Vendor & Send to PC** creates the PDF and puts the order with the PC for approval in one go (the PC is notified); an edited rejected order is resubmitted the same way. The separate **Send to PC for Approval** button only appears for old plain-draft vendors. After the PC approves, the procurer sends to the vendor — no second PC approval.

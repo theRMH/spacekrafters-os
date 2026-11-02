@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { inr, orderTotals } from '../../utils/purchaseOrderMath'
 import { sendNotification } from '../../utils/notifications'
-import { VENDOR_STATUS_LABEL, VENDOR_STATUS_TINT, hasBeenSent, logEntry, openVendorWhatsApp, routeFor, vendorStatus } from '../../utils/vendorOrderFlow'
+import { VENDOR_STATUS_LABEL, VENDOR_STATUS_TINT, hasBeenSent, logEntry, openVendorWhatsApp, routeFor, senderOf, vendorStatus } from '../../utils/vendorOrderFlow'
+import { ROLE_LABELS } from '../../data/permissions'
 import type { AuthUser, ManagedUser, Project, ProjectStage, VendorOrder, VendorOrderStatus } from '../../types'
 
 interface Props {
@@ -28,13 +29,14 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [sendingId, setSendingId] = useState<string | null>(null)
+  const [handoffTo, setHandoffTo] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
   if (!work) return null
 
   const isOwner = user?.role === 'owner'
   const isPc = user?.role === 'project_coordinator' || isOwner
-  const senderId = work.senderId ?? work.procurerId
-  const isSender = user?.id === senderId || isOwner
+  // Whoever the PC handed an order to (the procurer by default) sends it to the vendor and follows it up.
+  const isSenderOf = (v: VendorOrder) => user?.id === senderOf(work, v).id || isOwner
   const isProcurer = user?.id === work.procurerId || isOwner
 
   async function update(v: VendorOrder, status: VendorOrderStatus, label: string, extra: Partial<VendorOrder> = {}, via?: 'whatsapp' | 'email', note?: string) {
@@ -50,8 +52,16 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
   }
 
   async function approve(v: VendorOrder) {
-    const updated = await update(v, 'approved', 'PC approved')
-    if (updated) await sendNotification([senderId], 'Vendor Order Approved', `${project.name} — ${v.name} (${v.poNumber}) is approved. Send it to the vendor.`, `/my-tasks/project/${project.id}`)
+    await update(v, 'approved', 'PC approved')
+  }
+
+  // The PC hands the approved order to the procurer (or whoever they name), who then sends it to the vendor.
+  async function handOff(v: VendorOrder) {
+    const person = users.find(u => u.id === (handoffTo[v.id] || work!.procurerId))
+    if (!person) { setError('Choose who will send it to the vendor.'); return }
+    setError('')
+    const updated = await update(v, 'with_procurer', `PC sent to ${person.fullName} to send to the vendor`, { sendById: person.id, sendByName: person.fullName })
+    if (updated) await sendNotification([person.id], 'Send Vendor Order', `${project.name} — ${v.name} (${v.poNumber}) is approved. Send it to the vendor.`, `/my-tasks/project/${project.id}`)
   }
 
   async function reject(v: VendorOrder) {
@@ -118,8 +128,20 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
               </div>
             ))}
 
-            {/* Sender: send the approved order to the vendor (recorded). */}
-            {status === 'approved' && isSender && (sendingId === v.id ? (
+            {/* PC: hand the approved order to the procurer. */}
+            {status === 'approved' && (isPc ? (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-500 block">Send to procurer</label>
+                <select value={handoffTo[v.id] ?? work.procurerId} onChange={e => setHandoffTo(h => ({ ...h, [v.id]: e.target.value }))}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-400">
+                  {[...users].sort((a, b) => a.fullName.localeCompare(b.fullName)).map(u => <option key={u.id} value={u.id}>{u.fullName}{u.role ? ` · ${ROLE_LABELS[u.role] ?? u.role}` : ''}</option>)}
+                </select>
+                <button disabled={saving} onClick={() => handOff(v)} className={`${btn} w-full text-white`} style={{ background: '#0F2A4A' }}>Send to Procurer</button>
+              </div>
+            ) : <p className="text-xs text-slate-500">Waiting for the PC to send it to the procurer.</p>)}
+
+            {/* Procurer: send the order to the vendor (recorded). */}
+            {status === 'with_procurer' && isSenderOf(v) && (sendingId === v.id ? (
               <div className="space-y-2">
                 <p className="text-xs text-slate-500">Send {v.poNumber} to {v.name} through:</p>
                 <div className="flex gap-2">
@@ -131,12 +153,12 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
             ) : (
               <button disabled={saving} onClick={() => { setSendingId(v.id); setError('') }} className={`${btn} w-full text-white`} style={{ background: '#0F2A4A' }}>Send to Vendor</button>
             ))}
-            {status === 'approved' && !isSender && <p className="text-xs text-slate-500">Waiting for {work.senderName ?? work.procurerName} to send it to the vendor.</p>}
+            {status === 'with_procurer' && !isSenderOf(v) && <p className="text-xs text-slate-500">Waiting for {senderOf(work, v).name} to send it to the vendor.</p>}
 
             {/* Sender: follow the order after it is sent. */}
-            {status === 'sent' && isSender && <button disabled={saving} onClick={() => advance(v, 'order_placed', 'Vendor accepted — order placed')} className={`${btn} w-full text-white`} style={{ background: '#4F46E5' }}>Vendor Accepted — Order Placed</button>}
-            {status === 'order_placed' && isSender && <button disabled={saving} onClick={() => advance(v, 'in_transit', 'Marked in transit')} className={`${btn} w-full text-white`} style={{ background: '#EA580C' }}>Mark In Transit</button>}
-            {status === 'in_transit' && isSender && <button disabled={saving} onClick={() => advance(v, 'delivered', 'Marked delivered')} className={`${btn} w-full text-white`} style={{ background: '#059669' }}>Mark Delivered</button>}
+            {status === 'sent' && isSenderOf(v) && <button disabled={saving} onClick={() => advance(v, 'order_placed', 'Vendor accepted — order placed')} className={`${btn} w-full text-white`} style={{ background: '#4F46E5' }}>Vendor Accepted — Order Placed</button>}
+            {status === 'order_placed' && isSenderOf(v) && <button disabled={saving} onClick={() => advance(v, 'in_transit', 'Marked in transit')} className={`${btn} w-full text-white`} style={{ background: '#EA580C' }}>Mark In Transit</button>}
+            {status === 'in_transit' && isSenderOf(v) && <button disabled={saving} onClick={() => advance(v, 'delivered', 'Marked delivered')} className={`${btn} w-full text-white`} style={{ background: '#059669' }}>Mark Delivered</button>}
 
             {/* Procurer: fix a draft or rejected order. */}
             {(status === 'draft' || status === 'rejected') && isProcurer && (onEdit || onRemove) && (

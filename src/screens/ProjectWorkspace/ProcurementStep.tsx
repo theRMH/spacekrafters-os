@@ -23,6 +23,7 @@ export function procurementTaskTitle(project: Project): string {
   if (statuses.includes('with_pc')) return 'Review Vendor Orders'
   if (statuses.includes('rejected')) return 'Revise Vendor Orders'
   if (statuses.includes('draft')) return 'Send Vendor Orders to PC'
+  if (statuses.includes('approved')) return 'Send Orders to Procurer'
   return 'Send Orders to Vendors'
 }
 
@@ -149,7 +150,6 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
   const statusOf = (v: VendorOrder) => work ? vendorStatus(work, v) : 'draft'
   // Only vendors saved before orders went to the PC on save can still be waiting as plain drafts.
   const toSubmit = vendors.filter(v => statusOf(v) === 'draft' && v.pdf)
-  const approvedUnsent = vendors.filter(v => statusOf(v) === 'approved')
 
   // The procurer sends the finished orders (drafts and rejected ones) to the PC, who approves or rejects each vendor.
   async function sendToPc() {
@@ -163,18 +163,6 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
     const route = routeFor(next, project, users)
     const updated = await persist({ procurementWork: next, ...route }, `Vendor orders (${ids.size}) sent by ${user.name} to PC for approval`, STAGE)
     if (updated && route.assignedToId) await sendNotification([route.assignedToId], 'Vendor Orders Pending PC Approval', `${project.name} — ${ids.size} vendor order(s) are waiting for your approval.`, `/projects/${project.id}`)
-  }
-
-  // The PC names who sends the approved orders to the vendors (the procurer by default).
-  async function assignSender() {
-    const person = users.find(u => u.id === personId)
-    if (!person || !work) { setError('Choose who will send the orders.'); return }
-    const next = { ...work, senderId: person.id, senderName: person.fullName }
-    const updated = await persist({ procurementWork: next, ...routeFor(next, project, users) }, `${person.fullName} will send the approved orders to the vendors`, STAGE, { keepOpen: true })
-    if (updated) {
-      await sendNotification([person.id], 'Send Vendor Orders', `${project.name} — you are to send the approved purchase orders to the vendors.`, `/my-tasks/project/${project.id}`)
-      setPersonId('')
-    }
   }
 
 
@@ -315,7 +303,7 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
   const hint = isProcurer
     ? 'Add each vendor with its products. A separate purchase-order PDF is made for every vendor, and saving a vendor sends it to the PC for approval.'
     : isPc
-      ? 'Approve or reject each vendor order. Approved orders are sent to the vendor by the procurer (or the person you name below).'
+      ? 'Approve or reject each vendor order. Approved orders are sent to the procurer, who sends them to the vendor.'
       : `Waiting for ${work.procurerName} to create the vendors.`
   return (
     <div className="space-y-3">
@@ -339,13 +327,6 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
             Send to PC for Approval ({toSubmit.length})
           </button>}
         </>
-      )}
-      {isPc && approvedUnsent.length > 0 && (
-        <div className="border border-slate-200 rounded-xl p-3 space-y-2">
-          <label className={label}>Procurer to send the approved orders{work.senderName ? ` (now: ${work.senderName})` : ` (now: ${work.procurerName})`}</label>
-          <select value={personId} onChange={e => setPersonId(e.target.value)} className={input}>{personOptions}</select>
-          {personId && <button disabled={saving} onClick={assignSender} className={`${btn} border border-slate-200 bg-white text-slate-600`}>Assign to Send</button>}
-        </div>
       )}
     </div>
   )

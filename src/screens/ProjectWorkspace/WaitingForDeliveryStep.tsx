@@ -50,8 +50,8 @@ export function WaitingForDeliveryStep({ project, users, user, saving, persist }
   return (
     <div className="space-y-3">
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1">
-        <p className="text-xs text-slate-500">Following up the orders</p>
-        <p className="text-sm font-bold text-slate-800">{work.senderName ?? work.procurerName}</p>
+        <p className="text-xs text-slate-500">Procurer</p>
+        <p className="text-sm font-bold text-slate-800">{work.procurerName}</p>
         <p className="text-xs text-slate-500">{delivered} of {statuses.length} delivered{counts.length > 0 ? ` · ${counts.map(c => `${c.n} ${VENDOR_STATUS_LABEL[c.s].toLowerCase()}`).join(' · ')}` : ''}</p>
       </div>
       {approvedIndent && (
