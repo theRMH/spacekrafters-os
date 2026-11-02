@@ -701,6 +701,8 @@ export interface Project {
   statusHistory?: StatusHistoryItem[]
   // The Design Center stage: the PC assigns an architect, who uploads the design for the PC to approve or send back.
   designWork?: DesignWork
+  // The Shop Drawing stage: same loop, with a QS uploading the 2D drawing.
+  shopDrawingWork?: DesignWork
   // A stage-advance request the responsible role has submitted, sitting at
   // the current stage until the MD approves (moves to toStage) or rejects
   // (cleared, stage unchanged) — same pattern as MRF/Quotation/Design approval.

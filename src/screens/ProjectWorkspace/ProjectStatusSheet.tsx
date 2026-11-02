@@ -9,7 +9,7 @@ import { getAllPayables, getAllPaymentMilestones } from '../../services/financeS
 import { getAllPunchListItems } from '../../services/punchListService'
 import { upsertProject } from '../../services/projectService'
 import { sendNotification } from '../../utils/notifications'
-import { DesignCenterStep } from './DesignCenterStep'
+import { StageWorkStep, isWorkStage } from './StageWorkStep'
 import type { Project, ProjectStage, ManagedUser, UserRole, StatusHistoryItem } from '../../types'
 
 // Single source of truth for stage sequence — the client will share their
@@ -295,8 +295,8 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
 
     // Design Center has its own flow (PC assigns the architect, the architect uploads, the PC approves or rejects),
     // so it is open to the PC and the architect rather than only the stage's responsible role.
-    if (project.stage === 'design_center') {
-      return <DesignCenterStep project={project} users={users} user={user} saving={saving} persist={persist} responsibleFor={nextResponsible} />
+    if (isWorkStage(project.stage)) {
+      return <StageWorkStep project={project} stage={project.stage} users={users} user={user} saving={saving} persist={persist} />
     }
 
     if (!canAct) {
@@ -308,7 +308,6 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
     }
 
     switch (project.stage) {
-      case 'shop_drawing':
       case 'mrf':
       case 'material_intent':
       case 'waiting_for_delivery':
@@ -397,7 +396,7 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title={`Update Status — ${PROJECT_STAGE_LABEL[project.stage]}`}>
       <div className="space-y-4">
-        {!project.pendingStageRequest && canAct && project.stage !== 'closed' && project.stage !== 'design_center' && (
+        {!project.pendingStageRequest && canAct && project.stage !== 'closed' && !isWorkStage(project.stage) && (
           <p className="text-xs text-slate-400 -mt-2">Moving to the next stage needs MD approval before it takes effect.</p>
         )}
         {renderBody()}

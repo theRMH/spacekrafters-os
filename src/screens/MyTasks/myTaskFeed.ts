@@ -1,4 +1,5 @@
 import { PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
+import { stageTaskTitle } from '../ProjectWorkspace/StageWorkStep'
 import { coreStatus, leadNextAction } from '../Leads/leadPipeline'
 import type {
   Appointment, AuthUser, DailyReport, DailyTask, DesignPackage, ExpenseRequest, Lead,
@@ -100,9 +101,7 @@ export function buildMyTaskFeed(opts: {
     if (p.assignedRole !== role) continue
     items.push({
       key: `stage-${p.id}`, at: p.updatedAt,
-      title: p.stage === 'design_center'
-        ? (role === 'designer' ? 'Upload Design' : p.designWork ? 'Review Design' : 'Assign Architect')
-        : `Submit ${PROJECT_STAGE_LABEL[p.stage]} for Approval`, badge: 'Project Stage', badgeCls: 'bg-teal-50 text-teal-700',
+      title: stageTaskTitle(p) ?? `Submit ${PROJECT_STAGE_LABEL[p.stage]} for Approval`, badge: 'Project Stage', badgeCls: 'bg-teal-50 text-teal-700',
       subjectLabel: 'Project', subject: p.name,
       meta: [`Client: ${p.clientName}`, p.contractValue ? `Value: ${fmtCurrency(p.contractValue)}` : '', `Stage: ${PROJECT_STAGE_LABEL[p.stage]}`].filter(Boolean),
       person: p.assignedToName,

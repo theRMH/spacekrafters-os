@@ -2,6 +2,12 @@
 
 ## 2026-11-02
 
+### Changed: Design Center approval no longer auto-moves; Shop Drawing runs the same flow with a QS
+**Commit:** Uncommitted  ·  no DB changes (`Project.shopDrawingWork` lives in the project's JSON)
+- **Added:** `ProjectWorkspace/StageWorkStep.tsx` (replaces `DesignCenterStep.tsx`) — one component for both stages. Design Center: PC assigns → architect uploads → PC approves/rejects (reason required, loops) → on approval the architect is told it is approved and the PC then clicks **Move to Shop Drawing**. Shop Drawing: PC assigns a QS, who is sent the approved design files from Design Center along with the request, uploads the 2D drawing, same approve/reject loop; after approval the PC picks a QS and clicks **Assign QS & Move to Material Intent**.
+- **Changed:** the assignee pickers list every user (with their role), not only designers.
+- **Changed:** `ProjectWorkspace/ProjectStatusSheet.tsx` — renders the component for Design Center and Shop Drawing; `types/index.ts` — `Project.shopDrawingWork`; `MyTasks/myTaskFeed.ts` — task titles follow the step (Assign / Upload / Review / Move to …).
+
 ### Added: Design Center stage workflow (PC assigns architect → architect uploads → PC approves or rejects with reason)
 **Commit:** Uncommitted  ·  no DB changes (`Project.designWork` lives in the project's JSON)
 - **Added:** `ProjectWorkspace/DesignCenterStep.tsx` — the PC assigns an architect (designer) with an optional brief; the architect uploads the design file(s) and sends it to the PC; the PC approves (project moves straight to Shop Drawing, no MD step) or rejects with a mandatory reason; the architect sees the reason and re-uploads, repeating until approved. Every upload and decision is kept as a version history; the architect and PC get notifications.
