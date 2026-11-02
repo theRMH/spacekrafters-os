@@ -33,7 +33,6 @@ interface Props {
 
 const newId = (p: string) => `${p}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 const blankLine = (): VendorLine => ({ id: newId('vl'), category: '', description: '', spec: '', unit: '', qty: '', rate: '', hsn: '', gstPercent: DEFAULT_GST_PERCENT })
-const GSTIN = /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/
 
 const btn = 'w-full py-3 rounded-xl text-sm font-bold active:opacity-90 disabled:opacity-50'
 const input = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400'
@@ -83,7 +82,6 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
 
   function validate(d: Draft): string {
     if (!d.name.trim()) return 'Enter the vendor name.'
-    if (!GSTIN.test(d.gstin.trim().toUpperCase())) return 'Enter a valid 15-character GST number.'
     if (d.lines.length === 0) return 'Add at least one product.'
     const bad = d.lines.findIndex(l => !l.description.trim() || !l.unit || !(parseFloat(l.qty) > 0) || !(parseFloat(l.rate) > 0))
     if (bad >= 0) return `Product ${bad + 1}: enter the description, unit, quantity and rate.`
@@ -97,11 +95,6 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
     return indentItems.filter(it => !used.has(it.id))
   }
   const lineFromItem = (it: IndentItem): VendorLine => ({ ...blankLine(), indentItemId: it.id, category: it.category, description: it.description, spec: it.spec, unit: it.unit, qty: it.qty })
-  // A new vendor, pre-filled with everything still left to buy.
-  function newVendorDraft(left: IndentItem[]): Draft {
-    return { ...blankDraft(), lines: left.length > 0 ? left.map(lineFromItem) : [blankLine()] }
-  }
-
   async function saveVendor(addAnother = false) {
     if (!draft || !work) return
     const problem = validate(draft)
@@ -124,9 +117,8 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
         `${existing ? 'Updated' : 'Added'} vendor ${order.name} (${order.poNumber})`, STAGE, { keepOpen: true, quiet: true },
       )
       if (updated) {
-        // "Save & add another vendor" opens the next vendor with what is still left on the indent.
-        const left = indentItems.filter(it => !next.some(v => v.lines.some(l => l.indentItemId === it.id)))
-        setDraft(addAnother ? newVendorDraft(left) : null)
+        // "Save & add another vendor" opens the next vendor blank.
+        setDraft(addAnother ? blankDraft() : null)
         setShowIndentPick(false)
       }
     } catch (e) {
@@ -333,7 +325,7 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
         <p className="text-sm font-bold text-slate-800">{vendors.some(v => v.id === draft.id) ? 'Edit Vendor' : 'Add Vendor'}</p>
         <div className="space-y-3">
           <div><label className={label}>Vendor Name *</label><input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} className={input} /></div>
-          <div><label className={label}>GST Number *</label><input value={draft.gstin} onChange={e => setDraft({ ...draft, gstin: e.target.value.toUpperCase() })} maxLength={15} className={input} /></div>
+          <div><label className={label}>GST Number</label><input value={draft.gstin} onChange={e => setDraft({ ...draft, gstin: e.target.value.toUpperCase() })} maxLength={15} className={input} /></div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className={label}>Phone</label><input value={draft.phone} onChange={e => setDraft({ ...draft, phone: e.target.value })} inputMode="tel" className={input} /></div>
             <div><label className={label}>Email</label><input value={draft.email} onChange={e => setDraft({ ...draft, email: e.target.value })} inputMode="email" className={input} /></div>
@@ -419,11 +411,11 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
           <div className="flex justify-between"><span className="font-bold text-slate-800">Total</span><span className="font-bold text-slate-800">Rs. {inr(t.total)}</span></div>
         </div>
         {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
-        <button disabled={busy || saving} onClick={() => saveVendor()} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
-          {busy ? 'Creating PDF…' : 'Save Vendor & Create PDF'}
-        </button>
         <button disabled={busy || saving} onClick={() => saveVendor(true)} className={`${btn} border border-indigo-300 bg-indigo-50 text-indigo-700`}>
           Save & Add Another Vendor
+        </button>
+        <button disabled={busy || saving} onClick={() => saveVendor()} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
+          {busy ? 'Creating PDF…' : 'Save Vendor & Create PDF'}
         </button>
         <button disabled={busy} onClick={() => { setDraft(null); setError('') }} className={`${btn} border border-slate-200 bg-white text-slate-600`}>Cancel</button>
       </div>
@@ -448,7 +440,7 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
         </div>
       )}
       {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
-      <button onClick={() => { setDraft(newVendorDraft(remainingItems())); setError('') }} className={`${btn} border border-dashed border-indigo-300 text-indigo-600 flex items-center justify-center gap-1.5`}>
+      <button onClick={() => { setDraft(blankDraft()); setError('') }} className={`${btn} border border-dashed border-indigo-300 text-indigo-600 flex items-center justify-center gap-1.5`}>
         <Plus size={16} /> {vendors.length > 0 ? 'Add Another Vendor' : 'Add Vendor'}{vendors.length > 0 && remainingItems().length > 0 ? ` (${remainingItems().length} items left)` : ''}
       </button>
       <button disabled={saving || vendors.length === 0} onClick={sendToPc} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>

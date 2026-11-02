@@ -2,6 +2,10 @@
 
 ## 2026-11-02
 
+### Changed: Procurement vendor form — no GST check, Add Another above Create PDF, new vendors start blank
+**Commit:** Uncommitted  ·  no DB changes
+- **Changed:** `ProjectWorkspace/ProcurementStep.tsx` — the GST number is no longer required or format-checked; **Save & Add Another Vendor** now sits above **Save Vendor & Create PDF**; a new vendor opens with one blank product instead of being pre-filled with the remaining indent items (the "Add from approved indent" picker and the "Still to buy" card remain).
+
 ### Changed: Procurement — add more vendors for the items still left, each with its own PDF
 **Commit:** Uncommitted  ·  no DB changes
 - **Changed:** `ProjectWorkspace/ProcurementStep.tsx` — each vendor line remembers the indent item it came from, so the step knows what is still to buy. The vendor form has **Save & Add Another Vendor** (saves that vendor's PDF, then opens the next vendor pre-filled with the items not yet on any vendor); the item picker lists only the remaining items, with an "Add all remaining" shortcut; the vendor list shows a "Still to buy" card and an **Add Another Vendor (n items left)** button.
