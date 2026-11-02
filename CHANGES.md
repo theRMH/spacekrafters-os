@@ -2,6 +2,11 @@
 
 ## 2026-11-02
 
+### Changed: Procurement — add more vendors for the items still left, each with its own PDF
+**Commit:** Uncommitted  ·  no DB changes
+- **Changed:** `ProjectWorkspace/ProcurementStep.tsx` — each vendor line remembers the indent item it came from, so the step knows what is still to buy. The vendor form has **Save & Add Another Vendor** (saves that vendor's PDF, then opens the next vendor pre-filled with the items not yet on any vendor); the item picker lists only the remaining items, with an "Add all remaining" shortcut; the vendor list shows a "Still to buy" card and an **Add Another Vendor (n items left)** button.
+- **Changed:** `types/index.ts` — optional `VendorLine.indentItemId`.
+
 ### Added: MD approval for large material indents; Procurement stage with vendor purchase orders (one PDF per vendor)
 **Commit:** Uncommitted  ·  no DB changes (`Project.procurementWork` and the new indent fields live in the project's JSON)
 - **Changed:** `ProjectWorkspace/MaterialIndentStep.tsx` — the indent form has a required **Estimated Amount**. Up to Rs. 50,000 the PC approves; above it the PC must **Send to MD for Approval** (optional below the limit) and only the MD can approve. While it is with the MD the QS can keep revising and re-send the PDF. After approval the PC picks the **procurer** and clicks Assign Procurer & Move to Procurement (the approved indent goes with them). `utils/materialIndentPdf.ts` prints the estimated amount.

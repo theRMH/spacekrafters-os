@@ -8,7 +8,7 @@ import { generateAndUploadPurchaseOrderPdf } from '../../utils/purchaseOrderPdf'
 import { inr, lineAmounts, orderTotals } from '../../utils/purchaseOrderMath'
 import { deleteRemoteFile } from '../../utils/fileStorage'
 import { sendNotification } from '../../utils/notifications'
-import type { AuthUser, ManagedUser, Project, ProjectStage, VendorLine, VendorOrder } from '../../types'
+import type { AuthUser, IndentItem, ManagedUser, Project, ProjectStage, VendorLine, VendorOrder } from '../../types'
 
 const STAGE: ProjectStage = 'procurement'
 
@@ -90,7 +90,19 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
     return ''
   }
 
-  async function saveVendor() {
+  // Indent items not yet on any vendor's order (apart from `besides`, the vendor being edited) — what is still to buy.
+  const indentItems = approvedIndent?.indent.items ?? []
+  function remainingItems(extra: VendorLine[] = [], besides?: string) {
+    const used = new Set([...vendors.filter(v => v.id !== besides).flatMap(v => v.lines), ...extra].map(l => l.indentItemId).filter(Boolean))
+    return indentItems.filter(it => !used.has(it.id))
+  }
+  const lineFromItem = (it: IndentItem): VendorLine => ({ ...blankLine(), indentItemId: it.id, category: it.category, description: it.description, spec: it.spec, unit: it.unit, qty: it.qty })
+  // A new vendor, pre-filled with everything still left to buy.
+  function newVendorDraft(left: IndentItem[]): Draft {
+    return { ...blankDraft(), lines: left.length > 0 ? left.map(lineFromItem) : [blankLine()] }
+  }
+
+  async function saveVendor(addAnother = false) {
     if (!draft || !work) return
     const problem = validate(draft)
     if (problem) { setError(problem); return }
@@ -111,7 +123,12 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
         { procurementWork: { ...work, vendors: next, review: status === 'rejected' ? undefined : work.review } },
         `${existing ? 'Updated' : 'Added'} vendor ${order.name} (${order.poNumber})`, STAGE, { keepOpen: true, quiet: true },
       )
-      if (updated) setDraft(null)
+      if (updated) {
+        // "Save & add another vendor" opens the next vendor with what is still left on the indent.
+        const left = indentItems.filter(it => !next.some(v => v.lines.some(l => l.indentItemId === it.id)))
+        setDraft(addAnother ? newVendorDraft(left) : null)
+        setShowIndentPick(false)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create the PDF.')
     } finally { setBusy(false) }
@@ -326,26 +343,32 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
 
         <div className="space-y-3">
           <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Products</p>
-          {approvedIndent && (
-            <>
-              <button onClick={() => setShowIndentPick(s => !s)} className={`${btn} border border-indigo-200 bg-indigo-50 text-indigo-700`}>
-                {showIndentPick ? 'Hide' : 'Add from'} approved material indent
-              </button>
-              {showIndentPick && (
-                <div className="border border-indigo-100 rounded-xl divide-y divide-indigo-50">
-                  {approvedIndent.indent.items.map(it => (
-                    <button key={it.id} onClick={() => {
-                      setDraft(d => d && { ...d, lines: [...d.lines.filter(l => l.description.trim() || l.qty || l.rate), { ...blankLine(), category: it.category, description: it.description, spec: it.spec, unit: it.unit, qty: it.qty }] })
-                      setShowIndentPick(false)
-                    }} className="w-full text-left p-3 active:bg-indigo-50">
-                      <p className="text-sm font-semibold text-slate-800">{it.description}</p>
-                      <p className="text-xs text-slate-500">{[it.category, it.spec, `${it.qty} ${it.unit}`].filter(Boolean).join(' · ')}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
+          {approvedIndent && (() => {
+            const left = remainingItems(draft.lines, draft.id)
+            if (left.length === 0) return <p className="text-xs text-slate-400">Every item on the approved indent is already on a vendor order.</p>
+            const addLines = (items: IndentItem[]) => {
+              setDraft(d => d && { ...d, lines: [...d.lines.filter(l => l.description.trim() || l.qty || l.rate), ...items.map(lineFromItem)] })
+              setShowIndentPick(false)
+            }
+            return (
+              <>
+                <button onClick={() => setShowIndentPick(s => !s)} className={`${btn} border border-indigo-200 bg-indigo-50 text-indigo-700`}>
+                  {showIndentPick ? 'Hide' : `Add from approved material indent (${left.length} left)`}
+                </button>
+                {showIndentPick && (
+                  <div className="border border-indigo-100 rounded-xl divide-y divide-indigo-50">
+                    <button onClick={() => addLines(left)} className="w-full text-left p-3 text-sm font-bold text-indigo-700 active:bg-indigo-50">Add all {left.length} remaining items</button>
+                    {left.map(it => (
+                      <button key={it.id} onClick={() => addLines([it])} className="w-full text-left p-3 active:bg-indigo-50">
+                        <p className="text-sm font-semibold text-slate-800">{it.description}</p>
+                        <p className="text-xs text-slate-500">{[it.category, it.spec, `${it.qty} ${it.unit}`].filter(Boolean).join(' · ')}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )
+          })()}
           {draft.lines.map((l, idx) => {
             const a = lineAmounts(l)
             return (
@@ -396,8 +419,11 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
           <div className="flex justify-between"><span className="font-bold text-slate-800">Total</span><span className="font-bold text-slate-800">Rs. {inr(t.total)}</span></div>
         </div>
         {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
-        <button disabled={busy || saving} onClick={saveVendor} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
+        <button disabled={busy || saving} onClick={() => saveVendor()} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
           {busy ? 'Creating PDF…' : 'Save Vendor & Create PDF'}
+        </button>
+        <button disabled={busy || saving} onClick={() => saveVendor(true)} className={`${btn} border border-indigo-300 bg-indigo-50 text-indigo-700`}>
+          Save & Add Another Vendor
         </button>
         <button disabled={busy} onClick={() => { setDraft(null); setError('') }} className={`${btn} border border-slate-200 bg-white text-slate-600`}>Cancel</button>
       </div>
@@ -415,9 +441,15 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
       )}
       <p className="text-sm text-slate-600">Add each vendor with its products. A separate purchase-order PDF is made for every vendor.</p>
       {vendorCards}
+      {approvedIndent && vendors.length > 0 && remainingItems().length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1">
+          <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">Still to buy ({remainingItems().length})</p>
+          {remainingItems().map(it => <p key={it.id} className="text-xs text-amber-900">{it.description} · {it.qty} {it.unit}</p>)}
+        </div>
+      )}
       {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
-      <button onClick={() => { setDraft(blankDraft()); setError('') }} className={`${btn} border border-dashed border-indigo-300 text-indigo-600 flex items-center justify-center gap-1.5`}>
-        <Plus size={16} /> Add Vendor
+      <button onClick={() => { setDraft(newVendorDraft(remainingItems())); setError('') }} className={`${btn} border border-dashed border-indigo-300 text-indigo-600 flex items-center justify-center gap-1.5`}>
+        <Plus size={16} /> {vendors.length > 0 ? 'Add Another Vendor' : 'Add Vendor'}{vendors.length > 0 && remainingItems().length > 0 ? ` (${remainingItems().length} items left)` : ''}
       </button>
       <button disabled={saving || vendors.length === 0} onClick={sendToPc} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
         Send to PC for Approval

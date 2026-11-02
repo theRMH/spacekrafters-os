@@ -709,6 +709,8 @@ export interface IndentSubmission extends DesignSubmission {
 // One product on a vendor's purchase order.
 export interface VendorLine {
   id: string
+  // The material-indent item this line was taken from (blank for a product added by hand).
+  indentItemId?: string
   category: string
   description: string
   spec: string
