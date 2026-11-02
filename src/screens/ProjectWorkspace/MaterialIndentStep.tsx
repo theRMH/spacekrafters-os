@@ -34,7 +34,7 @@ interface Props {
 const newId = () => `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 const today = () => new Date().toISOString().slice(0, 10)
 const fmtAt = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-const blankItem = (): IndentItem => ({ id: newId(), category: '', description: '', spec: '', unit: '', qty: '', remarks: '' })
+const blankItem = (): IndentItem => ({ id: newId(), category: '', description: '', spec: '', unit: '', qty: '', rate: '', remarks: '' })
 
 const btn = 'w-full py-3 rounded-xl text-sm font-bold active:opacity-90 disabled:opacity-50'
 const input = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400'
@@ -77,17 +77,25 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
   const [showReject, setShowReject] = useState(false)
   const [error, setError] = useState('')
 
-  function edit(patch: Partial<IndentForm>) { setForm(f => ({ ...f, ...patch })); setStale(true) }
+  // The estimated amount is always the sum of qty × rate over the items.
+  const lineAmount = (i: IndentItem) => parseAmount(i.qty) * parseAmount(i.rate)
+  function edit(patch: Partial<IndentForm>) {
+    setForm(f => {
+      const next = { ...f, ...patch }
+      next.estimatedAmount = String(Math.round(next.items.reduce((s, i) => s + lineAmount(i), 0) * 100) / 100)
+      return next
+    })
+    setStale(true)
+  }
   function editItem(id: string, patch: Partial<IndentItem>) { edit({ items: form.items.map(i => i.id === id ? { ...i, ...patch } : i) }) }
 
   function validate(): string {
     if (!form.projectName.trim()) return 'Enter the project name.'
     if (!form.indentNo.trim()) return 'Enter the indent number.'
     if (!form.date) return 'Choose the date.'
-    if (parseAmount(form.estimatedAmount) <= 0) return 'Enter the estimated amount of the indent.'
     if (form.items.length === 0) return 'Add at least one item.'
-    const bad = form.items.findIndex(i => !i.category || !i.description.trim() || !i.unit.trim() || !i.qty.trim())
-    if (bad >= 0) return `Item ${bad + 1}: choose a category and enter the description, unit and quantity.`
+    const bad = form.items.findIndex(i => !i.category || !i.description.trim() || !i.unit.trim() || !i.qty.trim() || parseAmount(i.rate) <= 0)
+    if (bad >= 0) return `Item ${bad + 1}: choose a category and enter the description, unit, quantity and rate.`
     return ''
   }
 
@@ -358,8 +366,8 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
           {field('Indent No *', 'indentNo')}
         </div>
         <div>
-          <label className={label}>Estimated Amount (Rs.) *</label>
-          <input value={form.estimatedAmount ?? ''} onChange={e => edit({ estimatedAmount: e.target.value })} inputMode="decimal" className={input} />
+          <label className={label}>Estimated Amount (Rs.) — total of qty × rate</label>
+          <div className={`${input} font-bold text-slate-800`}>{inr(parseAmount(form.estimatedAmount))}</div>
           <p className="text-[11px] text-slate-400 mt-1">Above Rs. {inr(MD_APPROVAL_LIMIT)} the MD must approve the indent; otherwise the PC can.</p>
         </div>
       </div>
@@ -398,6 +406,16 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
               <div>
                 <label className={label}>Qty *</label>
                 <input value={it.qty} onChange={e => editItem(it.id, { qty: e.target.value })} inputMode="decimal" className={input} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={label}>Rate (Rs. per unit) *</label>
+                <input value={it.rate ?? ''} onChange={e => editItem(it.id, { rate: e.target.value })} inputMode="decimal" className={input} />
+              </div>
+              <div>
+                <label className={label}>Amount (Rs.)</label>
+                <div className={`${input} text-slate-600`}>{inr(lineAmount(it))}</div>
               </div>
             </div>
             <div>

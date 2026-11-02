@@ -680,6 +680,7 @@ export interface IndentItem {
   spec: string
   unit: string
   qty: string
+  rate?: string          // Rs. per unit; qty × rate adds up to the indent's estimated amount
   remarks: string
 }
 
