@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, ListChecks, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -93,6 +93,9 @@ export default function ProjectsScreen() {
   const [form, setForm] = useState<Project>(emptyProject())
   const [selected, setSelected] = useState<Project | null>(null)
   const [showDelete, setShowDelete] = useState(false)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
   const [showStatusSheet, setShowStatusSheet] = useState(false)
   const [statusProject, setStatusProject] = useState<Project | null>(null)
@@ -353,6 +356,49 @@ export default function ProjectsScreen() {
     setSnack({ open: true, msg: 'Project deleted.', type: 'success' })
   }
 
+  function toggleSelectMode() {
+    setSelectMode(prev => !prev)
+    setSelectedIds(new Set())
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function confirmBulkDelete() {
+    const ids = [...selectedIds]
+    for (const id of ids) {
+      const result = await deleteProject(id)
+      if (!result.ok) {
+        setShowBulkDelete(false)
+        setSnack({ open: true, msg: result.error ?? 'Could not delete all selected projects.', type: 'error' })
+        return
+      }
+      const project = projects.find(p => p.id === id)
+      if (user && project) {
+        addAuditLog({
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          projectId: id,
+          action: 'project_deleted',
+          description: `Project "${project.name}" deleted.`,
+          createdBy: user.name,
+          createdByRole: user.role,
+          createdAt: new Date().toISOString(),
+        })
+      }
+      setProjects(prev => prev.filter(p => p.id !== id))
+    }
+    setShowBulkDelete(false)
+    setSelectMode(false)
+    setSelectedIds(new Set())
+    setSnack({ open: true, msg: `${ids.length} project${ids.length === 1 ? '' : 's'} deleted.`, type: 'success' })
+  }
+
   // Sidebar "Project Sort": ?stage=<ProjectStage> or ?stage=active (not closed).
   const stageParam = searchParams.get('stage')
   const stageFilter = stageParam === 'active' || STAGE_OPTIONS.some(o => o.value === stageParam) ? stageParam : null
@@ -382,6 +428,13 @@ export default function ProjectsScreen() {
         <h1 className="text-lg font-extrabold text-slate-800 mb-3">Projects</h1>
         <div className="flex items-center gap-2">
           <SearchBar value={search} onChange={setSearch} placeholder="Search projects…" className="flex-1" />
+          {canDelete && (
+            <button onClick={toggleSelectMode} aria-label={selectMode ? 'Cancel selection' : 'Select projects'}
+              className={`h-10 px-3 rounded-xl flex items-center gap-1.5 text-xs font-bold flex-shrink-0 ${selectMode ? 'bg-slate-100 text-slate-600' : 'border border-slate-200 bg-white text-slate-600'}`}>
+              {selectMode ? <X size={15} /> : <ListChecks size={15} />}
+              {selectMode ? 'Cancel' : 'Select'}
+            </button>
+          )}
           <PermissionGate permission="create_project">
             <button onClick={openCreate} aria-label="New project"
               className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-fab active:bg-indigo-700 flex-shrink-0">
@@ -402,10 +455,13 @@ export default function ProjectsScreen() {
           <p className="text-sm text-slate-400 text-center py-10">No projects yet.</p>
         ) : (
           filtered.map(project => (
-            <div key={project.id} role="button" tabIndex={0} onClick={() => setSelected(project)}
-              className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50 cursor-pointer">
+            <div key={project.id} role="button" tabIndex={0} onClick={() => (selectMode ? toggleSelected(project.id) : setSelected(project))}
+              className={`w-full text-left bg-white rounded-2xl p-4 shadow-sm border active:bg-slate-50 cursor-pointer ${selectMode && selectedIds.has(project.id) ? 'border-red-300 bg-red-50' : 'border-slate-100'}`}>
               <div className="flex items-start justify-between gap-2 mb-1">
-                <span className="font-bold text-sm text-slate-800">{project.name}</span>
+                {selectMode && (
+                  <input type="checkbox" checked={selectedIds.has(project.id)} readOnly className="mt-0.5 w-4 h-4 accent-red-500 flex-shrink-0" />
+                )}
+                <span className="font-bold text-sm text-slate-800 flex-1">{project.name}</span>
                 <StatusBadge status={project.status} />
               </div>
               <p className="text-xs text-slate-500 mb-2">{project.projectNumber ? `${project.projectNumber} · ` : ''}{project.clientName}</p>
@@ -413,7 +469,7 @@ export default function ProjectsScreen() {
                 <StatusBadge status={project.stage} />
                 <span className="text-xs font-semibold text-slate-600">{fmtCurrency(project.contractValue)}</span>
               </div>
-              {project.status !== 'closed' && (
+              {!selectMode && project.status !== 'closed' && (
                 <button onClick={e => { e.stopPropagation(); setStatusProject(project); setShowStatusSheet(true) }}
                   className="w-full mt-3 py-2.5 rounded-xl text-white text-sm font-bold active:opacity-90"
                   style={{ background: '#0F2A4A' }}>
@@ -424,6 +480,24 @@ export default function ProjectsScreen() {
           ))
         )}
       </div>
+
+      {selectMode && (
+        <div className="fixed bottom-16 left-0 w-full z-30 lg:left-[260px] lg:w-[calc(100%-260px)] lg:bottom-0">
+          <div className="bg-red-50 border-t border-red-100 px-5 py-3 flex items-center justify-between gap-3">
+            <button onClick={() => setSelectedIds(prev => (prev.size === filtered.length ? new Set() : new Set(filtered.map(p => p.id))))}
+              className="text-xs font-semibold text-red-600 active:opacity-70">
+              {selectedIds.size === filtered.length && filtered.length > 0 ? 'Clear all' : `Select all (${filtered.length})`}
+            </button>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold text-red-600">{selectedIds.size} selected</span>
+              <button onClick={() => setShowBulkDelete(true)} disabled={selectedIds.size === 0}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-red-500 active:opacity-90 disabled:opacity-40">
+                <Trash2 size={13} /> Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create/Edit Project */}
       <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title={isEditingExisting ? 'Edit Project' : 'New Project'}>
@@ -627,6 +701,17 @@ export default function ProjectsScreen() {
         confirmLabel="Delete"
         cancelLabel="Cancel"
         onConfirm={handleDelete}>
+      </Dialog>
+
+      <Dialog
+        isOpen={showBulkDelete}
+        onClose={() => setShowBulkDelete(false)}
+        title="Delete Selected Projects"
+        message={`Permanently delete ${selectedIds.size} selected project${selectedIds.size === 1 ? '' : 's'}? This cannot be undone.`}
+        variant="danger"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={confirmBulkDelete}>
       </Dialog>
 
       <Dialog

@@ -1,3 +1,10 @@
+## 2026-11-03
+
+### Changed: Leads and Projects delete in one step (select → Delete)
+**Commit:** see git log  ·  no DB changes
+- **Changed:** `Leads/LeadsScreen.tsx` — **Delete** (single lead, or **Select** → tick leads → **Delete**) now permanently deletes after one confirmation; no more "Mark as Lost" first. Lost leads still have **Restore**.
+- **Changed:** `Projects/ProjectsScreen.tsx` — new **Select** button (owner only): tick several projects and **Delete** them in one go, with one confirmation. The single **Delete Project** on a project is unchanged.
+
 ## 2026-10-15
 
 ## 2026-11-02
