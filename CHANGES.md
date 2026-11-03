@@ -1,5 +1,10 @@
 ## 2026-11-03
 
+
+### Fixed: deleting a project with receipts/expenses/purchase orders failed (foreign key error) ⚠ DEPLOY
+**Commit:** Uncommitted
+- **Added:** `supabase/delete-project-cascade.sql` — receipts, expense requests, documents, purchase orders (and their vendor bills) now cascade when their project is deleted; company-transaction allocations are detached. ⚠ DEPLOY: run once in the Supabase SQL editor. Until then, deleting a project that has those records still shows the database error.
+
 ### Changed: Leads and Projects delete in one step (select → Delete)
 **Commit:** see git log  ·  no DB changes
 - **Changed:** `Leads/LeadsScreen.tsx` — **Delete** (single lead, or **Select** → tick leads → **Delete**) now permanently deletes after one confirmation; no more "Mark as Lost" first. Lost leads still have **Restore**.
