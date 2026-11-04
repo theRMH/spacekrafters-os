@@ -20,6 +20,7 @@ import {
   DIVISIONS_WITH_BRAND, BUSINESS_BRAND_OPTIONS, BUSINESS_BRAND_LABEL,
 } from '../../data/businessDivisions'
 import { getManagedUsersDirectory } from '../../services/userService'
+import { sendNotification } from '../../utils/notifications'
 import { getNextLeadNumber } from '../../services/leadService'
 import { hasRole } from '../../utils/permissions'
 import { LeadStatusSheet, LEAD_STATUS_LABEL, leadStatusLabel } from './LeadStatusSheet'
@@ -464,6 +465,10 @@ export default function LeadsScreen() {
       return
     }
     const statusChanged = status !== selected.status
+    // Choosing a different person in Assign To / Lead Owner hands the lead to them: they become who it waits on and get the Update Status step.
+    const newOwner = ownerId && ownerId !== selected.ownerId
+      ? (assignableMembers.find(m => m.id === ownerId) ?? allManagedUsers.find(m => m.id === ownerId))
+      : undefined
     const result = await updateLead(selected.id, {
       name: name.trim(), siteNo: siteNo.trim() || undefined, phone: phone.trim(), email: email.trim() || undefined, city: city.trim(),
       latitude, longitude,
@@ -472,8 +477,10 @@ export default function LeadsScreen() {
       requirement: requirement.trim() || undefined, notes: notes.trim() || undefined,
       source, subSource: source === 'other' ? (subSource.trim() || undefined) : undefined,
       interest, status, ownerId: ownerId || undefined, ownerName: ownerName.trim(),
-    }, statusChanged ? `Status changed to ${status.replace(/_/g, ' ')}` : undefined)
+      ...(newOwner ? { assignedToId: newOwner.id, assignedToName: newOwner.fullName, assignedRole: newOwner.role } : {}),
+    }, statusChanged ? `Status changed to ${status.replace(/_/g, ' ')}` : newOwner ? `Assigned to ${newOwner.fullName}` : undefined)
     if (!result.ok) { setFormError(result.error ?? 'Could not update lead.'); return }
+    if (newOwner) await sendNotification([newOwner.id], 'New Lead Task', `${name.trim()} is assigned to you.`, `/leads/${selected.id}`)
     setShowEdit(false)
     setSelected(null)
     setSnack({ open: true, msg: 'Lead updated.', type: 'success' })

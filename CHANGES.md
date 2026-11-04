@@ -1,5 +1,9 @@
 ## 2026-11-03
 
+### Fixed: assigning a lead to someone left it "Waiting on" the old person
+**Commit:** see git log  ·  no DB changes
+- **Changed:** `Leads/LeadsScreen.tsx` — picking a different person in a lead's Assign To / Lead Owner now also hands the lead to them (assigned-to follows the owner), so they see the Update Status step and the lead on My Tasks; they are notified.
+
 ### Changed: recording a site visit sends the lead back to the PC
 **Commit:** see git log  ·  no DB changes
 - **Changed:** `SiteVisits/SiteVisitsScreen.tsx` — when the site engineer records the planned visit, the lead moves to Site Visit Done and is handed back to the lead's PC (owner), who is notified. Flow: lead → PC contacts and assigns the site engineer → engineer records the visit from My Tasks → back to the PC.
