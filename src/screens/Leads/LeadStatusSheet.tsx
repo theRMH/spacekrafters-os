@@ -199,9 +199,12 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   // The lead's current, actually-assigned person — assignedToId/Name if an
   // explicit hand-off has happened, otherwise the lead's own Owner.
   const effectiveAssigneeId = lead.assignedToId ?? lead.ownerId
-  const effectiveAssigneeName = lead.assignedToName ?? lead.ownerName
+  // While a site visit is planned, the people on its team are who the lead waits on (visits planned before the hand-off existed).
+  const onVisitTeam = siteVisit?.status === 'scheduled' && !!user && (siteVisit.teamMemberIds ?? []).includes(user.id)
+  const visitTeamNames = siteVisit?.status === 'scheduled' ? siteVisit.teamMemberNames?.join(', ') : undefined
+  const effectiveAssigneeName = visitTeamNames || (lead.assignedToName ?? lead.ownerName)
   // Full managers (edit_lead) always act; otherwise only the actual assignee.
-  const canAct = can('edit_lead') || user?.id === effectiveAssigneeId
+  const canAct = can('edit_lead') || user?.id === effectiveAssigneeId || onVisitTeam
 
   const btn = 'w-full py-3 rounded-xl text-sm font-bold active:opacity-90 disabled:opacity-50'
   const primaryBtn = `${btn} text-white`

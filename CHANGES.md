@@ -1,5 +1,10 @@
 ## 2026-11-03
 
+### Fixed: a lead still said "Waiting on <owner>" after its site visit was assigned to someone else
+**Commit:** see git log  ·  no DB changes
+- **Changed:** `SiteVisits/SiteVisitsScreen.tsx` — planning a site visit now hands the lead to the first team member (assigned-to name/role), logs it and notifies the whole team.
+- **Changed:** `Leads/LeadStatusSheet.tsx` — while a visit is planned the sheet says "Waiting on" the visit team, and team members can act on it (covers visits planned before this fix).
+
 ### Fixed: tasks assigned to someone did not show on their My Tasks page
 **Commit:** see git log  ·  no DB changes
 - **Changed:** `MyTasks/myTaskFeed.ts` — a planned **site visit** now shows on every assigned team member's list as soon as it is assigned ("Upcoming Site Visit"), not only on the visit day; a **project stage** assigned to a named person shows for that person whatever their role.

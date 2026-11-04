@@ -17,6 +17,7 @@ import { getAllSiteVisits, upsertSiteVisit, deleteSiteVisit } from '../../servic
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getRoleDisplayLabel } from '../../data/permissions'
 import { addAuditLog } from '../../services/auditLogService'
+import { sendNotification } from '../../utils/notifications'
 import { LeadStatusSheet } from '../Leads/LeadStatusSheet'
 import type { SiteVisit, SiteVisitRoom, SiteVisitChecklistItem, SiteChecklistItem, AuditLog, ManagedUser } from '../../types'
 
@@ -276,8 +277,14 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
     // Planning the visit moves the lead to Site Visit Planned.
     const lead = leads.find(l => l.id === leadId)
     if (lead && ['new', 'contacted', 'qualified'].includes(lead.status)) {
-      await updateLead(lead.id, { status: 'site_visit_scheduled' }, `Site visit planned for ${fmtDate(visit.visitDate)}`)
+      // The lead now waits on the person going to the visit (the first team member), not on its owner.
+      const goer = assignableMembers.find(m => m.id === teamMemberIds[0])
+      await updateLead(lead.id, {
+        status: 'site_visit_scheduled',
+        ...(goer ? { assignedToId: goer.id, assignedToName: goer.fullName, assignedRole: goer.role } : {}),
+      }, `Site visit planned for ${fmtDate(visit.visitDate)}${goer ? ` — assigned to ${goer.fullName}` : ''}`)
     }
+    await sendNotification(teamMemberIds, 'Site Visit Assigned', `${leadName(leadId)} — site visit on ${fmtDate(visit.visitDate)}.`, `/leads/${leadId}`)
     dismiss(() => setShowNew(false), `Site visit planned for ${fmtDate(visit.visitDate)}.`)
     setSnack({ open: true, msg: 'Site visit planned.', type: 'success' })
   }
