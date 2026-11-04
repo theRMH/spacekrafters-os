@@ -312,7 +312,13 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
       // Recording the planned visit moves the lead on to Site Visit Done by itself.
       const lead = leads.find(l => l.id === updated.leadId)
       if (lead && ['new', 'contacted', 'qualified', 'site_visit_scheduled'].includes(lead.status)) {
-        await updateLead(lead.id, { status: 'site_visit_done' }, 'Site visit recorded')
+        // ...and sends it back to the PC who owns the lead, for the next step.
+        const pc = assignableMembers.find(m => m.id === lead.ownerId)
+        await updateLead(lead.id, {
+          status: 'site_visit_done',
+          ...(pc ? { assignedToId: pc.id, assignedToName: pc.fullName, assignedRole: pc.role } : {}),
+        }, `Site visit recorded${pc ? ` — sent to ${pc.fullName}` : ''}`)
+        if (pc) await sendNotification([pc.id], 'Site Visit Recorded', `${leadName(lead.id)} — the site visit is recorded. Next: requirements.`, `/leads/${lead.id}`)
       }
     }
     const doneMsg = recording ? 'Site visit recorded — lead moved to Site Visit Done.' : 'Site visit updated.'

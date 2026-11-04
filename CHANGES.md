@@ -1,5 +1,9 @@
 ## 2026-11-03
 
+### Changed: recording a site visit sends the lead back to the PC
+**Commit:** see git log  ·  no DB changes
+- **Changed:** `SiteVisits/SiteVisitsScreen.tsx` — when the site engineer records the planned visit, the lead moves to Site Visit Done and is handed back to the lead's PC (owner), who is notified. Flow: lead → PC contacts and assigns the site engineer → engineer records the visit from My Tasks → back to the PC.
+
 ### Changed: "Assign Site Visit" step — the site engineer gets the task with a Record Site Visit update
 **Commit:** see git log  ·  no DB changes
 - **Changed:** `Leads/LeadStatusSheet.tsx` — the Contacted step now reads **Assign Site Visit** (pick the date and the site engineer); the assignee opens the lead from My Tasks and taps **Record Site Visit**.
