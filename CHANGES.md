@@ -1,5 +1,9 @@
 ## 2026-11-03
 
+### Fixed: a person assigned a site visit could not open the lead or update it (lead name showed as an id) ⚠ DEPLOY
+**Commit:** see git log
+- **Added:** `supabase/assigned-lead-access.sql` — the person a lead is assigned to (or who is on its site-visit team) can now read and update that lead, whatever their role. ⚠ DEPLOY: run once in the Supabase SQL editor. Without it, they see the task but the lead is hidden by the database.
+
 ### Fixed: assigning a lead to someone left it "Waiting on" the old person
 **Commit:** see git log  ·  no DB changes
 - **Changed:** `Leads/LeadsScreen.tsx` — picking a different person in a lead's Assign To / Lead Owner now also hands the lead to them (assigned-to follows the owner), so they see the Update Status step and the lead on My Tasks; they are notified.
