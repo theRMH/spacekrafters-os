@@ -1,5 +1,10 @@
 ## 2026-11-03
 
+### Changed: "Assign Site Visit" step — the site engineer gets the task with a Record Site Visit update
+**Commit:** see git log  ·  no DB changes
+- **Changed:** `Leads/LeadStatusSheet.tsx` — the Contacted step now reads **Assign Site Visit** (pick the date and the site engineer); the assignee opens the lead from My Tasks and taps **Record Site Visit**.
+- **Changed:** `MyTasks/myTaskFeed.ts` — no duplicate Site Visit card when the lead card already shows for the same person.
+
 ### Fixed: a lead still said "Waiting on <owner>" after its site visit was assigned to someone else
 **Commit:** see git log  ·  no DB changes
 - **Changed:** `SiteVisits/SiteVisitsScreen.tsx` — planning a site visit now hands the lead to the first team member (assigned-to name/role), logs it and notifies the whole team.

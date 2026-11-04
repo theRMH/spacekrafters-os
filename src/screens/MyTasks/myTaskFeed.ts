@@ -210,6 +210,8 @@ export function buildMyTaskFeed(opts: {
     // A planned visit stays on the assignee's list from the moment it is assigned (not only on the day); done visits only show on the day.
     if (v.status !== 'scheduled' && !isToday(v.visitDate)) continue
     if (!(v.teamMemberIds ?? []).includes(user.id)) continue
+    // The lead card (handed to the visit's first team member) already carries the Record Site Visit update.
+    if (items.some(i => i.key === `lead-${v.leadId}`)) continue
     const visitLead = leadById.get(v.leadId)
     if (visitLead?.status === 'won' || visitLead?.status === 'lost') continue
     items.push({

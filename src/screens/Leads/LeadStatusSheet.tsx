@@ -244,12 +244,12 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
             {/* Two steps: PLAN the visit (date + team), then RECORD it (rooms, measurements, checklist). */}
             {!siteVisit ? (
               <>
-                <p className="text-sm text-slate-600">Step 1 — plan the site visit: pick the date and who is going.</p>
-                <button onClick={() => setEmbed('site')} className={primaryBtn} style={navy}>Plan Site Visit</button>
+                <p className="text-sm text-slate-600">Step 1 — assign the site visit: pick the date and the site engineer who will go and record it.</p>
+                <button onClick={() => setEmbed('site')} className={primaryBtn} style={navy}>Assign Site Visit</button>
               </>
             ) : siteVisit.status === 'scheduled' ? (
               <>
-                <p className="text-sm text-slate-600">Site visit planned for <span className="font-bold text-slate-800">{new Date(siteVisit.visitDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>{siteVisit.teamMemberNames?.length ? ` · ${siteVisit.teamMemberNames.join(', ')}` : ''}.</p>
+                <p className="text-sm text-slate-600">Site visit assigned for <span className="font-bold text-slate-800">{new Date(siteVisit.visitDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>{siteVisit.teamMemberNames?.length ? ` · ${siteVisit.teamMemberNames.join(', ')}` : ''}.</p>
                 <p className="text-xs text-slate-400">Step 2 — after the visit, record the rooms, measurements and checklist.</p>
                 <button onClick={() => setEmbed('site-edit')} className={primaryBtn} style={navy}>Record Site Visit</button>
               </>
