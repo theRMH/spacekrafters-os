@@ -1,5 +1,10 @@
 ## 2026-11-03
 
+### Fixed: tasks assigned to someone did not show on their My Tasks page
+**Commit:** see git log  ·  no DB changes
+- **Changed:** `MyTasks/myTaskFeed.ts` — a planned **site visit** now shows on every assigned team member's list as soon as it is assigned ("Upcoming Site Visit"), not only on the visit day; a **project stage** assigned to a named person shows for that person whatever their role.
+- **Changed:** `MyTasks/MyTaskScreen.tsx` — the "visits" count follows the same rule.
+
 
 ### Fixed: deleting a project with receipts/expenses/purchase orders failed (foreign key error) ⚠ DEPLOY
 **Commit:** Uncommitted

@@ -85,7 +85,7 @@ export default function MyTaskScreen() {
   const completedTasks = useMemo(() => tasks.filter(t => t.assigneeId === user?.id && t.status === 'completed'), [tasks, user])
   const todayVisits = useMemo(() => {
     const apptCount = appointments.filter(a => a.status !== 'cancelled' && isToday(a.scheduledAt) && (a.assignedToIds ?? (a.coordinatorId ? [a.coordinatorId] : [])).includes(user?.id ?? '')).length
-    const svCount = siteVisits.filter(v => isToday(v.visitDate) && (v.teamMemberIds ?? []).includes(user?.id ?? '')).length
+    const svCount = siteVisits.filter(v => (v.status === 'scheduled' || isToday(v.visitDate)) && (v.teamMemberIds ?? []).includes(user?.id ?? '')).length
     return apptCount + svCount
   }, [appointments, siteVisits, user])
 

@@ -98,7 +98,7 @@ export function buildMyTaskFeed(opts: {
   // 1. Project — my role's turn on the current stage (mirrors ProjectStatusSheet's own canAct gate: role match, not exact person — several people can share a role).
   for (const p of projects) {
     if (p.status === 'closed' || p.pendingStageRequest) continue
-    if (p.assignedRole !== role) continue
+    if (p.assignedRole !== role && p.assignedToId !== user.id) continue
     items.push({
       key: `stage-${p.id}`, at: p.updatedAt,
       title: stageTaskTitle(p) ?? `Submit ${PROJECT_STAGE_LABEL[p.stage]} for Approval`, badge: 'Project Stage', badgeCls: 'bg-teal-50 text-teal-700',
@@ -207,13 +207,14 @@ export function buildMyTaskFeed(opts: {
     })
   }
   for (const v of siteVisits) {
-    if (!isToday(v.visitDate)) continue
+    // A planned visit stays on the assignee's list from the moment it is assigned (not only on the day); done visits only show on the day.
+    if (v.status !== 'scheduled' && !isToday(v.visitDate)) continue
     if (!(v.teamMemberIds ?? []).includes(user.id)) continue
     const visitLead = leadById.get(v.leadId)
     if (visitLead?.status === 'won' || visitLead?.status === 'lost') continue
     items.push({
       key: `sv-${v.id}`, at: v.visitDate,
-      title: 'Site Visit Today', badge: 'Site Visit', badgeCls: 'bg-purple-50 text-purple-700',
+      title: isToday(v.visitDate) ? 'Site Visit Today' : 'Upcoming Site Visit', badge: 'Site Visit', badgeCls: 'bg-purple-50 text-purple-700',
       subjectLabel: 'Lead', subject: leadById.get(v.leadId)?.name ?? v.leadId,
       meta: [fmtDateTime(v.visitDate), `${v.rooms.length} room(s)`],
       // Completion is a Lead-level action (see LeadStatusSheet's
