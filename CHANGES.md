@@ -1,3 +1,9 @@
+## 2026-11-05
+
+### Changed: Plan Site Visit — one person instead of team members
+**Commit:** Uncommitted  ·  no DB changes
+- **Changed:** `SiteVisits/SiteVisitsScreen.tsx` — the Team Members checklist is replaced by a **Person for Site Visit** dropdown (everyone active, with role); the button reads **Assign Site Visit**. The chosen person is saved as the visit's only team member, so the lead assignment and notification work as before. Same field on the Record / Edit form.
+
 ## 2026-11-03
 
 ### Fixed: a person assigned a site visit could not open the lead or update it (lead name showed as an id) ⚠ DEPLOY

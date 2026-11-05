@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Trash2, CheckSquare, Square } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -146,10 +146,6 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
     getManagedUsersDirectory().then(users => setAssignableMembers(users.filter(u => u.status === 'active')))
   }, [])
 
-  function toggleTeamMember(id: string) {
-    setTeamMemberIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
-  }
-
   function namesFor(ids: string[]): string[] {
     return ids.map(id => assignableMembers.find(m => m.id === id)?.fullName ?? (id === user?.id ? user?.name : undefined) ?? 'Unknown')
   }
@@ -255,7 +251,7 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
   // Step 1 — PLAN the visit: the lead, the date and who goes. The rooms and measurements come later (recordVisit).
   async function handleAddVisit() {
     if (!leadId || !visitDate || teamMemberIds.length === 0) {
-      setFormError('Lead, visit date and team members are required.')
+      setFormError('Lead, visit date and the person for the site visit are required.')
       return
     }
     if (visitDate < todayStr()) {
@@ -295,7 +291,7 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
     const recording = selected.status === 'scheduled'
     const validRooms = rooms.filter(r => r.name.trim())
     if (!visitDate || validRooms.length === 0 || teamMemberIds.length === 0) {
-      setFormError('Visit date, team members, and at least one named room are required.')
+      setFormError('Visit date, the person for the site visit, and at least one named room are required.')
       return
     }
     const updated: SiteVisit = {
@@ -591,23 +587,15 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-1 block">Team Members *</label>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 max-h-56 overflow-y-auto">
-              {assignableMembers.map(m => {
-                const isChecked = teamMemberIds.includes(m.id)
-                return (
-                  <button type="button" key={m.id} onClick={() => toggleTeamMember(m.id)}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left active:bg-slate-100">
-                    {isChecked ? <CheckSquare size={17} className="text-indigo-600 shrink-0" /> : <Square size={17} className="text-slate-300 shrink-0" />}
-                    <span className="text-sm text-slate-700 truncate">{m.fullName}</span>
-                    <span className="text-[12px] text-slate-400 ml-auto shrink-0">{getRoleDisplayLabel(m.role, m.displayRole)}</span>
-                  </button>
-                )
-              })}
-              {assignableMembers.length === 0 && (
-                <p className="text-xs text-slate-400 text-center py-4">No active team members found</p>
-              )}
-            </div>
+            <label className="text-xs font-semibold text-slate-500 mb-1 block">Person for Site Visit *</label>
+            <select value={teamMemberIds[0] ?? ''} onChange={e => setTeamMemberIds(e.target.value ? [e.target.value] : [])}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+              <option value="">— Select —</option>
+              {[...assignableMembers].sort((x, y) => x.fullName.localeCompare(y.fullName)).map(m => (
+                <option key={m.id} value={m.id}>{m.fullName} · {getRoleDisplayLabel(m.role, m.displayRole)}</option>
+              ))}
+              {teamMemberIds[0] && !assignableMembers.some(m => m.id === teamMemberIds[0]) && <option value={teamMemberIds[0]}>{namesFor(teamMemberIds)[0]}</option>}
+            </select>
           </div>
 
           {/* Planning only needs the lead, date and team — rooms, measurements and the checklist are filled in when the visit is recorded. */}
@@ -700,7 +688,7 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
             className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
             style={{ background: '#C9A24B' }}
           >
-            {showEdit ? (selected?.status === 'scheduled' ? 'Save & Complete Site Visit' : 'Save Changes') : 'Plan Site Visit'}
+            {showEdit ? (selected?.status === 'scheduled' ? 'Save & Complete Site Visit' : 'Save Changes') : 'Assign Site Visit'}
           </button>
         </div>
       </BottomSheet>
