@@ -1,5 +1,20 @@
 ## 2026-11-05
 
+### Fixed: work stopping after Waiting for Delivery, and assigned people of another role could not act
+**Commit:** Uncommitted  ·  no DB changes
+- **Changed:** `ProjectWorkspace/WaitingForDeliveryStep.tsx` — **Move to Execution** now asks the PC to pick the site engineer (everyone listed, with role); the project is assigned to them and they get a notification and a My Tasks card. Before, it was assigned to the PC, who could not act on Execution and left no task for anyone but the MD.
+- **Changed:** `ProjectWorkspace/ProjectStatusSheet.tsx` — the person a project is assigned to right now can act on the stage even when their role differs from the stage's usual role.
+- **Changed:** `ProjectWorkspace/MaterialIndentStep.tsx` — the assigned person can prepare the indent even if they are not a user with the QS role.
+
+### Fixed: assigned people could not see or save their project step (architect never got the task)
+**Commit:** Uncommitted
+- **Changed:** `services/projectService.ts` — `upsertProject` updates an existing project and inserts only a new one; the old upsert was also checked against the INSERT policy (owner / PC only), so an architect, QS or site engineer could not save their step.
+- **Changed:** `supabase/project-owner-column-policies.sql` — also redefines `sks_can_see_project` so whoever a project is assigned to (or the architect on its design / shop-drawing work) can see and update it; before, only owner / admin / accounts / QS / the PC owner or someone with a task could. ⚠ DEPLOY
+
+### Added: SQL so a project coordinator can convert a lead to a project
+**Commit:** Uncommitted
+- **Added:** `supabase/project-owner-column-policies.sql` — SELECT and UPDATE policies on `sks_projects` also pass when the row's own `owner_id` is the caller, so the insert half of the save (upsert) is not blocked for a PC. ⚠ DEPLOY
+
 ### Changed: Plan Site Visit — one person instead of team members
 **Commit:** Uncommitted  ·  no DB changes
 - **Changed:** `SiteVisits/SiteVisitsScreen.tsx` — the Team Members checklist is replaced by a **Person for Site Visit** dropdown (everyone active, with role); the button reads **Assign Site Visit**. The chosen person is saved as the visit's only team member, so the lead assignment and notification work as before. Same field on the Record / Edit form.

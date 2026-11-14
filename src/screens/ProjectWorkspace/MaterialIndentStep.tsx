@@ -56,7 +56,7 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
 
   const isOwner = user?.role === 'owner'
   const isPc = user?.role === 'project_coordinator' || isOwner
-  const isQs = user?.role === 'qs' || isOwner
+  const isQs = user?.role === 'qs' || isOwner || (!!user && project.assignedToId === user.id)
   const qsRevising = withMd && user?.role === 'qs'
 
   const [form, setForm] = useState<IndentForm>(() => {

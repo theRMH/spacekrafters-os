@@ -227,7 +227,8 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
 
   const respRole = ROLE_FOR_PROJECT_STAGE[project.stage]
   const respName = project.assignedToName
-  const canAct = !respRole || user?.role === respRole || user?.role === 'owner'
+  // The stage's role, the MD, or the person the project is assigned to right now (the PC may pick someone of another role).
+  const canAct = !respRole || user?.role === respRole || user?.role === 'owner' || (!!user && project.assignedToId === user.id)
   const canApprove = can('approve_project_stage')
 
   const btn = 'w-full py-3 rounded-xl text-sm font-bold active:opacity-90 disabled:opacity-50'
