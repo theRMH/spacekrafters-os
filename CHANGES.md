@@ -1,3 +1,10 @@
+## 2026-11-14
+
+### Changed: Material Indent — the PC approves at any amount (MD approval removed)
+**Commit:** see git log  ·  no DB changes
+- **Changed:** `ProjectWorkspace/MaterialIndentStep.tsx` — removed the 50K rule: no "Send to MD for Approval", no MD hold, no "QS keeps revising while with the MD". The PC (or MD) simply **Approves** or **Rejects** (with a reason) whatever the amount; the QS sends to the PC only. Estimated Amount is still shown and printed.
+- **Changed:** `data/procurementRules.ts` — removed the unused `MD_APPROVAL_LIMIT`.
+
 ## 2026-11-05
 
 ### Fixed: work stopping after Waiting for Delivery, and assigned people of another role could not act
