@@ -211,7 +211,7 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
   // the sheet's own first content block (full-bleed via negative margins)
   // rather than BottomSheet's generic title bar, so it can carry the nav row.
   function reviewHeader(title: string, ownerName: string | undefined) {
-    const showNav = onPrev || onNext
+    const showNav = false // no Previous/Next in the review header
     return (
       <div className="-mx-5 -mt-4 px-5 pt-4 pb-4 mb-4" style={{ background: 'linear-gradient(135deg, #0F2A4A, #16385E)' }}>
         <div className="flex items-start justify-between gap-3">
@@ -244,7 +244,7 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
       {/* Quotation review — the same sheet handles both the MD's own internal
           approval (status 'internal_review') and the client-approval stage
           (status 'sent_to_client'), branching only on which decision to record. */}
-      <BottomSheet isOpen={!!quote} onClose={onClose} height="full">
+      <BottomSheet isOpen={!!quote} onClose={onClose} height="full" bleedTop>
         {quote && (() => {
           const q = quote
           const isClientStage = q.status === 'sent_to_client'
@@ -329,7 +329,7 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
       </BottomSheet>
 
       {/* Design review */}
-      <BottomSheet isOpen={!!design} onClose={onClose} height="full">
+      <BottomSheet isOpen={!!design} onClose={onClose} height="full" bleedTop>
         {design && (() => {
           const p = design
           const pkgVersions = versions.filter(v => v.designPackageId === p.id).sort((a, b) => b.versionNumber - a.versionNumber)

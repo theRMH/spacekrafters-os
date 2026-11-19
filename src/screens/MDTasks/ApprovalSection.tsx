@@ -304,7 +304,7 @@ export function ApprovalSection({ onDecided, range, onPendingCount }: {
         </div>
       ))}
 
-      <BottomSheet isOpen={!!selectedMrf} onClose={() => setSelectedMrf(null)} height="full">
+      <BottomSheet isOpen={!!selectedMrf} onClose={() => setSelectedMrf(null)} height="full" bleedTop>
         {selectedMrf && (() => {
           const project = projects.find(p => p.id === selectedMrf.projectId)
           const leadOwner = resolveLeadOwner(project?.leadId, leads)
@@ -319,16 +319,6 @@ export function ApprovalSection({ onDecided, range, onPendingCount }: {
                   </div>
                   <button onClick={() => setSelectedMrf(null)} aria-label="Close" className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center shrink-0 active:bg-white/25">
                     <X size={16} className="text-white" />
-                  </button>
-                </div>
-                <div className="flex items-center justify-between mt-3">
-                  <button disabled={!hasPrev} onClick={() => openEntry(visibleEntries[selectedIndex - 1])}
-                    className="text-xs font-semibold text-white bg-white/15 px-3 py-1.5 rounded-lg disabled:text-white/40 disabled:bg-white/5">
-                    ← Previous
-                  </button>
-                  <button disabled={!hasNext} onClick={() => openEntry(visibleEntries[selectedIndex + 1])}
-                    className="text-xs font-semibold text-white bg-white/15 px-3 py-1.5 rounded-lg disabled:text-white/40 disabled:bg-white/5">
-                    Next →
                   </button>
                 </div>
               </div>
@@ -348,7 +338,7 @@ export function ApprovalSection({ onDecided, range, onPendingCount }: {
         })()}
       </BottomSheet>
 
-      <BottomSheet isOpen={!!selectedReschedule} onClose={() => setSelectedReschedule(null)} height="full">
+      <BottomSheet isOpen={!!selectedReschedule} onClose={() => setSelectedReschedule(null)} height="full" bleedTop>
         {selectedReschedule && (() => {
           const appt = selectedReschedule
           const lead = leadFor(appt.leadId)
@@ -362,16 +352,6 @@ export function ApprovalSection({ onDecided, range, onPendingCount }: {
                   </div>
                   <button onClick={() => setSelectedReschedule(null)} aria-label="Close" className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center shrink-0 active:bg-white/25">
                     <X size={16} className="text-white" />
-                  </button>
-                </div>
-                <div className="flex items-center justify-between mt-3">
-                  <button disabled={!hasPrev} onClick={() => openEntry(visibleEntries[selectedIndex - 1])}
-                    className="text-xs font-semibold text-white bg-white/15 px-3 py-1.5 rounded-lg disabled:text-white/40 disabled:bg-white/5">
-                    ← Previous
-                  </button>
-                  <button disabled={!hasNext} onClick={() => openEntry(visibleEntries[selectedIndex + 1])}
-                    className="text-xs font-semibold text-white bg-white/15 px-3 py-1.5 rounded-lg disabled:text-white/40 disabled:bg-white/5">
-                    Next →
                   </button>
                 </div>
               </div>
