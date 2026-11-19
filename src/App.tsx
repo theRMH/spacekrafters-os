@@ -130,7 +130,7 @@ function AuthedRoutes() {
       <Route
         path="/my-tasks/project/:projectId"
         element={
-          <ProtectedRoute screenPath="my-tasks">
+          <ProtectedRoute screenPath="my-tasks/project">
             <AppShell><MyProjectDetailScreen /></AppShell>
           </ProtectedRoute>
         }

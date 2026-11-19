@@ -17,6 +17,11 @@ export function hasRole(user: Pick<AuthUser, 'role' | 'roles'> | null | undefine
 }
 
 export function canAccessScreen(role: UserRole | UserRole[], screenPath: string): boolean {
+  // The project detail page is opened from My Tasks (view_my_tasks) and from the Projects list (view_projects —
+  // the owner/MD has the list but no My Tasks), so either is enough.
+  if (screenPath === 'my-tasks/project') {
+    return hasPermission(role, 'view_my_tasks') || hasPermission(role, 'view_projects') || hasPermission(role, 'view_tasks')
+  }
   const required = SCREEN_PERMISSIONS[screenPath]
   if (!required) return true
   return hasPermission(role, required)
