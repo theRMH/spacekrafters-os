@@ -307,7 +307,6 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
       case 'site_visit_done':
         return (
           <div className="space-y-3">
-            {siteVisit && siteVisit.status !== 'scheduled' && <SiteVisitDetails visit={siteVisit} />}
             {hasRequirement ? (
               <>
                 <p className="text-sm text-slate-600">Requirements are on record.</p>
@@ -382,6 +381,8 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   const canLose = canAct && stage !== 'won' && stage !== 'lost'
   // A planned visit already counts as being in the Site Visit stage.
   const currentIdx = PIPELINE.findIndex(p => p.status === (lead.status === 'site_visit_scheduled' ? 'site_visit_done' : stage))
+  // Stages after the site visit show the recorded visit above the current step.
+  const showPrevious = ['site_visit_done', 'requirements_captured', 'quotation_drafted', 'client_approved'].includes(stage)
 
   return (
     <>
@@ -399,28 +400,26 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
             options={overrideOptions} />
         )}
 
-        <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-2">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Lead Details</p>
+        {/* Lead banner — who the lead is and where it stands in the journey. */}
+        <div className="rounded-2xl p-4 space-y-2.5 text-white" style={{ background: 'linear-gradient(135deg,#6D28D9,#7C3AED)' }}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="text-base font-extrabold text-slate-800 leading-tight truncate">{lead.name}</h3>
-              {lead.leadNumber && <p className="text-xs text-slate-400 mt-0.5">{lead.leadNumber}</p>}
+              <h3 className="text-base font-extrabold leading-tight truncate">{lead.name}</h3>
+              <p className="text-xs text-violet-200 mt-0.5">{[lead.leadNumber, lead.city].filter(Boolean).join(' · ')}</p>
             </div>
-            <StatusBadge status={lead.status} label={leadStatusLabel(lead)} />
+            <span className="text-[11px] font-bold bg-white/20 rounded-full px-2.5 py-1 shrink-0">{leadStatusLabel(lead)}</span>
           </div>
-          <div className="space-y-0.5 text-sm text-slate-600 pt-1">
+          <div className="space-y-0.5 text-xs text-violet-100">
             <p>{lead.phone}</p>
-            <p>{lead.city}</p>
-            <p>Owner: {lead.ownerName}</p>
+            <p>Lead Owner: {lead.ownerName}{lead.assignedToName && lead.assignedToName !== lead.ownerName ? ` · Assigned to: ${lead.assignedToName}` : ''}</p>
             {lead.businessDivision && (
               <p>{BUSINESS_DIVISION_LABEL[lead.businessDivision]}{lead.businessBrand ? ` (${BUSINESS_BRAND_LABEL[lead.businessBrand]})` : ''}</p>
             )}
-            {lead.assignedToName && lead.assignedToName !== lead.ownerName && <p>Assigned to: {lead.assignedToName}</p>}
           </div>
           {currentIdx !== -1 && (
-            <div className="flex flex-wrap gap-x-2 gap-y-1 pt-2 border-t border-slate-200">
+            <div className="flex flex-wrap gap-x-2 gap-y-1 pt-2 border-t border-white/20">
               {PIPELINE.map((p, i) => (
-                <span key={p.status} className={`text-[11px] font-semibold ${i < currentIdx ? 'text-emerald-600' : i === currentIdx ? 'text-indigo-700 underline underline-offset-4' : 'text-slate-300'}`}>
+                <span key={p.status} className={`text-[11px] font-semibold ${i < currentIdx ? 'text-emerald-300' : i === currentIdx ? 'text-white underline underline-offset-4' : 'text-violet-300/60'}`}>
                   {i < currentIdx ? '✓ ' : ''}{p.label}{i < PIPELINE.length - 1 ? ' ›' : ''}
                 </span>
               ))}
@@ -468,6 +467,14 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
           )}
         </div>
 
+        {/* Earlier stages' details on top, the current step below — so nobody has to open another screen. */}
+        {showPrevious && siteVisit && siteVisit.status !== 'scheduled' && (
+          <>
+            <p className="text-[11px] font-bold text-violet-500 uppercase tracking-wide pt-1">Previous stage — Site Visit Summary</p>
+            <SiteVisitDetails visit={siteVisit} />
+          </>
+        )}
+        <p className="text-[11px] font-bold text-violet-500 uppercase tracking-wide pt-1">Current step — {PIPELINE[currentIdx]?.label ?? leadStatusLabel(lead)}</p>
         {renderBody()}
 
         {/* Edit the record behind the current stage (e.g. after the MD overrides the lead back to it). */}

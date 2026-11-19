@@ -440,6 +440,15 @@ export interface QuotationTemplateData {
   paymentFooter?: string
 }
 
+export interface QuotationPastVersion {
+  version: number
+  file?: string
+  netAmount: number
+  // Why it was replaced (the MD's / client's rejection reason), when there was one.
+  reason?: string
+  replacedAt: string
+}
+
 export interface Quotation {
   id: string
   leadId: string
@@ -476,6 +485,8 @@ export interface Quotation {
   // quotation — array-typed to match this app's other file-list fields, but
   // the form caps it at one file.
   documentFiles?: string[]
+  // Earlier proposals (PDF + amount) kept when the quotation is edited and re-sent after a rejection.
+  previousVersions?: QuotationPastVersion[]
   // Layout version of the stored generated PDF (PDF_LAYOUT_VERSION in utils/quotationPdf.ts); older ones are rebuilt on View.
   pdfLayout?: number
   terms?: string

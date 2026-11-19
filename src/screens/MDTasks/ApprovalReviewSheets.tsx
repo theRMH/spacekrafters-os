@@ -11,6 +11,7 @@ import { upsertDesignPackage } from '../../services/designService'
 import { addAuditLog } from '../../services/auditLogService'
 import { approvalHistoryEntry } from '../../utils/approvalHistory'
 import { statusToSyncFromQuotation } from '../Leads/leadPipeline'
+import { getFileUrl } from '../../utils/fileStorage'
 import type { Quotation, DesignPackage, DesignVersion, Project, AuditLog, QuotationStatus, DesignPackageStatus } from '../../types'
 
 export function fmtCurrency(n: number): string {
@@ -293,6 +294,25 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
                 <div>
                   <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quotation Documents</p>
                   <MultiFileUploadField label="" files={q.documentFiles} onChange={() => {}} readOnly />
+                </div>
+              )}
+              {(q.previousVersions ?? []).length > 0 && (
+                <div>
+                  <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Previous Proposals</p>
+                  <div className="space-y-1.5">
+                    {[...(q.previousVersions ?? [])].reverse().map(pv => {
+                      const link = pv.file ? getFileUrl(pv.file) : undefined
+                      return (
+                        <div key={`${pv.version}-${pv.replacedAt}`} className="flex items-start justify-between gap-3 bg-slate-50 rounded-xl px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-700">Proposal {pv.version} · {fmtCurrency(pv.netAmount)}</p>
+                            {pv.reason && <p className="text-[11px] text-red-600">Rejected: {pv.reason}</p>}
+                          </div>
+                          {link && <a href={link} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-indigo-600 shrink-0">View PDF</a>}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
               {q.terms && <div><p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms</p><p className="text-xs text-slate-600">{q.terms}</p></div>}
