@@ -64,8 +64,6 @@ export function leadStatusLabel(lead: Pick<Lead, 'status' | 'advanceStatus' | 'a
   return LEAD_STATUS_LABEL[lead.status]
 }
 
-// The statuses the MD can force a lead to (the 7 stages + Lost).
-const OVERRIDE_STATUSES: LeadStatus[] = [...PIPELINE.map(p => p.status), 'lost']
 
 interface Props {
   isOpen: boolean
@@ -174,7 +172,8 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     await save(
       status,
       `MD override: ${LEAD_STATUS_LABEL[lead.status]} → ${LEAD_STATUS_LABEL[status]}${withReason(reason)}`,
-      { mdStatusOverride: true, ...(status === 'lost' ? { lostReason: reason || 'MD override' } : {}) },
+      // Stepping back hands the lead to its owner (the PC) so they can redo the step.
+      { mdStatusOverride: true, ...(lead.ownerId ? { assignedToId: lead.ownerId, assignedToName: lead.ownerName } : {}) },
     )
   }
 
@@ -245,7 +244,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
         return (
           <div className="space-y-3">
             {/* Two steps: PLAN the visit (date + team), then RECORD it (rooms, measurements, checklist). */}
-            {!siteVisit ? (
+            {!siteVisit || (siteVisit.status !== 'scheduled' && lead.mdStatusOverride) ? (
               <>
                 <p className="text-sm text-slate-600">Step 1 — assign the site visit: pick the date and the site engineer who will go and record it.</p>
                 <button onClick={() => setEmbed('site')} className={primaryBtn} style={navy}>Assign Site Visit</button>
@@ -332,6 +331,10 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     }
   }
 
+  // MD override only steps BACK: the stages before the current one (a Lost lead can be restored to any stage).
+  const overrideOptions = (lead.status === 'lost' ? PIPELINE : PIPELINE.slice(0, Math.max(0, PIPELINE.findIndex(p => p.status === stage))))
+    .map(p => ({ value: p.status as string, label: LEAD_STATUS_LABEL[p.status] }))
+
   const wa = waLink(lead)
   // The early stages only ever need a phone call — WhatsApp is hidden and
   // Call takes the full row, solid green.
@@ -351,9 +354,9 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     )}
     <BottomSheet isOpen={isOpen && !embed} onClose={onClose} title={`Update Status — ${leadStatusLabel(lead)}`} height="full">
       <div className="space-y-4">
-        {user?.role === 'owner' && (
+        {user?.role === 'owner' && overrideOptions.length > 0 && (
           <MdOverrideCard noun="status" title="lead status" saving={saving} onApply={submitMdOverride}
-            options={OVERRIDE_STATUSES.filter(s => s !== lead.status).map(s => ({ value: s, label: LEAD_STATUS_LABEL[s] }))} />
+            options={overrideOptions} />
         )}
 
         <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-2">

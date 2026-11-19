@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { MdOverrideCard, withReason } from '../../components/forms/MdOverrideCard'
 import { useAuth } from '../../context/AuthContext'
+import { useCRM } from '../../context/CRMContext'
+import { PIPELINE } from '../Leads/leadPipeline'
 import { getManagedUsersDirectory } from '../../services/userService'
 import { getAllPaymentMilestones } from '../../services/financeService'
 import { getAllPunchListItems } from '../../services/punchListService'
@@ -12,7 +14,7 @@ import { StageWorkStep, isWorkStage } from './StageWorkStep'
 import { MaterialIndentStep } from './MaterialIndentStep'
 import { ProcurementStep } from './ProcurementStep'
 import { WaitingForDeliveryStep } from './WaitingForDeliveryStep'
-import type { Project, ProjectStage, ManagedUser, UserRole, StatusHistoryItem } from '../../types'
+import type { Project, ProjectStage, LeadStatus, ManagedUser, UserRole, StatusHistoryItem } from '../../types'
 
 // Single source of truth for stage sequence — the client will share their
 // final order separately; reordering this array (and nothing else) is all
@@ -76,6 +78,7 @@ interface Props {
 
 export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) {
   const { user, can } = useAuth()
+  const { leads, updateLead } = useCRM()
   const navigate = useNavigate()
 
   const [users, setUsers] = useState<ManagedUser[]>([])
@@ -169,6 +172,23 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
   // approval flow. Clears a pending request, reassigns to the stage's
   // responsible role, and reopens a closed project. Reason is mandatory.
   async function submitMdOverride(value: string, reason: string) {
+    // A lead stage ("lead:<status>"): the lead goes back to that stage and the project waits (on hold) until it is won again.
+    if (value.startsWith('lead:')) {
+      const leadStatus = value.slice(5) as LeadStatus
+      const lead = leads.find(l => l.id === project.leadId)
+      if (!lead) { onDone('This project has no lead to move back.'); return }
+      const label = PIPELINE.find(p => p.status === leadStatus)?.label ?? leadStatus
+      setSaving(true)
+      const r = await updateLead(lead.id, {
+        status: leadStatus, mdStatusOverride: true,
+        ...(lead.ownerId ? { assignedToId: lead.ownerId, assignedToName: lead.ownerName } : {}),
+      }, `MD override: project sent back to lead stage ${label}${withReason(reason)}`)
+      setSaving(false)
+      if (!r.ok) { alert(`Not changed: ${r.error ?? 'could not update the lead.'}`); return }
+      await persist({ status: 'on_hold' },
+        `MD override: ${PROJECT_STAGE_LABEL[project.stage]} → Lead stage ${label}${withReason(reason)}`, project.stage)
+      return
+    }
     const stage = value as ProjectStage
     const { role, id, name } = nextResponsible(stage)
     await persist(
@@ -176,7 +196,7 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
         stage,
         assignedRole: role, assignedToId: id, assignedToName: name,
         pendingStageRequest: undefined,
-        status: stage === 'closed' ? 'closed' as const : project.status === 'closed' ? 'active' as const : project.status,
+        status: stage === 'closed' ? 'closed' as const : (project.status === 'closed' || project.status === 'on_hold') ? 'active' as const : project.status,
       },
       `MD override: ${PROJECT_STAGE_LABEL[project.stage]} → ${PROJECT_STAGE_LABEL[stage]}${withReason(reason)}`,
       stage,
@@ -388,7 +408,11 @@ export function ProjectStatusSheet({ isOpen, onClose, project, onDone }: Props) 
         {renderBody()}
         {user?.role === 'owner' && (
           <MdOverrideCard noun="stage" title="project stage" saving={saving} onApply={submitMdOverride}
-            options={PROJECT_STAGE_ORDER.filter(s => s !== project.stage).map(s => ({ value: s, label: PROJECT_STAGE_LABEL[s] }))} />
+            options={[
+              // The whole lead journey comes first, then the project stages before the current one.
+              ...PIPELINE.filter(p => p.status !== 'won').map(p => ({ value: `lead:${p.status}`, label: `Lead — ${p.label}` })),
+              ...PROJECT_STAGE_ORDER.slice(0, Math.max(0, PROJECT_STAGE_ORDER.indexOf(project.stage))).map(s => ({ value: s as string, label: PROJECT_STAGE_LABEL[s] })),
+            ]} />
         )}
         <button onClick={onClose} className={secondaryBtn}>Cancel</button>
       </div>
