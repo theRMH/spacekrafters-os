@@ -455,7 +455,7 @@ export default function ProjectsScreen() {
           <p className="text-sm text-slate-400 text-center py-10">No projects yet.</p>
         ) : (
           filtered.map(project => (
-            <div key={project.id} role="button" tabIndex={0} onClick={() => (selectMode ? toggleSelected(project.id) : setSelected(project))}
+            <div key={project.id} role="button" tabIndex={0} onClick={() => (selectMode ? toggleSelected(project.id) : navigate(`/my-tasks/project/${project.id}`, { state: { from: '/projects' } }))}
               className={`w-full text-left bg-white rounded-2xl p-4 shadow-sm border active:bg-slate-50 cursor-pointer ${selectMode && selectedIds.has(project.id) ? 'border-red-300 bg-red-50' : 'border-slate-100'}`}>
               <div className="flex items-start justify-between gap-2 mb-1">
                 {selectMode && (
