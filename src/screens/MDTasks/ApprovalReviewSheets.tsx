@@ -292,7 +292,7 @@ export function ApprovalReviewSheets({ quote, design, versions, projects, onClos
 
               {q.documentFiles && q.documentFiles.length > 0 && (
                 <div>
-                  <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quotation Documents</p>
+                  <p className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">Latest Quotation (Proposal {q.version ?? 1})</p>
                   <MultiFileUploadField label="" files={q.documentFiles} onChange={() => {}} readOnly />
                 </div>
               )}
