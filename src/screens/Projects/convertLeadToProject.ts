@@ -22,7 +22,7 @@ export async function convertLeadToProject(params: {
   name: string
   dueDate: string
   user: AuthUser | null
-}): Promise<{ ok: boolean; error?: string; project?: Project }> {
+}): Promise<{ ok: boolean; error?: string; warning?: string; project?: Project }> {
   const { lead, quotation, name, dueDate, user } = params
   const now = new Date().toISOString()
 
@@ -66,8 +66,10 @@ export async function convertLeadToProject(params: {
   for (const pkg of leadPackages) await upsertDesignPackage({ ...pkg, projectId: project.id, updatedAt: now })
 
   let finalProject = project
+  const problems: string[] = []
   if (quotation) {
-    await upsertQuotation({ ...quotation, projectId: project.id })
+    const q = await upsertQuotation({ ...quotation, projectId: project.id })
+    if (q && q.ok === false) problems.push(`quotation link: ${q.error}`)
     const advance = lead.advancePaymentAmount
     const milestone: PaymentMilestone = {
       id: newId('mst'), projectId: project.id, title: 'Full Contract Value', amount: quotation.netAmount,
@@ -78,13 +80,15 @@ export async function convertLeadToProject(params: {
       milestone.receivedDates = [now]
       milestone.status = advance >= milestone.amount ? 'received' : 'partial'
     }
-    await upsertPaymentMilestone(milestone)
+    const m = await upsertPaymentMilestone(milestone)
+    if (!m.ok) problems.push(`payment milestone: ${m.error}`)
     if (advance) {
       const receipt: Receipt = {
         id: newId('rcpt'), projectId: project.id, milestoneId: milestone.id, amount: advance, receivedDate: now,
         reference: lead.advancePaymentRef, notes: 'Advance payment carried over from Lead.', createdAt: now,
       }
-      await addReceipt(receipt)
+      const r = await addReceipt(receipt)
+      if (!r.ok) problems.push(`advance receipt: ${r.error}`)
       finalProject = { ...project, advanceReceived: advance }
       await upsertProject(finalProject)
     }
@@ -96,5 +100,5 @@ export async function convertLeadToProject(params: {
       description: `Project "${project.name}" created.`, createdBy: user.name, createdByRole: user.role, createdAt: now,
     })
   }
-  return { ok: true, project: finalProject }
+  return { ok: true, project: finalProject, warning: problems.length ? problems.join('; ') : undefined }
 }

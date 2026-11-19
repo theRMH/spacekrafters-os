@@ -162,6 +162,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     setConverting(false)
     if (!result.ok) { setConvertError(result.error ?? 'Could not create the project.'); return }
     setShowConvert(false)
+    if (result.warning) alert(`Project created, but some records were not saved: ${result.warning}`)
     await save('won', `Converted to a project: ${convertName.trim()}`)
   }
 

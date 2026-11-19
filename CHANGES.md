@@ -1,5 +1,11 @@
 ## 2026-11-14
 
+### Fixed: errors found testing lead → project → procurement as each role (role simulation, rolled back)
+**Commit:** Uncommitted  ·  ⚠ DEPLOY `supabase/pc-convert-and-notify-policies.sql`
+- **Changed:** `services/leadService.ts` — `upsertLead` updates first and inserts only a new lead; the old upsert was blocked by the INSERT policy for the QS / designer a lead is assigned to.
+- **Changed:** `Projects/convertLeadToProject.ts` + `Leads/LeadStatusSheet.tsx` — quotation link, payment milestone and advance receipt failures are no longer silent; the PC sees which record was not saved.
+- **Added:** `supabase/pc-convert-and-notify-policies.sql` — PC may INSERT the first payment milestone and advance receipt (read/update stay owner/accounts); notification insert policy re-created.
+
 ### Changed: Material Indent — the PC approves at any amount (MD approval removed)
 **Commit:** see git log  ·  no DB changes
 - **Changed:** `ProjectWorkspace/MaterialIndentStep.tsx` — removed the 50K rule: no "Send to MD for Approval", no MD hold, no "QS keeps revising while with the MD". The PC (or MD) simply **Approves** or **Rejects** (with a reason) whatever the amount; the QS sends to the PC only. Estimated Amount is still shown and printed.
