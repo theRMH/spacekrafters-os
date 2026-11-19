@@ -47,7 +47,10 @@ export async function upsertLead(lead: Lead): Promise<{ ok: boolean; error?: str
   if (updated.error) return { ok: false, error: updated.error.message }
   if (updated.data && updated.data.length > 0) return { ok: true }
   const { error } = await supabase.from(TABLE).insert({ id: lead.id, ...row })
-  if (error) return { ok: false, error: error.message }
+  if (error) {
+    // The row exists but the update touched 0 rows → a permission (RLS) block, not a missing lead.
+    return { ok: false, error: error.code === '23505' ? 'The database blocked this update (permissions).' : error.message }
+  }
   return { ok: true }
 }
 

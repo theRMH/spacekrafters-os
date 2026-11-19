@@ -79,7 +79,7 @@ interface Props {
 
 export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged }: Props) {
   const { user, can } = useAuth()
-  const { updateLead } = useCRM()
+  const { updateLead, refreshLeads } = useCRM()
 
   const [users, setUsers] = useState<ManagedUser[]>([])
   // The lead's latest site visit: planned (date + team, nothing recorded yet) or recorded.
@@ -113,6 +113,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     setShowReassign(false)
     setReassignTo('')
     setShowLostReason(false)
+    refreshLeads() // pick up a stage change someone else just made before showing this lead's step
     getManagedUsersDirectory().then(setUsers)
     getAllSiteVisits().then(v => setSiteVisit(v.filter(sv => sv.leadId === lead.id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null))
     getAllRequirements().then(async reqs => {
@@ -141,7 +142,8 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
       onDone(note)
       onClose()
     } else {
-      onDone(result.error ?? 'Could not update status.')
+      // Shown as an alert: onDone paints a green "success" toast, which hid failed saves.
+      alert(`Status was NOT changed: ${result.error ?? 'could not update status.'}`)
     }
   }
 
