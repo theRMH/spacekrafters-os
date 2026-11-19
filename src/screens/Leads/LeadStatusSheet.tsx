@@ -65,6 +65,37 @@ export function leadStatusLabel(lead: Pick<Lead, 'status' | 'advanceStatus' | 'a
 }
 
 
+// What the site engineer recorded — shown to the PC above the Add Requirements button.
+function SiteVisitDetails({ visit }: { visit: SiteVisit }) {
+  const checked = (visit.checklist ?? []).filter(c => c.checked)
+  return (
+    <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-2.5 text-sm">
+      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Site Visit Details</p>
+      <p className="text-slate-700">
+        <span className="font-bold">{new Date(visit.visitDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+        {visit.teamMemberNames?.length ? ` · ${visit.teamMemberNames.join(', ')}` : ''}
+        {visit.customerPresence ? ` · ${visit.customerPresence === 'with_customer' ? 'With customer' : 'Without customer'}` : ''}
+      </p>
+      {(visit.rooms ?? []).length > 0 && (
+        <div className="space-y-1">
+          {visit.rooms.map(r => (
+            <div key={r.id} className="flex justify-between gap-3 text-slate-600">
+              <span className="font-semibold text-slate-700">{r.name}</span>
+              <span className="text-right">
+                {r.lengthFt && r.widthFt ? `${r.lengthFt} × ${r.widthFt} ft` : r.measurements ?? ''}
+                {r.calculatedTotal ? ` = ${r.calculatedTotal}` : ''}
+                {r.heightFt ? ` · H ${r.heightFt}` : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {checked.length > 0 && <p className="text-slate-600"><span className="font-semibold text-slate-700">Checked:</span> {checked.map(c => c.label).join(', ')}</p>}
+      {visit.notes && <p className="text-slate-600"><span className="font-semibold text-slate-700">Notes:</span> {visit.notes}</p>}
+    </div>
+  )
+}
+
 interface Props {
   isOpen: boolean
   onClose: () => void
@@ -223,6 +254,14 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   // itself. The "Mark … done" fallbacks only show when the record already exists but the lead never advanced.
   function renderBody() {
     if (!canAct) {
+      // The person who just finished the site visit sees it as done, not as "waiting".
+      if (stage === 'site_visit_done') {
+        return (
+          <p className="text-sm text-emerald-700 font-semibold py-6 text-center">
+            ✓ Site visit done{effectiveAssigneeName ? ` — details sent to ${effectiveAssigneeName}` : ''}.
+          </p>
+        )
+      }
       return (
         <p className="text-sm text-slate-500 py-6 text-center">
           Waiting on {effectiveAssigneeName ?? 'Not Assigned'}.
@@ -268,6 +307,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
       case 'site_visit_done':
         return (
           <div className="space-y-3">
+            {siteVisit && siteVisit.status !== 'scheduled' && <SiteVisitDetails visit={siteVisit} />}
             {hasRequirement ? (
               <>
                 <p className="text-sm text-slate-600">Requirements are on record.</p>
