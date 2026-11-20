@@ -138,6 +138,24 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
   const notSelected = work.notSelected ?? []
   return (
     <div className="space-y-2">
+      {/* The proposals that were not chosen sit on top; the selected vendor (the one being ordered) comes below them. */}
+      {notSelected.length > 0 && (
+        <div className="pb-1 space-y-2">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Not selected ({notSelected.length})</p>
+          {notSelected.map(v => (
+            <div key={v.id} className="bg-white border border-slate-200 rounded-xl p-3 space-y-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-600 truncate">{v.name}</p>
+                  <p className="text-xs text-slate-400">{v.poNumber}{v.gstin ? ` · GST ${v.gstin}` : ''}</p>
+                </div>
+                <p className="text-sm font-semibold text-slate-500 shrink-0">Rs. {inr(orderTotals(v.lines).total)}</p>
+              </div>
+              {v.pdf && <MultiFileUploadField label="" files={[v.pdf]} onChange={() => {}} readOnly />}
+            </div>
+          ))}
+        </div>
+      )}
       <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{comparing ? 'Vendor proposals' : work.compare ? 'Final vendor' : 'Vendors'} ({work.vendors.length})</p>
       {work.vendors.map(v => {
         const status = vendorStatus(work, v)
@@ -240,23 +258,6 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
       })}
       {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
       {!comparing && <p className="text-xs text-slate-500 text-right">{work.compare ? 'Order total' : 'All vendors'}: <span className="font-bold text-slate-800">Rs. {inr(work.vendors.reduce((s, v) => s + orderTotals(v.lines).total, 0))}</span></p>}
-      {notSelected.length > 0 && (
-        <div className="pt-1 space-y-2">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Not selected ({notSelected.length})</p>
-          {notSelected.map(v => (
-            <div key={v.id} className="bg-white border border-slate-200 rounded-xl p-3 space-y-1.5">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-600 truncate">{v.name}</p>
-                  <p className="text-xs text-slate-400">{v.poNumber}{v.gstin ? ` · GST ${v.gstin}` : ''}</p>
-                </div>
-                <p className="text-sm font-semibold text-slate-500 shrink-0">Rs. {inr(orderTotals(v.lines).total)}</p>
-              </div>
-              {v.pdf && <MultiFileUploadField label="" files={[v.pdf]} onChange={() => {}} readOnly />}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
