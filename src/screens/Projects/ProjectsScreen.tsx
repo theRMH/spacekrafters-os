@@ -22,7 +22,7 @@ import { getAllVendorBills, getAllPurchaseOrders } from '../../services/procurem
 import { getAllDesignPackages, upsertDesignPackage } from '../../services/designService'
 import { getAllExpenseRequests } from '../../services/expenseService'
 import { addAuditLog } from '../../services/auditLogService'
-import { getAllClients, upsertClient } from '../../services/clientService'
+import { getAllClients, upsertClient, deleteClientIfNoProjects } from '../../services/clientService'
 import { ROLE_LABELS } from '../../data/permissions'
 import { ProjectStatusSheet, ROLE_FOR_PROJECT_STAGE, PROJECT_STAGE_LABEL, PROJECT_STAGE_ORDER } from '../ProjectWorkspace/ProjectStatusSheet'
 import type { ManagedUser, Project, ProjectStage, StatusHistoryItem, Quotation, PaymentMilestone, Payable, VendorBill, PurchaseOrder, ExpenseRequest, AuditLog, Client, Receipt } from '../../types'
@@ -351,6 +351,8 @@ export default function ProjectsScreen() {
       addAuditLog(log)
     }
     setProjects(prev => prev.filter(p => p.id !== selected.id))
+    // The client goes with its last project.
+    if (await deleteClientIfNoProjects(selected.clientId)) setClients(prev => prev.filter(c => c.id !== selected.clientId))
     setShowDelete(false)
     setSelected(null)
     setSnack({ open: true, msg: 'Project deleted.', type: 'success' })
@@ -392,6 +394,7 @@ export default function ProjectsScreen() {
         })
       }
       setProjects(prev => prev.filter(p => p.id !== id))
+      if (await deleteClientIfNoProjects(project?.clientId)) setClients(prev => prev.filter(c => c.id !== project?.clientId))
     }
     setShowBulkDelete(false)
     setSelectMode(false)

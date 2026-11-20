@@ -134,6 +134,28 @@ export default function ClientMasterScreen() {
     setSnack({ open: true, msg: 'Client deleted.', type: 'success' })
   }
 
+  // Clients with no project at all — left behind when their projects were deleted.
+  const orphanClients = clients.filter(c => !projects.some(p => p.clientId === c.id))
+  const [showPurge, setShowPurge] = useState(false)
+
+  async function purgeOrphans() {
+    setShowPurge(false)
+    let removed = 0
+    for (const c of orphanClients) {
+      if ((await deleteClient(c.id)).ok) {
+        removed++
+        if (user) addAuditLog({
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          action: 'client_deleted', description: `Client "${c.name}" deleted (no projects).`,
+          createdBy: user.name, createdByRole: user.role, createdAt: new Date().toISOString(),
+        })
+      }
+    }
+    const left = await getAllClients()
+    setClients(left)
+    setSnack({ open: true, msg: `${removed} client${removed === 1 ? '' : 's'} without projects removed.`, type: removed === orphanClients.length ? 'success' : 'error' })
+  }
+
   const filtered = clients.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()))
   const selectedProjects = selected ? projects.filter(p => p.clientId === selected.id) : []
 
@@ -155,6 +177,12 @@ export default function ClientMasterScreen() {
       </div>
 
       <div className="px-4 pt-4 space-y-2.5">
+        {user?.role === 'owner' && !isLoading && orphanClients.length > 0 && (
+          <button onClick={() => setShowPurge(true)}
+            className="w-full py-2.5 rounded-xl text-xs font-bold border border-red-200 bg-red-50 text-red-700 active:bg-red-100">
+            Remove {orphanClients.length} client{orphanClients.length === 1 ? '' : 's'} without projects
+          </button>
+        )}
         {!isLoading && filtered.map(client => {
           const clientProjects = projects.filter(p => p.clientId === client.id)
           return (
@@ -272,6 +300,15 @@ export default function ClientMasterScreen() {
         )}
       </BottomSheet>
 
+      <Dialog
+        isOpen={showPurge}
+        onClose={() => setShowPurge(false)}
+        title="Remove clients without projects"
+        message={`Delete ${orphanClients.length} client${orphanClients.length === 1 ? '' : 's'} that have no project? This cannot be undone.`}
+        confirmLabel="Remove"
+        onConfirm={purgeOrphans}
+        variant="danger"
+      />
       <Dialog
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
