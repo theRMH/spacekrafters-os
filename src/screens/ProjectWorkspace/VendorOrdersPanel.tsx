@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
 import { inr, orderTotals } from '../../utils/purchaseOrderMath'
 import { sendNotification } from '../../utils/notifications'
+import { insertPayableIfAbsent } from '../../services/financeService'
 import { VENDOR_STATUS_LABEL, VENDOR_STATUS_TINT, hasBeenSent, logEntry, openVendorWhatsApp, routeFor, senderOf, vendorStatus } from '../../utils/vendorOrderFlow'
 import { ROLE_LABELS } from '../../data/permissions'
 import type { AuthUser, ManagedUser, Project, ProjectStage, VendorOrder, VendorOrderStatus } from '../../types'
@@ -125,6 +126,16 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
 
   async function advance(v: VendorOrder, status: VendorOrderStatus, label: string) {
     const updated = await update(v, status, label)
+    // Delivered: the order becomes a payable in Company Finance (once), tied to this project, ready for Accounts to pay.
+    if (updated && status === 'delivered') {
+      const now = new Date().toISOString()
+      const r = await insertPayableIfAbsent({
+        id: `pay_vo_${v.id}`, projectId: project.id, vendorOrderId: v.id, payeeName: v.name,
+        description: `${v.poNumber} — ${v.name} · ${project.name}`,
+        amount: Math.round(orderTotals(v.lines).total * 100) / 100, paidAmount: 0, status: 'pending', createdAt: now, updatedAt: now,
+      })
+      if (!r.ok) setError(`Delivered, but the payable could not be created (${r.error ?? 'unknown error'}). Ask Accounts to add it in Payables.`)
+    }
     if (updated && status === 'delivered' && work && work.vendors.every(x => x.id === v.id || vendorStatus(work, x) === 'delivered')) {
       const pc = users.find(u => u.id === project.coordinatorId)?.id ?? project.coordinatorId
       await sendNotification([pc], 'All Orders Delivered', `${project.name} — every vendor order has been delivered.`, `/projects/${project.id}`)

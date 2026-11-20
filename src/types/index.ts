@@ -1261,6 +1261,9 @@ export interface Payable {
   id: string
   vendorId?: string
   vendorBillId?: string
+  // Set when the payable was raised automatically from a delivered in-project vendor order.
+  projectId?: string
+  vendorOrderId?: string
   payeeName?: string
   description: string
   amount: number

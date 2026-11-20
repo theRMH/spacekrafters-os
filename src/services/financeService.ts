@@ -66,6 +66,21 @@ export async function upsertPayable(payable: Payable): Promise<{ ok: boolean; er
   return { ok: true }
 }
 
+// Creates a payable once: a second call for the same id (an order marked delivered twice) is not an error.
+export async function insertPayableIfAbsent(payable: Payable): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Not configured.' }
+  const { error } = await supabase.from(PAYABLE_TABLE).insert({
+    id:              payable.id,
+    vendor_id:       payable.vendorId ?? null,
+    vendor_bill_id:  null,
+    status:          payable.status,
+    data:            payable,
+    updated_at:      new Date().toISOString(),
+  })
+  if (error && error.code !== '23505') return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 export async function getAllPayments(): Promise<Payment[]> {
   if (!supabase) return []
   const { data, error } = await supabase.from(PAYMENT_TABLE).select('data').order('created_at', { ascending: false })
