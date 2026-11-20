@@ -28,6 +28,7 @@ export interface MyTaskItem {
   // on SiteVisitsScreen) — the UI opens LeadStatusSheet inline for this lead
   // instead of navigating anywhere.
   leadAction?: { leadId: string }
+  projectAction?: { projectId: string }
   // The Lead this item is about, when there is one — lets the list sort by
   // how recently that Lead itself was touched (see the final sort below)
   // instead of just this item's own timestamp, so everything about a Lead
@@ -106,6 +107,8 @@ export function buildMyTaskFeed(opts: {
       meta: [`Client: ${p.clientName}`, p.contractValue ? `Value: ${fmtCurrency(p.contractValue)}` : '', `Stage: ${PROJECT_STAGE_LABEL[p.stage]}`].filter(Boolean),
       person: p.assignedToName,
       linkTo: `/my-tasks/project/${p.id}`,
+      // Update Status opens the project's status sheet in place.
+      projectAction: { projectId: p.id },
     })
   }
 
