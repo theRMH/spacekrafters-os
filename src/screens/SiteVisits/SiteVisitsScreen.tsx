@@ -53,11 +53,6 @@ function fmtDate(val: string): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function todayStr(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
 
 function newRoom(): SiteVisitRoom {
   return { id: `room_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: '', measurements: '', lengthFt: '', widthFt: '', heightFt: '', calculatedTotal: '', notes: '' }
@@ -252,10 +247,6 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
   async function handleAddVisit() {
     if (!leadId || !visitDate || teamMemberIds.length === 0) {
       setFormError('Lead, visit date and the person for the site visit are required.')
-      return
-    }
-    if (visitDate < todayStr()) {
-      setFormError('Cannot plan a site visit for a past date.')
       return
     }
     const now = new Date().toISOString()
@@ -585,8 +576,7 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Visit Date *</label>
-            <DateField value={visitDate} min={showEdit ? undefined : todayStr()}
-              onChange={v => setVisitDate(!showEdit && v < todayStr() ? todayStr() : v)} />
+            <DateField value={visitDate} onChange={setVisitDate} />
           </div>
 
           <div>

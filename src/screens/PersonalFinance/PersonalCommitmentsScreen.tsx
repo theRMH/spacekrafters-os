@@ -11,11 +11,6 @@ import { getAllPersonalCommitments, upsertPersonalCommitment, deletePersonalComm
 import { addAuditLog } from '../../services/auditLogService'
 import type { PersonalCommitment, PersonalCommitmentType, PersonalCommitmentFrequency, PersonalCommitmentStatus, PersonalAccount } from '../../types'
 
-function todayStr(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
 
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
@@ -211,7 +206,7 @@ export default function PersonalCommitmentsScreen() {
           </div>
           <div>
             <label className={label}>Due Date *</label>
-            <DateField value={form.dueDate} min={isEditing ? undefined : todayStr()}
+            <DateField value={form.dueDate}
               onChange={v => setForm(f => ({ ...f, dueDate: v }))} />
           </div>
           <div>
@@ -308,7 +303,7 @@ export default function PersonalCommitmentsScreen() {
               </div>
               <div>
                 <label className={label}>Expected Date</label>
-                <DateField value={form.expectedDate ?? ''} min={todayStr()}
+                <DateField value={form.expectedDate ?? ''}
                   onChange={v => setForm(f => ({ ...f, expectedDate: v }))} />
               </div>
             </>

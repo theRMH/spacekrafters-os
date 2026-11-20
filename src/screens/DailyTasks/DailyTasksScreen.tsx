@@ -108,7 +108,6 @@ export default function DailyTasksScreen() {
   async function handleAssign() {
     if (!user || !assignTarget) return
     if (!title.trim()) { setSnack({ open: true, msg: 'Enter what to assign.', type: 'error' }); return }
-    if (date < todayKey) { setSnack({ open: true, msg: 'Cannot assign a task for a past date.', type: 'error' }); return }
     const now = new Date().toISOString()
     const task: DailyTask = {
       id: `dtask_${assignTarget.id}_${Date.now()}`,
@@ -271,8 +270,8 @@ export default function DailyTasksScreen() {
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Date</label>
-              <DateField value={date} min={editingTask ? undefined : todayKey}
-                onChange={v => setDate(!editingTask && v < todayKey ? todayKey : v)} />
+              <DateField value={date}
+                onChange={setDate} />
             </div>
             <button onClick={editingTask ? handleSaveEdit : handleAssign} className="w-full py-3 rounded-xl text-white text-sm font-bold active:opacity-90" style={{ background: '#0F2A4A' }}>
               {editingTask ? 'Save Changes' : 'Assign Task'}
