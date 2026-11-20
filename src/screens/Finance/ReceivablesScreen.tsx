@@ -42,6 +42,20 @@ function effectiveStatus(m: PaymentMilestone): PaymentMilestone['status'] {
   return m.status
 }
 
+// Ageing of what is still owed: not yet due, then how many days past the due date.
+type Bucket = 'all' | 'current' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90'
+const BUCKETS: { key: Exclude<Bucket, 'all'>; label: string }[] = [
+  { key: 'current', label: 'Not due' }, { key: 'd1_30', label: '1–30 days' }, { key: 'd31_60', label: '31–60 days' },
+  { key: 'd61_90', label: '61–90 days' }, { key: 'd90', label: '90+ days' },
+]
+const balanceOf = (m: PaymentMilestone) => Math.max(0, m.amount - m.receivedAmount)
+function bucketOf(m: PaymentMilestone): Exclude<Bucket, 'all'> | null {
+  if (balanceOf(m) <= 0) return null
+  const d = daysOverdue(m.dueDate)
+  if (d <= 0) return 'current'
+  return d <= 30 ? 'd1_30' : d <= 60 ? 'd31_60' : d <= 90 ? 'd61_90' : 'd90'
+}
+
 function emptyMilestone(projectId: string): PaymentMilestone {
   const now = new Date().toISOString()
   return {
@@ -117,7 +131,10 @@ export default function ReceivablesScreen() {
       setSnack({ open: true, msg: 'Project, title, and amount are required.', type: 'error' })
       return
     }
-    const toSave: PaymentMilestone = { ...form, updatedAt: new Date().toISOString() }
+    const before = milestones.find(m => m.id === form.id)
+    // A revised due date keeps the first one as the original.
+    const originalDueDate = before?.dueDate && before.dueDate !== form.dueDate ? (before.originalDueDate ?? before.dueDate) : form.originalDueDate
+    const toSave: PaymentMilestone = { ...form, originalDueDate, updatedAt: new Date().toISOString() }
     const result = await upsertPaymentMilestone(toSave)
     if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Failed to save milestone.', type: 'error' }); return }
     setMilestones(prev => {
@@ -224,7 +241,15 @@ export default function ReceivablesScreen() {
     }
   }
 
-  const filtered = milestones.filter(m => !search || m.title.toLowerCase().includes(search.toLowerCase()))
+  const [bucket, setBucket] = useState<Bucket>('all')
+  const bucketTotals = BUCKETS.map(b => {
+    const rows = milestones.filter(m => bucketOf(m) === b.key)
+    return { ...b, count: rows.length, amount: rows.reduce((s, m) => s + balanceOf(m), 0) }
+  })
+  const totalOutstanding = bucketTotals.reduce((s, b) => s + b.amount, 0)
+  const filtered = milestones
+    .filter(m => !search || m.title.toLowerCase().includes(search.toLowerCase()))
+    .filter(m => bucket === 'all' || bucketOf(m) === bucket)
   function projectName(id: string) { return projects.find(p => p.id === id)?.name ?? 'Unknown project' }
   const selReceipts = selected ? receipts.filter(r => r.milestoneId === selected.id).sort((a, b) => b.receivedDate.localeCompare(a.receivedDate)) : []
 
@@ -246,6 +271,28 @@ export default function ReceivablesScreen() {
       </div>
 
       <div className="px-4 pt-4 space-y-2.5">
+        {!isLoading && milestones.length > 0 && (
+          <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Outstanding</p>
+              <p className="text-sm font-extrabold text-slate-800">{fmtCurrency(totalOutstanding)}</p>
+            </div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {bucketTotals.map(b => {
+                const on = bucket === b.key
+                return (
+                  <button key={b.key} onClick={() => setBucket(on ? 'all' : b.key)}
+                    className={`rounded-xl px-1.5 py-2 text-center border ${on ? 'border-transparent text-white' : b.key === 'current' ? 'bg-slate-50 border-slate-100 text-slate-700' : b.amount > 0 ? 'bg-red-50 border-red-100 text-red-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                    style={on ? { background: '#0F2A4A' } : {}}>
+                    <p className="text-[10px] font-semibold leading-tight">{b.label}</p>
+                    <p className="text-xs font-extrabold mt-0.5">{b.amount > 0 ? fmtCurrency(b.amount) : '—'}</p>
+                    <p className="text-[10px] opacity-70">{b.count} item{b.count === 1 ? '' : 's'}</p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
         {!isLoading && filtered.map(m => {
           const status = effectiveStatus(m)
           const overdue = daysOverdue(m.dueDate)
@@ -261,6 +308,12 @@ export default function ReceivablesScreen() {
                 <span className="text-sm font-bold text-slate-800">{fmtCurrency(m.receivedAmount)} / {fmtCurrency(m.amount)}</span>
                 {status === 'overdue' && <span className="text-xs font-semibold text-red-600">{overdue}d overdue</span>}
               </div>
+              {balanceOf(m) > 0 && (
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Balance {fmtCurrency(balanceOf(m))}{m.dueDate ? ` · due ${fmtDate(m.dueDate)}` : ''}
+                  {m.originalDueDate ? ` (originally ${fmtDate(m.originalDueDate)})` : ''}
+                </p>
+              )}
             </button>
           )
         })}
@@ -315,6 +368,9 @@ export default function ReceivablesScreen() {
               <div className="flex justify-between"><span className="text-slate-500">Status</span><StatusBadge status={effectiveStatus(selected)} /></div>
               <div className="flex justify-between"><span className="text-slate-500">Project</span><span className="font-semibold text-slate-800">{projectName(selected.projectId)}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Due Date</span><span className="font-semibold text-slate-800">{fmtDate(selected.dueDate)}</span></div>
+              {selected.originalDueDate && <div className="flex justify-between"><span className="text-slate-500">Original Due Date</span><span className="font-semibold text-slate-800">{fmtDate(selected.originalDueDate)}</span></div>}
+              {balanceOf(selected) > 0 && daysOverdue(selected.dueDate) > 0 && <div className="flex justify-between"><span className="text-slate-500">Overdue</span><span className="font-semibold text-red-600">{daysOverdue(selected.dueDate)} days</span></div>}
+              <div className="flex justify-between"><span className="text-slate-500">Balance</span><span className="font-bold text-slate-800">{fmtCurrency(balanceOf(selected))}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Received</span><span className="font-bold text-slate-800">{fmtCurrency(selected.receivedAmount)} / {fmtCurrency(selected.amount)}</span></div>
             </div>
 

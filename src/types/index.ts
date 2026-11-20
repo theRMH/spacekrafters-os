@@ -1232,6 +1232,8 @@ export interface PaymentMilestone {
   title: string
   amount: number
   dueDate?: string
+  // The due date first set, kept when the due date is later revised (so the ledger shows original and revised).
+  originalDueDate?: string
   status: PaymentMilestoneStatus
   receivedAmount: number
   receivedDates: string[]
