@@ -56,9 +56,38 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
     await update(v, 'approved', 'PC approved')
   }
 
+  // Compare mode: the PC selects ONE final vendor. It goes straight to the procurer to send; every other proposal is kept
+  // (with its PDF) under "Not selected" so the comparison stays on record.
+  async function selectFinal(v: VendorOrder) {
+    if (!work || !user) return
+    const now = new Date().toISOString()
+    const others = work.vendors.filter(x => x.id !== v.id).map(x => ({ ...x, updatedAt: now, log: [...(x.log ?? []), logEntry(vendorStatus(work, x), 'Not selected by PC', user.name)] }))
+    const chosen: VendorOrder = {
+      ...v, status: 'with_procurer', sendById: work.procurerId, sendByName: work.procurerName, updatedAt: now,
+      log: [...(v.log ?? []), logEntry('approved', 'PC selected as final vendor', user.name), logEntry('with_procurer', `Sent to ${work.procurerName} to send to the vendor`, user.name)],
+    }
+    const next = { ...work, vendors: [chosen], notSelected: [...(work.notSelected ?? []), ...others], review: undefined }
+    const updated = await persist({ procurementWork: next, ...routeFor(next, project, users) }, `PC selected ${v.name} (${v.poNumber}) as the final vendor`, stage, { keepOpen: true })
+    if (updated) await sendNotification([work.procurerId], 'Final Vendor Selected', `${project.name} — ${v.name} (${v.poNumber}) was selected. Send the order to the vendor.`, `/my-tasks/project/${project.id}`)
+  }
+
+  // Compare mode: take the selection back — every proposal returns to "Waiting for PC approval" so the PC can choose again.
+  async function reopenSelection(v: VendorOrder) {
+    if (!work || !user) return
+    const now = new Date().toISOString()
+    const back = (x: VendorOrder): VendorOrder => ({ ...x, status: 'with_pc', sendById: undefined, sendByName: undefined, updatedAt: now, log: [...(x.log ?? []), logEntry('with_pc', 'PC took back the selection', user.name)] })
+    const next = { ...work, vendors: [...work.vendors.map(back), ...(work.notSelected ?? []).map(back)], notSelected: [], review: undefined }
+    const updated = await persist({ procurementWork: next, ...routeFor(next, project, users) }, `PC took back the final vendor selection (${v.name})`, stage, { keepOpen: true })
+    if (updated) {
+      setUndoingId(null)
+      await sendNotification([work.procurerId], 'Vendor Selection Withdrawn', `${project.name} — the PC took back the vendor selection; do not send the order yet.`, `/my-tasks/project/${project.id}`)
+    }
+  }
+
   // The PC takes back an approval made by mistake: the order returns to "Waiting for PC approval" (any hand-off to the
   // procurer is withdrawn). Not possible once it has been sent to the vendor.
   async function undoApproval(v: VendorOrder) {
+    if (work?.compare) { await reopenSelection(v); return }
     const handedTo = v.sendById
     const updated = await update(v, 'with_pc', 'PC took back the approval', { sendById: undefined, sendByName: undefined })
     if (updated) {
@@ -103,9 +132,13 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
   }
 
   if (work.vendors.length === 0) return null
+  // Compare mode, while proposals are still being chosen between: mark the cheapest and hide the meaningless grand total.
+  const comparing = !!work.compare && work.vendors.some(v => ['draft', 'with_pc', 'rejected'].includes(vendorStatus(work, v)))
+  const lowest = comparing && work.vendors.length > 1 ? Math.min(...work.vendors.map(v => orderTotals(v.lines).total)) : null
+  const notSelected = work.notSelected ?? []
   return (
     <div className="space-y-2">
-      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Vendors ({work.vendors.length})</p>
+      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{comparing ? 'Vendor proposals' : work.compare ? 'Final vendor' : 'Vendors'} ({work.vendors.length})</p>
       {work.vendors.map(v => {
         const status = vendorStatus(work, v)
         const t = orderTotals(v.lines)
@@ -119,7 +152,10 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
               </div>
               <p className="text-sm font-bold text-slate-800 shrink-0">Rs. {inr(t.total)}</p>
             </div>
-            <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${VENDOR_STATUS_TINT[status]}`}>{VENDOR_STATUS_LABEL[status]}</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${VENDOR_STATUS_TINT[status]}`}>{VENDOR_STATUS_LABEL[status]}</span>
+              {lowest !== null && t.total === lowest && <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Lowest total</span>}
+            </div>
             {v.pdf && <MultiFileUploadField label="" files={[v.pdf]} onChange={() => {}} readOnly />}
             {status === 'rejected' && v.rejectionReason && <p className="text-xs text-red-700"><span className="font-bold">Reason:</span> {v.rejectionReason}</p>}
 
@@ -135,7 +171,9 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
               </div>
             ) : (
               <div className="flex gap-2">
-                <button disabled={saving} onClick={() => approve(v)} className={`${btn} text-white`} style={{ background: '#059669' }}>Approve</button>
+                {work.compare
+                  ? <button disabled={saving} onClick={() => selectFinal(v)} className={`${btn} text-white`} style={{ background: '#059669' }}>Select as Final Vendor</button>
+                  : <button disabled={saving} onClick={() => approve(v)} className={`${btn} text-white`} style={{ background: '#059669' }}>Approve</button>}
                 <button disabled={saving} onClick={() => { setRejectingId(v.id); setError('') }} className={`${btn} border border-red-200 bg-red-50 text-red-700`}>Reject</button>
               </div>
             ))}
@@ -201,7 +239,24 @@ export function VendorOrdersPanel({ project, users, user, saving, stage, persist
         )
       })}
       {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
-      <p className="text-xs text-slate-500 text-right">All vendors: <span className="font-bold text-slate-800">Rs. {inr(work.vendors.reduce((s, v) => s + orderTotals(v.lines).total, 0))}</span></p>
+      {!comparing && <p className="text-xs text-slate-500 text-right">{work.compare ? 'Order total' : 'All vendors'}: <span className="font-bold text-slate-800">Rs. {inr(work.vendors.reduce((s, v) => s + orderTotals(v.lines).total, 0))}</span></p>}
+      {notSelected.length > 0 && (
+        <div className="pt-1 space-y-2">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Not selected ({notSelected.length})</p>
+          {notSelected.map(v => (
+            <div key={v.id} className="bg-white border border-slate-200 rounded-xl p-3 space-y-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-600 truncate">{v.name}</p>
+                  <p className="text-xs text-slate-400">{v.poNumber}{v.gstin ? ` · GST ${v.gstin}` : ''}</p>
+                </div>
+                <p className="text-sm font-semibold text-slate-500 shrink-0">Rs. {inr(orderTotals(v.lines).total)}</p>
+              </div>
+              {v.pdf && <MultiFileUploadField label="" files={[v.pdf]} onChange={() => {}} readOnly />}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

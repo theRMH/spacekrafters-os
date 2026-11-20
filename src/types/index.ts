@@ -776,6 +776,10 @@ export interface ProcurementWork {
   assignedBy: string
   assignedAt: string
   vendors: VendorOrder[]
+  // Compare mode: the procurer drafts a proposal per vendor, sends them all to the PC, who selects ONE final vendor.
+  // The selected vendor stays in `vendors` and goes on to be ordered; the rest are kept (with their PDFs) in `notSelected`.
+  compare?: boolean
+  notSelected?: VendorOrder[]
   // Older whole-set review, kept so projects saved before per-vendor approval still read correctly.
   review?: { status: 'with_pc' | 'approved' | 'rejected'; submittedBy: string; submittedAt: string; decidedBy?: string; decidedAt?: string; reason?: string }
 }

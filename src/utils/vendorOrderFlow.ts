@@ -7,7 +7,7 @@ export const VENDOR_STATUS_LABEL: Record<VendorOrderStatus, string> = {
   rejected: 'Rejected by PC',
   approved: 'Approved — send to procurer',
   with_procurer: 'With procurer — ready to send',
-  sent: 'Waiting for vendor response',
+  sent: 'Waiting for vendor dispatch',
   order_placed: 'Order Placed',
   in_transit: 'In Transit',
   delivered: 'Delivered',

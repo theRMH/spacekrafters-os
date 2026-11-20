@@ -172,7 +172,7 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
     const updated = await persist(
       {
         stage: 'procurement', assignedRole: person.role, assignedToId: person.id, assignedToName: person.fullName, pendingStageRequest: undefined,
-        procurementWork: { procurerId: person.id, procurerName: person.fullName, assignedBy: user.name, assignedAt: new Date().toISOString(), vendors: [] },
+        procurementWork: { procurerId: person.id, procurerName: person.fullName, assignedBy: user.name, assignedAt: new Date().toISOString(), vendors: [], compare: true },
       },
       `PC moved the project to Procurement — assigned to ${person.fullName}`, 'procurement',
     )
