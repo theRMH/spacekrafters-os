@@ -309,6 +309,7 @@ export function StageWorkStep({ project, stage, users, user, saving, persist }: 
     <div className="space-y-3">
       {assignedLine}
       {designReference}
+      {history}
       {rejected && last?.reason && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-3.5">
           <p className="text-xs font-bold text-red-700 uppercase tracking-wide">Rejected by PC</p>
@@ -336,7 +337,6 @@ export function StageWorkStep({ project, stage, users, user, saving, persist }: 
           ? <div className="space-y-2 pt-1">{assignForm}</div>
           : <button onClick={() => setReassigning(true)} className="text-xs font-semibold text-indigo-600 underline">Change {cfg.assignee.toLowerCase()}</button>
       )}
-      {history}
     </div>
   )
 }

@@ -292,6 +292,7 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
 
   return (
     <div className="space-y-4">
+      {history}
       {rejected && last?.reason && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-3.5">
           <p className="text-xs font-bold text-red-700 uppercase tracking-wide">Rejected by PC</p>
@@ -401,7 +402,6 @@ export function MaterialIndentStep({ project, users, user, saving, persist }: Pr
       <button disabled={saving || busy || !pdf || stale} onClick={send} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
         Send to PC for Approval
       </button>
-      {history}
     </div>
   )
 }
