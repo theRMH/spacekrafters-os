@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { LogOut, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { getRoleDisplayLabel } from '../../data/permissions'
-import { getMainItems, NAV_SECTIONS } from './navItems'
+import { getMainItems, NAV_SECTIONS, isNavActive } from './navItems'
 
 interface Props {
   isOpen: boolean
@@ -66,10 +66,9 @@ export function MobileMenuDrawer({ isOpen, onClose }: Props) {
                   </p>
                 )}
                 <div className="space-y-0.5">
-                  {visible.map(({ icon: Icon, label, path }) => {
-                    const active = path.includes('?')
-                      ? fullPath === path
-                      : pathname === path || pathname.startsWith(path)
+                  {visible.map(item => {
+                    const { icon: Icon, label, path } = item
+                    const active = path.includes('?') ? fullPath === path : isNavActive(item, pathname)
                     return (
                       <button
                         key={path}

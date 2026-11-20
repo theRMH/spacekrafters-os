@@ -2,7 +2,7 @@ import { LogOut } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { getRoleDisplayLabel } from '../../data/permissions'
-import { getMainItems, NAV_SECTIONS } from './navItems'
+import { getMainItems, NAV_SECTIONS, isNavActive } from './navItems'
 
 export function SidebarNavigation() {
   const navigate = useNavigate()
@@ -42,10 +42,9 @@ export function SidebarNavigation() {
                 </p>
               )}
               <div className="space-y-0.5">
-                {visible.map(({ icon: Icon, label, path }) => {
-                  const active = path.includes('?')
-                    ? fullPath === path
-                    : pathname === path || pathname.startsWith(path)
+                {visible.map(item => {
+                  const { icon: Icon, label, path } = item
+                  const active = path.includes('?') ? fullPath === path : isNavActive(item, pathname)
                   return (
                     <button
                       key={path}
