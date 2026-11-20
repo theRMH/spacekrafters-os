@@ -52,12 +52,6 @@ function fmtCurrency(n?: number): string {
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 }
 
-function todayStr(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
 function emptyProject(): Project {
   return {
     id: `prj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -602,13 +596,13 @@ export default function ProjectsScreen() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>Start Date</label>
-              <DateField value={form.startDate ?? ''} min={isEditingExisting ? undefined : todayStr()}
+              <DateField value={form.startDate ?? ''}
                 onChange={v => setForm(f => ({ ...f, startDate: v || undefined }))} />
             </div>
             <div>
               <label className={label}>Expected Handover</label>
               <DateField value={form.expectedHandoverDate ?? ''}
-                min={isEditingExisting ? undefined : (form.startDate || todayStr())}
+                min={form.startDate || undefined}
                 onChange={v => setForm(f => ({ ...f, expectedHandoverDate: v || undefined }))} />
             </div>
           </div>
