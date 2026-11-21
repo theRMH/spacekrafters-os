@@ -9,7 +9,7 @@ import type { Quotation, QuotationTemplateData } from '../types'
 // — cutting only between table rows so a line of text is never sliced in half.
 
 // Bump when the PDF layout changes: stored PDFs built with an older layout are rebuilt the next time they are viewed.
-export const PDF_LAYOUT_VERSION = 2
+export const PDF_LAYOUT_VERSION = 5
 
 const A4_W_MM = 210
 const A4_H_MM = 297

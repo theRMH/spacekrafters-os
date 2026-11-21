@@ -588,14 +588,16 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
 
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Person for Site Visit *</label>
-            <select value={teamMemberIds[0] ?? ''} onChange={e => setTeamMemberIds(e.target.value ? [e.target.value] : [])}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
-              <option value="">— Select —</option>
-              {[...assignableMembers].sort((x, y) => x.fullName.localeCompare(y.fullName)).map(m => (
-                <option key={m.id} value={m.id}>{m.fullName} · {getRoleDisplayLabel(m.role, m.displayRole)}</option>
-              ))}
-              {teamMemberIds[0] && !assignableMembers.some(m => m.id === teamMemberIds[0]) && <option value={teamMemberIds[0]}>{namesFor(teamMemberIds)[0]}</option>}
-            </select>
+            <SearchableSelect
+              value={teamMemberIds[0] ?? ''} onChange={v => setTeamMemberIds(v ? [v] : [])}
+              options={[
+                ...[...assignableMembers].sort((x, y) => x.fullName.localeCompare(y.fullName))
+                  .map(m => ({ value: m.id, label: `${m.fullName} · ${getRoleDisplayLabel(m.role, m.displayRole)}` })),
+                ...(teamMemberIds[0] && !assignableMembers.some(m => m.id === teamMemberIds[0])
+                  ? [{ value: teamMemberIds[0], label: namesFor(teamMemberIds)[0] }] : []),
+              ]}
+              placeholder="— Select —" searchPlaceholder="Search…"
+            />
           </div>
 
           {/* Planning only needs the lead, date and team — rooms, measurements and the checklist are filled in when the visit is recorded. */}

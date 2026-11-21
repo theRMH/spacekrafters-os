@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Plus, Trash2, ChevronDown } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCRM } from '../../context/CRMContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
@@ -11,6 +11,7 @@ import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
 import { getAllProjects } from '../../services/projectService'
 import { getAllDailyReports, upsertDailyReport } from '../../services/dailyReportService'
+import { DATE_FILTERS, getDateRange, inRange, type DateFilter } from '../../utils/dateRange'
 import type { Project, DailyReport, DailyReportAreaEntry, DailyReportEditHistoryItem } from '../../types'
 
 function todayISO(): string {
@@ -59,6 +60,21 @@ export default function DailyReportScreen() {
   const [formError, setFormError] = useState('')
 
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
+
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [filterOpen, setFilterOpen] = useState(false)
+  const filterRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!filterOpen) return
+    function onPointerDown(e: PointerEvent) {
+      if (!filterRef.current?.contains(e.target as Node)) setFilterOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [filterOpen])
 
   async function refresh() {
     setIsLoading(true)
@@ -208,7 +224,11 @@ export default function DailyReportScreen() {
     setSnack({ open: true, msg: approved ? 'Edit approved — report is now editable.' : 'Edit request rejected.', type: 'success' })
   }
 
-  const filtered = reports.filter(r => !search || projectName(r.projectId).toLowerCase().includes(search.toLowerCase()))
+  const { from: rangeFrom, to: rangeTo } = getDateRange(dateFilter, customFrom, customTo)
+  const filtered = reports
+    .filter(r => !search || projectName(r.projectId).toLowerCase().includes(search.toLowerCase()))
+    .filter(r => inRange(r.date, rangeFrom, rangeTo))
+  const activeFilterLabel = DATE_FILTERS.find(f => f.value === dateFilter)?.label ?? 'All'
   const selectedProject = selected ? projects.find(p => p.id === selected.projectId) : undefined
   const lo = resolveLO(selectedProject)
   const isLO = !!selected && (user?.role === 'owner' || (lo.id ? user?.id === lo.id : false))
@@ -218,16 +238,44 @@ export default function DailyReportScreen() {
     <div className="min-h-screen bg-slate-50 pb-24">
       <AppHeader />
       <div className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-14 z-20">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 gap-2">
           <h1 className="text-lg font-extrabold text-slate-800">Daily Report</h1>
-          <PermissionGate permission="create_daily_report">
-            <button onClick={openNew} aria-label="New daily report"
-              className="w-10 h-10 rounded-xl flex items-center justify-center shadow-fab active:opacity-90"
-              style={{ background: '#0F2A4A' }}>
-              <Plus size={19} className="text-white" strokeWidth={2.5} />
-            </button>
-          </PermissionGate>
+          <div className="flex items-center gap-2">
+            <div className="relative" ref={filterRef}>
+              <button onClick={() => setFilterOpen(o => !o)} type="button"
+                className="flex items-center gap-1 pl-3 pr-2 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 active:bg-slate-50">
+                {activeFilterLabel}
+                <ChevronDown size={14} className={`text-slate-400 transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {filterOpen && (
+                <div className="absolute right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden w-40">
+                  {DATE_FILTERS.map(f => (
+                    <button key={f.value} type="button" onClick={() => { setDateFilter(f.value); setFilterOpen(false) }}
+                      className={`w-full text-left px-4 py-2.5 text-xs border-b border-slate-50 last:border-0 active:bg-slate-50 ${
+                        f.value === dateFilter ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-700'
+                      }`}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <PermissionGate permission="create_daily_report">
+              <button onClick={openNew} aria-label="New daily report"
+                className="w-10 h-10 rounded-xl flex items-center justify-center shadow-fab active:opacity-90 shrink-0"
+                style={{ background: '#0F2A4A' }}>
+                <Plus size={19} className="text-white" strokeWidth={2.5} />
+              </button>
+            </PermissionGate>
+          </div>
         </div>
+        {dateFilter === 'custom' && (
+          <div className="flex items-center gap-2 flex-wrap mb-3">
+            <DateField value={customFrom} onChange={setCustomFrom} />
+            <span className="text-slate-400 text-xs">to</span>
+            <DateField value={customTo} onChange={setCustomTo} />
+          </div>
+        )}
         <SearchBar value={search} onChange={setSearch} placeholder="Search by project name…" />
       </div>
 

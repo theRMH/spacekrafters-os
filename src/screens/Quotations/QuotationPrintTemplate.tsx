@@ -16,7 +16,7 @@ const BORDER = '1px solid #000'
 // Tables use separate borders (right + bottom on every cell, left + top on the table) with whole-pixel
 // line heights: collapsed borders and fractional line heights come out doubled and misaligned when the
 // page is captured to an image for the PDF.
-const cell: CSSProperties = { borderRight: BORDER, borderBottom: BORDER, padding: '5px 6px', verticalAlign: 'top', lineHeight: '15px' }
+const cell: CSSProperties = { borderRight: BORDER, borderBottom: BORDER, padding: '7px 8px', verticalAlign: 'top', lineHeight: '16px' }
 const table: CSSProperties = { width: '100%', borderCollapse: 'separate', borderSpacing: 0, borderLeft: BORDER, borderTop: BORDER }
 
 const money = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -38,7 +38,23 @@ function Description({ text }: { text: string }) {
 function Bullets({ text }: { text?: string }) {
   const items = lines(text)
   if (items.length === 0) return null
-  return <ul style={{ margin: '2px 0 4px 18px', padding: 0, listStyle: 'disc' }}>{items.map((t, i) => <li key={i}>{t}</li>)}</ul>
+  // Plain flexbox, not a <ul>/native list marker or a negative text-indent
+  // hanging-indent — html2canvas (used to capture this page for the PDF)
+  // doesn't reliably rasterize either of those, rendering a stray glyph in
+  // the wrong position instead of a clean bullet. A fixed-width bullet
+  // column + a flexible text column is plain box layout, which captures
+  // correctly, and guarantees every line's text starts at the same x
+  // position regardless of the bullet character's own width.
+  return (
+    <div style={{ margin: '3px 0 5px' }}>
+      {items.map((t, i) => (
+        <div key={i} style={{ display: 'flex', marginBottom: 2 }}>
+          <span style={{ width: 12, flexShrink: 0 }}>-</span>
+          <span style={{ flex: 1 }}>{t}</span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function SectionTitle({ children }: { children: ReactNode }) {
@@ -56,7 +72,7 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
   const stages = (tpl.paymentStages ?? []).filter(s => s.stage.trim() || s.percent.trim())
 
   return (
-    <div style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: 11, color: '#000', lineHeight: '15px', background: '#fff' }}>
+    <div style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: 11, color: '#000', lineHeight: '16px', background: '#fff' }}>
       {/* ───────── Page 1 ───────── */}
       <div data-pdf-page="1" style={{ border: BORDER }}>
         <div style={{ padding: '10px 14px 4px', textAlign: 'center' }}>
@@ -65,27 +81,35 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
             <div style={{ fontStyle: 'italic', color: '#666', borderBottom: `1px solid ${GREEN}`, paddingBottom: 2, marginTop: 46, fontSize: 10 }}>{L.tagline}</div>
           </div>
           <img src={L.logo} alt="" style={{ height: 96, display: 'block', margin: '0 auto 6px' }} />
-          <div style={{ fontSize: 10, borderBottom: `1px solid ${GREEN}`, paddingBottom: 3 }}>{L.address}<br />{L.phone}</div>
+          <div style={{ fontSize: 10, paddingBottom: 3 }}>{L.address}<br />{L.phone}</div>
         </div>
 
-        <div style={{ borderTop: BORDER, textAlign: 'center' }}>
-          <div style={{ fontWeight: 700, fontSize: 17, letterSpacing: 0.5 }}>QUOTATION</div>
-          <div style={{ fontStyle: 'italic', color: '#666', fontSize: 10 }}>{tpl.workTitle}</div>
+        <div style={{ borderTop: BORDER, textAlign: 'center', paddingBottom: 6 }}>
+          <div style={{ fontWeight: 700, fontSize: 17, lineHeight: '22px', letterSpacing: 0.5 }}>QUOTATION</div>
+          <div style={{ fontStyle: 'italic', color: '#666', fontSize: 10, lineHeight: '14px' }}>{tpl.workTitle}</div>
         </div>
 
-        <div style={{ display: 'flex', borderTop: BORDER, padding: '3px 6px', fontSize: 10.5 }}>
-          <div style={{ flex: 1 }}>
-            <div><strong>Kind Attn.:</strong> {tpl.kindAttn}</div>
-            <div><strong>Site: {tpl.siteName}</strong></div>
-            <div><strong>Project Type: {tpl.projectType}</strong></div>
-            <div><strong>Date:</strong> {fmtDate(q.createdAt)}</div>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div><strong>Project MD:</strong> {tpl.projectMd}</div>
-            <div><strong>Project Lead:</strong> {tpl.projectLead}</div>
-            <div><strong>Project QS:</strong> {tpl.projectQs}</div>
-          </div>
-        </div>
+        <table style={{ ...table, tableLayout: 'fixed', borderLeft: 'none', fontSize: 10.5 }}>
+          <colgroup><col style={{ width: '50%' }} /><col style={{ width: '50%' }} /></colgroup>
+          <tbody>
+            <tr>
+              <td style={{ ...cell, padding: '3px 8px', borderBottom: 'none' }}><strong>Kind Attn.:</strong> {tpl.kindAttn}</td>
+              <td style={{ ...cell, padding: '3px 8px', borderRight: 'none', borderBottom: 'none' }}><strong>Project MD:</strong> {tpl.projectMd}</td>
+            </tr>
+            <tr>
+              <td style={{ ...cell, padding: '3px 8px', borderBottom: 'none' }}><strong>Site:</strong> {tpl.siteName}</td>
+              <td style={{ ...cell, padding: '3px 8px', borderRight: 'none', borderBottom: 'none' }}><strong>Project Lead:</strong> {tpl.projectLead}</td>
+            </tr>
+            <tr>
+              <td style={{ ...cell, padding: '3px 8px', borderBottom: 'none' }}><strong>Project Type:</strong> {tpl.projectType}</td>
+              <td style={{ ...cell, padding: '3px 8px', borderRight: 'none', borderBottom: 'none' }}><strong>Project QS:</strong> {tpl.projectQs}</td>
+            </tr>
+            <tr>
+              <td style={{ ...cell, padding: '3px 8px' }}><strong>Date:</strong> {fmtDate(q.createdAt)}</td>
+              <td style={{ ...cell, padding: '3px 8px', borderRight: 'none' }} />
+            </tr>
+          </tbody>
+        </table>
 
         <table style={{ ...table, tableLayout: 'fixed', borderLeft: 'none' }}>
           <colgroup>
@@ -95,7 +119,7 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
           <thead>
             <tr style={{ background: NAVY, color: '#fff' }}>
               {['S.No', 'Description of Work', 'UoM', 'Qty', 'Rate (₹)', 'Amount (₹)'].map(h => (
-                <th key={h} style={{ ...cell, textAlign: 'center', fontWeight: 700 }}>{h}</th>
+                <th key={h} style={{ ...cell, textAlign: h === 'Description of Work' ? 'left' : 'center', fontWeight: 700 }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -128,7 +152,7 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
             {transport > 0 && (
               <tr>
                 <td style={{ ...cell, textAlign: 'center' }}>{serial + 1}</td>
-                <td style={cell}>Transport</td>
+                <td style={{ ...cell, textAlign: 'justify' }}>Transport</td>
                 <td style={{ ...cell, textAlign: 'center' }}>Lsm</td>
                 <td style={{ ...cell, textAlign: 'center' }}>1.00</td>
                 <td style={{ ...cell, textAlign: 'center' }}>{money(transport)}</td>
@@ -172,7 +196,7 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
 
       {/* ───────── Page 2: Terms & Conditions ───────── */}
       <div data-pdf-page="2" style={{ border: BORDER, padding: '6px 8px' }}>
-        <p style={{ margin: 0, fontWeight: 700, fontSize: 12 }}>TERMS &amp; CONDITIONS</p>
+        <p style={{ margin: 0, fontWeight: 700, fontSize: 12, lineHeight: '16px' }}>TERMS &amp; CONDITIONS</p>
         <p style={{ margin: 0, fontStyle: 'italic', color: '#666' }}>Annexure to Quotation – {attn}</p>
 
         {hasLegacyTerms && !tpl.commercialTerms ? (
@@ -187,11 +211,11 @@ export function QuotationPrintTemplate({ q, tpl, clientName }: { q: Quotation; t
             <SectionTitle>3. Scope, Design &amp; Variations</SectionTitle><Bullets text={tpl.scopeVariations} />
             <SectionTitle>4. Payment Terms</SectionTitle>
             {stages.length > 0 && (
-              <table style={{ ...table, margin: '2px 0' }}>
+              <table style={{ ...table, margin: '6px 0' }}>
                 <thead>
                   <tr style={{ background: NAVY, color: '#fff' }}>
                     <th style={{ ...cell, textAlign: 'left' }}>Stage</th>
-                    <th style={{ ...cell, width: '25%' }} />
+                    <th style={{ ...cell, width: '25%', textAlign: 'center' }}>Payment %</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
+import { SearchableSelect } from '../../components/forms/SearchableSelect'
 import { materialIndentTaskTitle } from './MaterialIndentStep'
 import { procurementTaskTitle } from './ProcurementStep'
 import { waitingForDeliveryTaskTitle } from './WaitingForDeliveryStep'
@@ -91,12 +92,7 @@ export function StageWorkStep({ project, stage, users, user, saving, persist }: 
   const [showReject, setShowReject] = useState(false)
   const [error, setError] = useState('')
 
-  const personOptions = (
-    <>
-      <option value="">— Select —</option>
-      {everyone.map(u => <option key={u.id} value={u.id}>{u.fullName}{u.role ? ` · ${ROLE_LABELS[u.role] ?? u.role}` : ''}</option>)}
-    </>
-  )
+  const personSelectOptions = everyone.map(u => ({ value: u.id, label: `${u.fullName}${u.role ? ` · ${ROLE_LABELS[u.role] ?? u.role}` : ''}` }))
 
   async function assign() {
     const person = users.find(u => u.id === personId)
@@ -206,7 +202,7 @@ export function StageWorkStep({ project, stage, users, user, saving, persist }: 
     <div className="space-y-3">
       <div>
         <label className="text-xs font-semibold text-slate-500 mb-1 block">{cfg.assignee} *</label>
-        <select value={personId} onChange={e => setPersonId(e.target.value)} className={input}>{personOptions}</select>
+        <SearchableSelect value={personId} onChange={setPersonId} options={personSelectOptions} searchPlaceholder="Search…" />
       </div>
       <div>
         <label className="text-xs font-semibold text-slate-500 mb-1 block">What is needed <span className="font-normal text-slate-400">(optional)</span></label>
@@ -252,7 +248,7 @@ export function StageWorkStep({ project, stage, users, user, saving, persist }: 
             {cfg.pickNextAssignee && (
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1 block">Assign QS for {cfg.nextLabel} *</label>
-                <select value={nextPersonId} onChange={e => setNextPersonId(e.target.value)} className={input}>{personOptions}</select>
+                <SearchableSelect value={nextPersonId} onChange={setNextPersonId} options={personSelectOptions} searchPlaceholder="Search…" />
               </div>
             )}
             {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
