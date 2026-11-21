@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react'
 import type { Lead, LeadActivityItem } from '../types'
 import { getAllLeads, upsertLead, insertLead, getNextLeadNumber, hardDeleteLead } from '../services/leadService'
 import { getAllQuotations, deleteQuotations } from '../services/quotationService'
@@ -23,10 +23,14 @@ export function CRMProvider({ children }: { children: ReactNode }) {
   const { user, isAuthReady } = useAuth()
   const [leads, setLeads] = useState<Lead[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const hasLoaded = useRef(false)
 
   async function refreshLeads() {
-    setIsLoading(true)
-    setLeads(await getAllLeads())
+    // Only the very first load shows the loading state; later refreshes are silent so open sheets don't flicker.
+    if (!hasLoaded.current) setIsLoading(true)
+    const fresh = await getAllLeads()
+    hasLoaded.current = true
+    setLeads(fresh)
     setIsLoading(false)
   }
 
@@ -44,7 +48,11 @@ export function CRMProvider({ children }: { children: ReactNode }) {
     // manually reload — same 30s interval NotificationBell.tsx already polls
     // notifications at, for consistency.
     const id = setInterval(refreshLeads, 30000)
-    return () => clearInterval(id)
+    // Also refetch the moment the tab/app comes back into view, so a stage the MD just changed shows at once.
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshLeads() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthReady, user?.id])
 

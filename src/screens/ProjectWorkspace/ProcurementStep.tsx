@@ -19,7 +19,11 @@ export function procurementTaskTitle(project: Project): string {
   const work = project.procurementWork
   if (!work) return 'Assign Procurer'
   const statuses = work.vendors.map(v => vendorStatus(work, v))
-  if (statuses.length === 0) return 'Create Vendors'
+  const compare = work.compare ?? statuses.length === 0
+  if (statuses.length === 0) return compare ? 'Create Vendor Proposals' : 'Create Vendors'
+  if (compare && statuses.includes('with_pc')) return 'Select Final Vendor'
+  if (compare && statuses.includes('draft')) return 'Send Proposals to PC'
+  if (compare && statuses.includes('with_procurer')) return 'Send Order to Vendor'
   if (statuses.includes('with_pc')) return 'Review Vendor Orders'
   if (statuses.includes('rejected')) return 'Revise Vendor Orders'
   if (statuses.includes('draft')) return 'Send Vendor Orders to PC'
@@ -51,6 +55,8 @@ const blankDraft = (): Draft => ({ id: newId('ven'), name: '', gstin: '', phone:
 export function ProcurementStep({ project, users, user, saving, persist }: Props) {
   const work = project.procurementWork
   const vendors = work?.vendors ?? []
+  // Proposal comparison is the flow for every project that has no vendors yet; one already mid-way keeps the flow it started in.
+  const compare = work ? (work.compare ?? vendors.length === 0) : true
   const isPc = user?.role === 'project_coordinator' || user?.role === 'owner'
   const isProcurer = !!work && (user?.id === work.procurerId || user?.role === 'owner')
   const projectLabel = project.projectNumber ? `${project.projectNumber} - ${project.name}` : project.name
@@ -104,21 +110,22 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
         ...draft, name: draft.name.trim(), gstin: draft.gstin.trim().toUpperCase(),
         poNumber: existing?.poNumber ?? `PO-${poBase}-${vendors.length + 1}`,
         createdAt: existing?.createdAt ?? now, updatedAt: now,
-        // Saving a vendor sends its order straight to the PC for approval — there is no separate send step.
-        status: 'with_pc', rejectionReason: undefined,
-        log: [...(existing?.log ?? []), logEntry('draft', existing ? 'Edited' : 'Created', user?.name ?? 'Unknown'), logEntry('with_pc', 'Sent to PC for approval', user?.name ?? 'Unknown')],
+        // Compare mode: a saved vendor stays a draft until the procurer sends ALL proposals to the PC together.
+        // Older projects keep the old behaviour: saving sends that vendor's order straight to the PC.
+        status: compare ? 'draft' : 'with_pc', rejectionReason: undefined,
+        log: [...(existing?.log ?? []), logEntry('draft', existing ? 'Edited' : 'Created', user?.name ?? 'Unknown'), ...(compare ? [] : [logEntry('with_pc', 'Sent to PC for approval', user?.name ?? 'Unknown')])],
       }
       order.pdf = await generateAndUploadPurchaseOrderPdf(order, projectLabel)
       if (existing?.pdf) await deleteRemoteFile(existing.pdf)
       const next = existing ? vendors.map(v => v.id === order.id ? order : v) : [...vendors, order]
-      const nextWork = { ...work, vendors: next, review: undefined }
+      const nextWork = { ...work, vendors: next, compare, review: undefined }
       const updated = await persist(
         { procurementWork: nextWork, ...routeFor(nextWork, project, users) },
-        `${existing ? 'Updated' : 'Added'} vendor ${order.name} (${order.poNumber}) — sent to PC for approval`, STAGE, { keepOpen: true },
+        `${existing ? 'Updated' : 'Added'} vendor ${order.name} (${order.poNumber})${compare ? ' proposal' : ' — sent to PC for approval'}`, STAGE, { keepOpen: true },
       )
       if (updated) {
         const pcId = routeFor(nextWork, project, users).assignedToId
-        if (pcId) await sendNotification([pcId], 'Vendor Order Pending PC Approval', `${project.name} — ${order.name} (${order.poNumber}) is waiting for your approval.`, `/projects/${project.id}`)
+        if (!compare && pcId) await sendNotification([pcId], 'Vendor Order Pending PC Approval', `${project.name} — ${order.name} (${order.poNumber}) is waiting for your approval.`, `/projects/${project.id}`)
         // "Save & add another vendor" opens the next vendor blank.
         setDraft(addAnother ? blankDraft() : null)
         setShowIndentPick(false)
@@ -140,7 +147,7 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
     const updated = await persist(
       {
         assignedRole: person.role, assignedToId: person.id, assignedToName: person.fullName,
-        procurementWork: { procurerId: person.id, procurerName: person.fullName, assignedBy: user.name, assignedAt: new Date().toISOString(), vendors: [] },
+        procurementWork: { procurerId: person.id, procurerName: person.fullName, assignedBy: user.name, assignedAt: new Date().toISOString(), vendors: [], compare: true },
       },
       `Procurement assigned to ${person.fullName}`, STAGE,
     )
@@ -161,8 +168,8 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
       vendors: vendors.map(v => ids.has(v.id) ? { ...v, status: 'with_pc' as const, rejectionReason: undefined, log: [...(v.log ?? []), logEntry('with_pc', 'Sent to PC for approval', user.name)] } : v),
     }
     const route = routeFor(next, project, users)
-    const updated = await persist({ procurementWork: next, ...route }, `Vendor orders (${ids.size}) sent by ${user.name} to PC for approval`, STAGE)
-    if (updated && route.assignedToId) await sendNotification([route.assignedToId], 'Vendor Orders Pending PC Approval', `${project.name} — ${ids.size} vendor order(s) are waiting for your approval.`, `/projects/${project.id}`)
+    const updated = await persist({ procurementWork: next, ...route }, compare ? `Vendor proposals (${ids.size}) sent by ${user.name} to PC to select the final vendor` : `Vendor orders (${ids.size}) sent by ${user.name} to PC for approval`, STAGE)
+    if (updated && route.assignedToId) await sendNotification([route.assignedToId], compare ? 'Select Final Vendor' : 'Vendor Orders Pending PC Approval', compare ? `${project.name} — ${ids.size} vendor proposal(s) are ready. Compare them and select the final vendor.` : `${project.name} — ${ids.size} vendor order(s) are waiting for your approval.`, `/projects/${project.id}`)
   }
 
 
@@ -290,20 +297,23 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
         </div>
         {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
         <button disabled={busy || saving} onClick={() => saveVendor(true)} className={`${btn} border border-indigo-300 bg-indigo-50 text-indigo-700`}>
-          Save & Add Another Vendor
+          {compare ? 'Generate PDF & Add Another Vendor' : 'Save & Add Another Vendor'}
         </button>
         <button disabled={busy || saving} onClick={() => saveVendor()} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
-          {busy ? 'Creating PDF…' : 'Save Vendor & Send to PC'}
+          {busy ? 'Creating PDF…' : compare ? 'Generate PDF' : 'Save Vendor & Send to PC'}
         </button>
-        <button disabled={busy} onClick={() => { setDraft(null); setError('') }} className={`${btn} border border-slate-200 bg-white text-slate-600`}>Cancel</button>
       </div>
     )
   }
 
   const hint = isProcurer
-    ? 'Add each vendor with its products. A separate purchase-order PDF is made for every vendor, and saving a vendor sends it to the PC for approval.'
+    ? (compare
+      ? 'Add a proposal for each vendor (name, GST number, address and the rate for every product). A PDF is made for each one. Send them all to the PC, who selects the final vendor.'
+      : 'Add each vendor with its products. A separate purchase-order PDF is made for every vendor, and saving a vendor sends it to the PC for approval.')
     : isPc
-      ? 'Approve or reject each vendor order. Approved orders are sent to the procurer, who sends them to the vendor.'
+      ? (compare
+        ? 'Open each vendor proposal PDF, compare the totals, then select the final vendor. The order then goes to the procurer, who sends it to that vendor.'
+        : 'Approve or reject each vendor order. Approved orders are sent to the procurer, who sends them to the vendor.')
       : `Waiting for ${work.procurerName} to create the vendors.`
   return (
     <div className="space-y-3">
@@ -324,7 +334,7 @@ export function ProcurementStep({ project, users, user, saving, persist }: Props
             <Plus size={16} /> {vendors.length > 0 ? 'Add Another Vendor' : 'Add Vendor'}{vendors.length > 0 && remainingItems().length > 0 ? ` (${remainingItems().length} items left)` : ''}
           </button>
           {toSubmit.length > 0 && <button disabled={saving} onClick={sendToPc} className={`${btn} text-white`} style={{ background: '#0F2A4A' }}>
-            Send to PC for Approval ({toSubmit.length})
+            {compare ? `Send Proposals to PC (${toSubmit.length})` : `Send to PC for Approval (${toSubmit.length})`}
           </button>}
         </>
       )}

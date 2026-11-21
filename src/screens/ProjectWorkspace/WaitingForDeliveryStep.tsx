@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
+import { sendNotification } from '../../utils/notifications'
+import { ROLE_LABELS } from '../../data/permissions'
 import { VendorOrdersPanel } from './VendorOrdersPanel'
 import { VENDOR_STATUS_LABEL, vendorStatus } from '../../utils/vendorOrderFlow'
 import type { AuthUser, ManagedUser, Project, ProjectStage } from '../../types'
@@ -9,7 +12,7 @@ const STAGE: ProjectStage = 'waiting_for_delivery'
 export function waitingForDeliveryTaskTitle(project: Project): string {
   const work = project.procurementWork
   if (!work || work.vendors.length === 0) return 'Follow Up Vendor Orders'
-  return work.vendors.every(v => vendorStatus(work, v) === 'delivered') ? 'Move to Execution' : 'Follow Up Vendor Orders'
+  return work.vendors.every(v => vendorStatus(work, v) === 'delivered') ? 'Assign Site Engineer & Move to Execution' : 'Follow Up Vendor Orders'
 }
 
 interface Props {
@@ -26,6 +29,8 @@ const btn = 'w-full py-3 rounded-xl text-sm font-bold active:opacity-90 disabled
 // step recorded by whoever follows the orders up. When every order is delivered the PC moves the project to Execution.
 export function WaitingForDeliveryStep({ project, users, user, saving, persist }: Props) {
   const work = project.procurementWork
+  const [siteEngineerId, setSiteEngineerId] = useState('')
+  const [error, setError] = useState('')
   const isPc = user?.role === 'project_coordinator' || user?.role === 'owner'
 
   if (!work || work.vendors.length === 0) {
@@ -39,12 +44,15 @@ export function WaitingForDeliveryStep({ project, users, user, saving, persist }
   const counts = (['sent', 'order_placed', 'in_transit', 'delivered'] as const)
     .map(s => ({ s, n: statuses.filter(x => x === s).length })).filter(c => c.n > 0)
 
+  // The PC picks the site engineer who runs Execution; the project is assigned to them, so it shows in their My Tasks.
   async function moveOn() {
-    const pc = users.find(u => u.id === project.coordinatorId)
-    await persist(
-      { stage: 'execution', assignedRole: 'project_coordinator', assignedToId: pc?.id ?? project.coordinatorId, assignedToName: pc?.fullName ?? project.coordinatorName, pendingStageRequest: undefined },
-      'PC moved the project to Execution — all vendor orders delivered', 'execution',
+    const person = users.find(u => u.id === siteEngineerId)
+    if (!person) { setError('Choose the site engineer for Execution.'); return }
+    const updated = await persist(
+      { stage: 'execution', assignedRole: person.role, assignedToId: person.id, assignedToName: person.fullName, pendingStageRequest: undefined },
+      `PC moved the project to Execution — assigned to ${person.fullName}`, 'execution',
     )
+    if (updated) await sendNotification([person.id], 'Execution Assigned', `${project.name} — you have been assigned Execution.`, `/my-tasks/project/${project.id}`)
   }
 
   return (
@@ -67,9 +75,19 @@ export function WaitingForDeliveryStep({ project, users, user, saving, persist }
             <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">All delivered</p>
             <p className="text-sm text-emerald-700 mt-1">Every vendor order has reached the site.</p>
           </div>
-          {isPc
-            ? <button disabled={saving} onClick={moveOn} className={`${btn} text-white`} style={{ background: '#059669' }}>Move to Execution</button>
-            : <p className="text-sm text-slate-500 text-center py-1">Waiting for the PC to move the project to Execution.</p>}
+          {isPc ? (
+            <>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 mb-1 block">Site Engineer for Execution *</label>
+                <select value={siteEngineerId} onChange={e => setSiteEngineerId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400">
+                  <option value="">— Select —</option>
+                  {[...users].sort((a, b) => a.fullName.localeCompare(b.fullName)).map(u => <option key={u.id} value={u.id}>{u.fullName}{u.role ? ` · ${ROLE_LABELS[u.role] ?? u.role}` : ''}</option>)}
+                </select>
+              </div>
+              {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
+              <button disabled={saving || !siteEngineerId} onClick={moveOn} className={`${btn} text-white`} style={{ background: '#059669' }}>Assign Site Engineer & Move to Execution</button>
+            </>
+          ) : <p className="text-sm text-slate-500 text-center py-1">Waiting for the PC to assign a site engineer and move the project to Execution.</p>}
         </>
       )}
     </div>

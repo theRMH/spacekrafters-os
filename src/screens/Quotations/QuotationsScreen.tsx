@@ -495,6 +495,12 @@ export default function QuotationsScreen({ embed }: { embed?: { leadId: string; 
       template: tpl,
       ...(needsReapproval ? {
         status: 'draft' as const,
+        // Keep the proposal that was rejected (its PDF too) and start the next version.
+        version: (selected.version ?? 1) + 1,
+        previousVersions: [...(selected.previousVersions ?? []), {
+          version: selected.version ?? 1, file: selected.documentFiles?.[0], netAmount: selected.netAmount,
+          reason: selected.rejectionReason, replacedAt: new Date().toISOString(),
+        }],
         rejectionReason: undefined,
         statusHistory: [...(selected.statusHistory ?? []), makeHistory('draft', 'Edited — send to MD for approval again')],
       } : {}),

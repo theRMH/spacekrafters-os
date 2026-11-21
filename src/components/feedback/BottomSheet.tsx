@@ -8,9 +8,11 @@ interface Props {
   title?: string
   children: React.ReactNode
   height?: 'auto' | 'half' | 'full'
+  // For sheets that start with a full-width coloured header: no white strip above it (the handle floats on top).
+  bleedTop?: boolean
 }
 
-export function BottomSheet({ isOpen, onClose, title, children, height = 'auto' }: Props) {
+export function BottomSheet({ isOpen, onClose, title, children, height = 'auto', bleedTop = false }: Props) {
   useEffect(() => {
     if (isOpen) document.body.style.overflow = 'hidden'
     else document.body.style.overflow = ''
@@ -27,11 +29,17 @@ export function BottomSheet({ isOpen, onClose, title, children, height = 'auto' 
       <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} />
 
       {/* Sheet */}
-      <div className={`relative bg-white rounded-t-3xl shadow-sheet animate-slide-up w-full ${heightClass} flex flex-col`}>
+      <div className={`relative bg-white rounded-t-3xl shadow-sheet animate-slide-up w-full ${heightClass} flex flex-col ${bleedTop ? 'overflow-hidden' : ''}`}>
         {/* Handle */}
-        <div className="flex-shrink-0 flex flex-col items-center pt-3 pb-2">
-          <div className="w-10 h-1 bg-slate-200 rounded-full" />
-        </div>
+        {bleedTop ? (
+          <div className="absolute top-2 left-0 right-0 z-10 flex justify-center pointer-events-none">
+            <div className="w-10 h-1 bg-white/40 rounded-full" />
+          </div>
+        ) : (
+          <div className="flex-shrink-0 flex flex-col items-center pt-3 pb-2">
+            <div className="w-10 h-1 bg-slate-200 rounded-full" />
+          </div>
+        )}
 
         {/* Header */}
         {title && (

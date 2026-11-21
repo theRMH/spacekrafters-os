@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { PermissionGate } from '../../components/layout/PermissionGate'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { SearchBar } from '../../components/forms/SearchBar'
 import { BottomSheet } from '../../components/feedback/BottomSheet'
 import { Snackbar } from '../../components/feedback/Snackbar'
-import { Dialog } from '../../components/feedback/Dialog'
 import { StatusBadge } from '../../components/badges/StatusBadge'
 import { getAllClients, upsertClient, deleteClient } from '../../services/clientService'
 import { getAllProjects } from '../../services/projectService'
@@ -47,25 +45,22 @@ export default function ClientMasterScreen() {
   const [tab, setTab] = useState<Tab>('profile')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<Client>(emptyClient())
-  // The client the delete confirmation is open for (from a list card or from the detail sheet).
-  const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   useEffect(() => {
     async function load() {
       setIsLoading(true)
       const [c, p] = await Promise.all([getAllClients(), getAllProjects()])
-      setClients(c)
+      // A client exists only because a lead was converted to a project: one with no project left (its projects or leads
+      // were deleted) is removed automatically, and is never listed.
+      const orphans = c.filter(cl => !p.some(pr => pr.clientId === cl.id))
+      if (user?.role === 'owner') await Promise.all(orphans.map(cl => deleteClient(cl.id)))
+      setClients(c.filter(cl => !orphans.includes(cl)))
       setProjects(p)
       setIsLoading(false)
     }
     load()
-  }, [])
-
-  function openCreate() {
-    setForm(emptyClient())
-    setShowForm(true)
-  }
+  }, [user?.role])
 
   function openDetail(client: Client) {
     setSelected(client)
@@ -103,37 +98,6 @@ export default function ClientMasterScreen() {
     setSnack({ open: true, msg: 'Client saved.', type: 'success' })
   }
 
-  function askDelete(client: Client) {
-    // Projects point at their client, so a client that still has projects cannot be removed.
-    const count = projects.filter(p => p.clientId === client.id).length
-    if (count > 0) {
-      setSnack({ open: true, msg: `${client.name} still has ${count} project${count !== 1 ? 's' : ''} — remove or reassign them first.`, type: 'error' })
-      return
-    }
-    setDeleteTarget(client)
-  }
-
-  async function confirmDelete() {
-    if (!deleteTarget) return
-    const target = deleteTarget
-    const result = await deleteClient(target.id)
-    setDeleteTarget(null)
-    if (!result.ok) { setSnack({ open: true, msg: result.error ?? 'Could not delete client.', type: 'error' }); return }
-    if (user) {
-      addAuditLog({
-        id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        action: 'client_deleted',
-        description: `Client "${target.name}" deleted.`,
-        createdBy: user.name,
-        createdByRole: user.role,
-        createdAt: new Date().toISOString(),
-      })
-    }
-    setClients(prev => prev.filter(c => c.id !== target.id))
-    setSelected(null)
-    setSnack({ open: true, msg: 'Client deleted.', type: 'success' })
-  }
-
   const filtered = clients.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()))
   const selectedProjects = selected ? projects.filter(p => p.clientId === selected.id) : []
 
@@ -143,13 +107,6 @@ export default function ClientMasterScreen() {
       <div className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-14 z-20">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-extrabold text-slate-800">Clients</h1>
-          <PermissionGate permission="view_projects">
-            <button onClick={openCreate} aria-label="Add client"
-              className="w-10 h-10 rounded-xl flex items-center justify-center shadow-fab active:opacity-90"
-              style={{ background: '#0F2A4A' }}>
-              <Plus size={19} className="text-white" strokeWidth={2.5} />
-            </button>
-          </PermissionGate>
         </div>
         <SearchBar value={search} onChange={setSearch} placeholder="Search clients…" />
       </div>
@@ -160,19 +117,13 @@ export default function ClientMasterScreen() {
           return (
             <div key={client.id} className="relative">
               <button onClick={() => openDetail(client)}
-                className="w-full text-left bg-white rounded-2xl p-4 pr-14 shadow-sm border border-slate-100 active:bg-slate-50">
+                className="w-full text-left bg-white rounded-2xl p-4 shadow-sm border border-slate-100 active:bg-slate-50">
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <span className="font-bold text-sm text-slate-800">{client.name}</span>
                 </div>
                 <p className="text-xs text-slate-500">{client.phone}</p>
                 <p className="text-[12px] text-slate-400 mt-1">{clientProjects.length} project{clientProjects.length !== 1 ? 's' : ''}</p>
               </button>
-              {user?.role === 'owner' && (
-                <button onClick={() => askDelete(client)} aria-label={`Delete ${client.name}`}
-                  className="absolute top-3 right-3 w-9 h-9 rounded-xl flex items-center justify-center text-red-500 bg-red-50 active:bg-red-100">
-                  <Trash2 size={16} />
-                </button>
-              )}
             </div>
           )
         })}
@@ -183,7 +134,7 @@ export default function ClientMasterScreen() {
       </div>
 
       {/* Create Client */}
-      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title="New Client">
+      <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title="Edit Client">
         <div className="space-y-4 pb-4">
           <div>
             <label className={label}>Client Name *</label>
@@ -241,12 +192,6 @@ export default function ClientMasterScreen() {
                     Edit Client
                   </button>
                 </PermissionGate>
-                {user?.role === 'owner' && (
-                  <button onClick={() => askDelete(selected)}
-                    className="w-full text-center text-xs font-semibold text-red-500 py-2">
-                    Delete Client
-                  </button>
-                )}
               </div>
             )}
 
@@ -271,16 +216,6 @@ export default function ClientMasterScreen() {
           </div>
         )}
       </BottomSheet>
-
-      <Dialog
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        title="Delete Client"
-        message={`Are you sure you want to delete ${deleteTarget?.name ?? 'this client'}? This cannot be undone.`}
-        confirmLabel="Delete"
-        onConfirm={confirmDelete}
-        variant="danger"
-      />
 
       <Snackbar isOpen={snack.open} message={snack.msg} type={snack.type} onClose={() => setSnack(s => ({ ...s, open: false }))} />
     </div>

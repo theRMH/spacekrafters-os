@@ -22,7 +22,7 @@ import { getAllVendorBills, getAllPurchaseOrders } from '../../services/procurem
 import { getAllDesignPackages, upsertDesignPackage } from '../../services/designService'
 import { getAllExpenseRequests } from '../../services/expenseService'
 import { addAuditLog } from '../../services/auditLogService'
-import { getAllClients, upsertClient } from '../../services/clientService'
+import { getAllClients, upsertClient, deleteClientIfNoProjects } from '../../services/clientService'
 import { ROLE_LABELS } from '../../data/permissions'
 import { ProjectStatusSheet, ROLE_FOR_PROJECT_STAGE, PROJECT_STAGE_LABEL, PROJECT_STAGE_ORDER } from '../ProjectWorkspace/ProjectStatusSheet'
 import type { ManagedUser, Project, ProjectStage, StatusHistoryItem, Quotation, PaymentMilestone, Payable, VendorBill, PurchaseOrder, ExpenseRequest, AuditLog, Client, Receipt } from '../../types'
@@ -50,12 +50,6 @@ function fmtDate(val?: string): string {
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
-}
-
-function todayStr(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 function emptyProject(): Project {
@@ -351,6 +345,8 @@ export default function ProjectsScreen() {
       addAuditLog(log)
     }
     setProjects(prev => prev.filter(p => p.id !== selected.id))
+    // The client goes with its last project.
+    if (await deleteClientIfNoProjects(selected.clientId)) setClients(prev => prev.filter(c => c.id !== selected.clientId))
     setShowDelete(false)
     setSelected(null)
     setSnack({ open: true, msg: 'Project deleted.', type: 'success' })
@@ -392,6 +388,7 @@ export default function ProjectsScreen() {
         })
       }
       setProjects(prev => prev.filter(p => p.id !== id))
+      if (await deleteClientIfNoProjects(project?.clientId)) setClients(prev => prev.filter(c => c.id !== project?.clientId))
     }
     setShowBulkDelete(false)
     setSelectMode(false)
@@ -455,7 +452,7 @@ export default function ProjectsScreen() {
           <p className="text-sm text-slate-400 text-center py-10">No projects yet.</p>
         ) : (
           filtered.map(project => (
-            <div key={project.id} role="button" tabIndex={0} onClick={() => (selectMode ? toggleSelected(project.id) : setSelected(project))}
+            <div key={project.id} role="button" tabIndex={0} onClick={() => (selectMode ? toggleSelected(project.id) : navigate(`/my-tasks/project/${project.id}`, { state: { from: '/projects' } }))}
               className={`w-full text-left bg-white rounded-2xl p-4 shadow-sm border active:bg-slate-50 cursor-pointer ${selectMode && selectedIds.has(project.id) ? 'border-red-300 bg-red-50' : 'border-slate-100'}`}>
               <div className="flex items-start justify-between gap-2 mb-1">
                 {selectMode && (
@@ -599,13 +596,13 @@ export default function ProjectsScreen() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>Start Date</label>
-              <DateField value={form.startDate ?? ''} min={isEditingExisting ? undefined : todayStr()}
+              <DateField value={form.startDate ?? ''}
                 onChange={v => setForm(f => ({ ...f, startDate: v || undefined }))} />
             </div>
             <div>
               <label className={label}>Expected Handover</label>
               <DateField value={form.expectedHandoverDate ?? ''}
-                min={isEditingExisting ? undefined : (form.startDate || todayStr())}
+                min={form.startDate || undefined}
                 onChange={v => setForm(f => ({ ...f, expectedHandoverDate: v || undefined }))} />
             </div>
           </div>

@@ -440,6 +440,15 @@ export interface QuotationTemplateData {
   paymentFooter?: string
 }
 
+export interface QuotationPastVersion {
+  version: number
+  file?: string
+  netAmount: number
+  // Why it was replaced (the MD's / client's rejection reason), when there was one.
+  reason?: string
+  replacedAt: string
+}
+
 export interface Quotation {
   id: string
   leadId: string
@@ -476,6 +485,8 @@ export interface Quotation {
   // quotation — array-typed to match this app's other file-list fields, but
   // the form caps it at one file.
   documentFiles?: string[]
+  // Earlier proposals (PDF + amount) kept when the quotation is edited and re-sent after a rejection.
+  previousVersions?: QuotationPastVersion[]
   // Layout version of the stored generated PDF (PDF_LAYOUT_VERSION in utils/quotationPdf.ts); older ones are rebuilt on View.
   pdfLayout?: number
   terms?: string
@@ -765,6 +776,10 @@ export interface ProcurementWork {
   assignedBy: string
   assignedAt: string
   vendors: VendorOrder[]
+  // Compare mode: the procurer drafts a proposal per vendor, sends them all to the PC, who selects ONE final vendor.
+  // The selected vendor stays in `vendors` and goes on to be ordered; the rest are kept (with their PDFs) in `notSelected`.
+  compare?: boolean
+  notSelected?: VendorOrder[]
   // Older whole-set review, kept so projects saved before per-vendor approval still read correctly.
   review?: { status: 'with_pc' | 'approved' | 'rejected'; submittedBy: string; submittedAt: string; decidedBy?: string; decidedAt?: string; reason?: string }
 }
@@ -1217,6 +1232,8 @@ export interface PaymentMilestone {
   title: string
   amount: number
   dueDate?: string
+  // The due date first set, kept when the due date is later revised (so the ledger shows original and revised).
+  originalDueDate?: string
   status: PaymentMilestoneStatus
   receivedAmount: number
   receivedDates: string[]
@@ -1244,6 +1261,9 @@ export interface Payable {
   id: string
   vendorId?: string
   vendorBillId?: string
+  // Set when the payable was raised automatically from a delivered in-project vendor order.
+  projectId?: string
+  vendorOrderId?: string
   payeeName?: string
   description: string
   amount: number

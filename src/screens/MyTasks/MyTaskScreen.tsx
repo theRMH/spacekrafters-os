@@ -17,7 +17,7 @@ import { getAllExpenseRequests } from '../../services/expenseService'
 import { getAllPurchaseRequests, getAllPurchaseOrders } from '../../services/procurementService'
 import { getAllQuotations } from '../../services/quotationService'
 import { getAllDesignPackages } from '../../services/designService'
-import { PROJECT_STAGE_ORDER, PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
+import { ProjectStatusSheet, PROJECT_STAGE_ORDER, PROJECT_STAGE_LABEL } from '../ProjectWorkspace/ProjectStatusSheet'
 import { LeadStatusSheet } from '../Leads/LeadStatusSheet'
 import { buildMyTaskFeed } from './myTaskFeed'
 import type {
@@ -50,6 +50,7 @@ export default function MyTaskScreen() {
   // Items whose real action is a Lead-status change (e.g. Site Visit
   // completion) open LeadStatusSheet inline here instead of navigating away.
   const [quickStatusLeadId, setQuickStatusLeadId] = useState<string | null>(null)
+  const [quickStatusProjectId, setQuickStatusProjectId] = useState<string | null>(null)
   const [snack, setSnack] = useState({ open: false, msg: '', type: 'success' as 'success' | 'error' })
 
   useEffect(() => {
@@ -174,7 +175,7 @@ export default function MyTaskScreen() {
               {item.person && <p className="text-xs font-semibold text-teal-700 mt-3">Assigned to: {item.person}</p>}
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
                 <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-primary-600 text-white">Pending</span>
-                <button onClick={() => (item.leadAction ? setQuickStatusLeadId(item.leadAction.leadId) : navigate(item.linkTo, item.linkToState ? { state: item.linkToState } : undefined))}
+                <button onClick={() => (item.leadAction ? setQuickStatusLeadId(item.leadAction.leadId) : item.projectAction ? setQuickStatusProjectId(item.projectAction.projectId) : navigate(item.linkTo, item.linkToState ? { state: item.linkToState } : undefined))}
                   className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 active:bg-blue-700">
                   Update Status
                 </button>
@@ -226,6 +227,18 @@ export default function MyTaskScreen() {
             onClose={() => setQuickStatusLeadId(null)}
             lead={quickStatusLead}
             onDone={(msg) => setSnack({ open: true, msg, type: 'success' })}
+          />
+        ) : null
+      })()}
+
+      {quickStatusProjectId && (() => {
+        const quickProject = projects.find(p => p.id === quickStatusProjectId)
+        return quickProject ? (
+          <ProjectStatusSheet
+            isOpen={!!quickStatusProjectId}
+            onClose={() => { setQuickStatusProjectId(null); getAllProjects().then(setProjects) }}
+            project={quickProject}
+            onDone={(msg) => { setSnack({ open: true, msg, type: 'success' }); getAllProjects().then(setProjects) }}
           />
         ) : null
       })()}

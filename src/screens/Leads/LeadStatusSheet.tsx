@@ -64,8 +64,37 @@ export function leadStatusLabel(lead: Pick<Lead, 'status' | 'advanceStatus' | 'a
   return LEAD_STATUS_LABEL[lead.status]
 }
 
-// The statuses the MD can force a lead to (the 7 stages + Lost).
-const OVERRIDE_STATUSES: LeadStatus[] = [...PIPELINE.map(p => p.status), 'lost']
+
+// What the site engineer recorded — shown to the PC above the Add Requirements button.
+function SiteVisitDetails({ visit }: { visit: SiteVisit }) {
+  const checked = (visit.checklist ?? []).filter(c => c.checked)
+  return (
+    <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-2.5 text-sm">
+      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Site Visit Details</p>
+      <p className="text-slate-700">
+        <span className="font-bold">{new Date(visit.visitDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+        {visit.teamMemberNames?.length ? ` · ${visit.teamMemberNames.join(', ')}` : ''}
+        {visit.customerPresence ? ` · ${visit.customerPresence === 'with_customer' ? 'With customer' : 'Without customer'}` : ''}
+      </p>
+      {(visit.rooms ?? []).length > 0 && (
+        <div className="space-y-1">
+          {visit.rooms.map(r => (
+            <div key={r.id} className="flex justify-between gap-3 text-slate-600">
+              <span className="font-semibold text-slate-700">{r.name}</span>
+              <span className="text-right">
+                {r.lengthFt && r.widthFt ? `${r.lengthFt} × ${r.widthFt} ft` : r.measurements ?? ''}
+                {r.calculatedTotal ? ` = ${r.calculatedTotal}` : ''}
+                {r.heightFt ? ` · H ${r.heightFt}` : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {checked.length > 0 && <p className="text-slate-600"><span className="font-semibold text-slate-700">Checked:</span> {checked.map(c => c.label).join(', ')}</p>}
+      {visit.notes && <p className="text-slate-600"><span className="font-semibold text-slate-700">Notes:</span> {visit.notes}</p>}
+    </div>
+  )
+}
 
 interface Props {
   isOpen: boolean
@@ -79,7 +108,7 @@ interface Props {
 
 export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged }: Props) {
   const { user, can } = useAuth()
-  const { updateLead } = useCRM()
+  const { updateLead, refreshLeads } = useCRM()
 
   const [users, setUsers] = useState<ManagedUser[]>([])
   // The lead's latest site visit: planned (date + team, nothing recorded yet) or recorded.
@@ -113,6 +142,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     setShowReassign(false)
     setReassignTo('')
     setShowLostReason(false)
+    refreshLeads() // pick up a stage change someone else just made before showing this lead's step
     getManagedUsersDirectory().then(setUsers)
     getAllSiteVisits().then(v => setSiteVisit(v.filter(sv => sv.leadId === lead.id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null))
     getAllRequirements().then(async reqs => {
@@ -141,7 +171,8 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
       onDone(note)
       onClose()
     } else {
-      onDone(result.error ?? 'Could not update status.')
+      // Shown as an alert: onDone paints a green "success" toast, which hid failed saves.
+      alert(`Status was NOT changed: ${result.error ?? 'could not update status.'}`)
     }
   }
 
@@ -162,6 +193,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     setConverting(false)
     if (!result.ok) { setConvertError(result.error ?? 'Could not create the project.'); return }
     setShowConvert(false)
+    if (result.warning) alert(`Project created, but some records were not saved: ${result.warning}`)
     await save('won', `Converted to a project: ${convertName.trim()}`)
   }
 
@@ -171,7 +203,8 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     await save(
       status,
       `MD override: ${LEAD_STATUS_LABEL[lead.status]} → ${LEAD_STATUS_LABEL[status]}${withReason(reason)}`,
-      { mdStatusOverride: true, ...(status === 'lost' ? { lostReason: reason || 'MD override' } : {}) },
+      // Stepping back hands the lead to its owner (the PC) so they can redo the step.
+      { mdStatusOverride: true, ...(lead.ownerId ? { assignedToId: lead.ownerId, assignedToName: lead.ownerName } : {}) },
     )
   }
 
@@ -221,6 +254,14 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   // itself. The "Mark … done" fallbacks only show when the record already exists but the lead never advanced.
   function renderBody() {
     if (!canAct) {
+      // The person who just finished the site visit sees it as done, not as "waiting".
+      if (stage === 'site_visit_done') {
+        return (
+          <p className="text-sm text-emerald-700 font-semibold py-6 text-center">
+            ✓ Site visit done{effectiveAssigneeName ? ` — details sent to ${effectiveAssigneeName}` : ''}.
+          </p>
+        )
+      }
       return (
         <p className="text-sm text-slate-500 py-6 text-center">
           Waiting on {effectiveAssigneeName ?? 'Not Assigned'}.
@@ -242,7 +283,7 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
         return (
           <div className="space-y-3">
             {/* Two steps: PLAN the visit (date + team), then RECORD it (rooms, measurements, checklist). */}
-            {!siteVisit ? (
+            {!siteVisit || (siteVisit.status !== 'scheduled' && lead.mdStatusOverride) ? (
               <>
                 <p className="text-sm text-slate-600">Step 1 — assign the site visit: pick the date and the site engineer who will go and record it.</p>
                 <button onClick={() => setEmbed('site')} className={primaryBtn} style={navy}>Assign Site Visit</button>
@@ -329,6 +370,10 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     }
   }
 
+  // MD override only steps BACK: the stages before the current one (a Lost lead can be restored to any stage).
+  const overrideOptions = (lead.status === 'lost' ? PIPELINE : PIPELINE.slice(0, Math.max(0, PIPELINE.findIndex(p => p.status === stage))))
+    .map(p => ({ value: p.status as string, label: LEAD_STATUS_LABEL[p.status] }))
+
   const wa = waLink(lead)
   // The early stages only ever need a phone call — WhatsApp is hidden and
   // Call takes the full row, solid green.
@@ -336,6 +381,8 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
   const canLose = canAct && stage !== 'won' && stage !== 'lost'
   // A planned visit already counts as being in the Site Visit stage.
   const currentIdx = PIPELINE.findIndex(p => p.status === (lead.status === 'site_visit_scheduled' ? 'site_visit_done' : stage))
+  // Stages after the site visit show the recorded visit above the current step.
+  const showPrevious = ['site_visit_done', 'requirements_captured', 'quotation_drafted', 'client_approved'].includes(stage)
 
   return (
     <>
@@ -348,33 +395,31 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
     )}
     <BottomSheet isOpen={isOpen && !embed} onClose={onClose} title={`Update Status — ${leadStatusLabel(lead)}`} height="full">
       <div className="space-y-4">
-        {user?.role === 'owner' && (
+        {user?.role === 'owner' && overrideOptions.length > 0 && (
           <MdOverrideCard noun="status" title="lead status" saving={saving} onApply={submitMdOverride}
-            options={OVERRIDE_STATUSES.filter(s => s !== lead.status).map(s => ({ value: s, label: LEAD_STATUS_LABEL[s] }))} />
+            options={overrideOptions} />
         )}
 
-        <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-2">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Lead Details</p>
+        {/* Lead banner — who the lead is and where it stands in the journey. */}
+        <div className="rounded-2xl p-4 space-y-2.5 text-white" style={{ background: 'linear-gradient(135deg,#0F2A4A,#1B3F6B)' }}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="text-base font-extrabold text-slate-800 leading-tight truncate">{lead.name}</h3>
-              {lead.leadNumber && <p className="text-xs text-slate-400 mt-0.5">{lead.leadNumber}</p>}
+              <h3 className="text-base font-extrabold leading-tight truncate">{lead.name}</h3>
+              <p className="text-xs text-slate-300 mt-0.5">{[lead.leadNumber, lead.city].filter(Boolean).join(' · ')}</p>
             </div>
-            <StatusBadge status={lead.status} label={leadStatusLabel(lead)} />
+            <span className="text-[11px] font-bold bg-white/20 rounded-full px-2.5 py-1 shrink-0">{leadStatusLabel(lead)}</span>
           </div>
-          <div className="space-y-0.5 text-sm text-slate-600 pt-1">
+          <div className="space-y-0.5 text-xs text-slate-200">
             <p>{lead.phone}</p>
-            <p>{lead.city}</p>
-            <p>Owner: {lead.ownerName}</p>
+            <p>Lead Owner: {lead.ownerName}{lead.assignedToName && lead.assignedToName !== lead.ownerName ? ` · Assigned to: ${lead.assignedToName}` : ''}</p>
             {lead.businessDivision && (
               <p>{BUSINESS_DIVISION_LABEL[lead.businessDivision]}{lead.businessBrand ? ` (${BUSINESS_BRAND_LABEL[lead.businessBrand]})` : ''}</p>
             )}
-            {lead.assignedToName && lead.assignedToName !== lead.ownerName && <p>Assigned to: {lead.assignedToName}</p>}
           </div>
           {currentIdx !== -1 && (
-            <div className="flex flex-wrap gap-x-2 gap-y-1 pt-2 border-t border-slate-200">
+            <div className="flex flex-wrap gap-x-2 gap-y-1 pt-2 border-t border-white/20">
               {PIPELINE.map((p, i) => (
-                <span key={p.status} className={`text-[11px] font-semibold ${i < currentIdx ? 'text-emerald-600' : i === currentIdx ? 'text-indigo-700 underline underline-offset-4' : 'text-slate-300'}`}>
+                <span key={p.status} className={`text-[11px] font-semibold ${i < currentIdx ? 'text-emerald-300' : i === currentIdx ? 'text-white underline underline-offset-4' : 'text-slate-400/60'}`}>
                   {i < currentIdx ? '✓ ' : ''}{p.label}{i < PIPELINE.length - 1 ? ' ›' : ''}
                 </span>
               ))}
@@ -422,6 +467,14 @@ export function LeadStatusSheet({ isOpen, onClose, lead, onDone, onStatusChanged
           )}
         </div>
 
+        {/* Earlier stages' details on top, the current step below — so nobody has to open another screen. */}
+        {showPrevious && siteVisit && siteVisit.status !== 'scheduled' && (
+          <>
+            <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wide pt-1">Previous stage — Site Visit Summary</p>
+            <SiteVisitDetails visit={siteVisit} />
+          </>
+        )}
+        <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wide pt-1">Current step — {PIPELINE[currentIdx]?.label ?? leadStatusLabel(lead)}</p>
         {renderBody()}
 
         {/* Edit the record behind the current stage (e.g. after the MD overrides the lead back to it). */}

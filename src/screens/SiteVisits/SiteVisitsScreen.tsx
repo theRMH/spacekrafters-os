@@ -53,11 +53,6 @@ function fmtDate(val: string): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function todayStr(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
 
 function newRoom(): SiteVisitRoom {
   return { id: `room_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: '', measurements: '', lengthFt: '', widthFt: '', heightFt: '', calculatedTotal: '', notes: '' }
@@ -254,10 +249,6 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
       setFormError('Lead, visit date and the person for the site visit are required.')
       return
     }
-    if (visitDate < todayStr()) {
-      setFormError('Cannot plan a site visit for a past date.')
-      return
-    }
     const now = new Date().toISOString()
     const visit: SiteVisit = {
       id: `sv_${Date.now()}`,
@@ -309,12 +300,15 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
       const lead = leads.find(l => l.id === updated.leadId)
       if (lead && ['new', 'contacted', 'qualified', 'site_visit_scheduled'].includes(lead.status)) {
         // ...and sends it back to the PC who owns the lead, for the next step.
-        const pc = assignableMembers.find(m => m.id === lead.ownerId)
+        // Uses the lead's own owner so the hand-back never depends on the member list having loaded.
+        const pcMember = assignableMembers.find(m => m.id === lead.ownerId)
+        const pcId = lead.ownerId
+        const pcName = pcMember?.fullName ?? lead.ownerName
         await updateLead(lead.id, {
           status: 'site_visit_done',
-          ...(pc ? { assignedToId: pc.id, assignedToName: pc.fullName, assignedRole: pc.role } : {}),
-        }, `Site visit recorded${pc ? ` — sent to ${pc.fullName}` : ''}`)
-        if (pc) await sendNotification([pc.id], 'Site Visit Recorded', `${leadName(lead.id)} — the site visit is recorded. Next: requirements.`, `/leads/${lead.id}`)
+          ...(pcId ? { assignedToId: pcId, assignedToName: pcName, ...(pcMember ? { assignedRole: pcMember.role } : {}) } : {}),
+        }, `Site visit completed${pcName ? ` — sent to ${pcName}` : ''}`)
+        if (pcId) await sendNotification([pcId], 'Site Visit Completed', `${leadName(lead.id)} — the site visit is completed. Next: requirements.`, `/leads/${lead.id}`)
       }
     }
     const doneMsg = recording ? 'Site visit recorded — lead moved to Site Visit Done.' : 'Site visit updated.'
@@ -582,8 +576,7 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Visit Date *</label>
-            <DateField value={visitDate} min={showEdit ? undefined : todayStr()}
-              onChange={v => setVisitDate(!showEdit && v < todayStr() ? todayStr() : v)} />
+            <DateField value={visitDate} onChange={setVisitDate} />
           </div>
 
           <div>
@@ -690,7 +683,7 @@ export default function SiteVisitsScreen({ embed }: { embed?: { leadId: string; 
             className="w-full text-white rounded-xl py-3.5 text-sm font-bold active:opacity-90"
             style={{ background: '#C9A24B' }}
           >
-            {showEdit ? (selected?.status === 'scheduled' ? 'Save & Complete Site Visit' : 'Save Changes') : 'Assign Site Visit'}
+            {showEdit ? (selected?.status === 'scheduled' ? 'Site Visit Completed' : 'Save Changes') : 'Assign Site Visit'}
           </button>
         </div>
       </BottomSheet>

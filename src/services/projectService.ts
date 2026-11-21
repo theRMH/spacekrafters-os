@@ -18,16 +18,21 @@ export async function getAllProjects(): Promise<Project[]> {
   })
 }
 
+// An existing project is updated, a new one inserted. A plain upsert would also be checked against the INSERT policy
+// (owner / project coordinator only), which blocks an architect, QS or site engineer from saving their own step.
 export async function upsertProject(project: Project): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: 'Not configured.' }
-  const { error } = await supabase.from(TABLE).upsert({
-    id:            project.id,
+  const row = {
     owner_id:      project.coordinatorId,
     status:        project.status,
     current_stage: project.stage,
     data:          project,
     updated_at:    new Date().toISOString(),
-  }, { onConflict: 'id' })
+  }
+  const updated = await supabase.from(TABLE).update(row).eq('id', project.id).select('id')
+  if (updated.error) return { ok: false, error: updated.error.message }
+  if (updated.data && updated.data.length > 0) return { ok: true }
+  const { error } = await supabase.from(TABLE).insert({ id: project.id, ...row })
   if (error) return { ok: false, error: error.message }
   return { ok: true }
 }

@@ -71,11 +71,6 @@ export function fmtDateTime(val: string): string {
   return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-function todayStr(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
 
 // Folds whichever notes were entered for a step into that step's history
 // line, so they stay attached to that exact point in time (not just the
@@ -393,11 +388,11 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Requesting Date *</label>
-            <DateField value={requestingDate} min={todayStr()} onChange={setRequestingDate} />
+            <DateField value={requestingDate} onChange={setRequestingDate} />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Expected Delivery Date *</label>
-            <DateField value={expectedDeliveryDate} min={requestingDate || todayStr()} onChange={setExpectedDeliveryDate} />
+            <DateField value={expectedDeliveryDate} min={requestingDate || undefined} onChange={setExpectedDeliveryDate} />
           </div>
           <label className="text-xs font-semibold text-slate-500 block">Additional Notes</label>
           <textarea value={additionalNotes} onChange={e => setAdditionalNotes(e.target.value)} rows={3}
@@ -531,7 +526,7 @@ export function MRFDetailBody({ mrf, projectName, leadId, onSaved, notify }: {
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Release Date *</label>
-            <DateField value={releaseDate} min={todayStr()} onChange={setReleaseDate} />
+            <DateField value={releaseDate} onChange={setReleaseDate} />
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-500 mb-1 block">Payment Reference</label>

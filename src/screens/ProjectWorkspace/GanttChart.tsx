@@ -14,11 +14,6 @@ interface Props {
 const DAY_MS = 24 * 60 * 60 * 1000
 const PX_PER_DAY = 28
 
-function todayStr(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
 
 function toDate(val?: string): Date | null {
   if (!val) return null
@@ -109,7 +104,7 @@ export function GanttChart({ tasks, dependencies, onTaskUpdated, canEditDeadline
 
       <BottomSheet isOpen={!!editing} onClose={() => setEditing(null)} title={editing ? `Edit Deadline — ${editing.title}` : ''}>
         <div className="space-y-4 pb-4">
-          <DateField value={deadlineInput} min={todayStr()} onChange={setDeadlineInput} />
+          <DateField value={deadlineInput} onChange={setDeadlineInput} />
           <button onClick={saveDeadline} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">
             Save Deadline
           </button>

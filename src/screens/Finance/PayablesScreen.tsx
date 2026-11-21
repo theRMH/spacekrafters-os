@@ -150,6 +150,7 @@ export default function PayablesScreen() {
   }
 
   function resolvedProjectId(p: Payable): string | undefined {
+    if (p.projectId) return p.projectId
     if (!p.vendorBillId) return undefined
     const bill = vendorBills.find(b => b.id === p.vendorBillId)
     const po = bill?.purchaseOrderId ? purchaseOrders.find(o => o.id === bill.purchaseOrderId) : undefined
@@ -251,6 +252,8 @@ export default function PayablesScreen() {
       : [{
           id: `alloc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           transactionId: txnId,
+          // A payable raised from a project's delivered order is that project's cost; anything else is overhead.
+          projectId: selected.projectId,
           amount,
           createdAt: new Date().toISOString(),
         }]

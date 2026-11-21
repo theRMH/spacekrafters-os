@@ -21,6 +21,15 @@ export async function upsertClient(client: Client): Promise<{ ok: boolean; error
   return { ok: true }
 }
 
+// After a project is deleted: remove its client too when no project is left on it.
+export async function deleteClientIfNoProjects(clientId?: string): Promise<boolean> {
+  if (!clientId) return false
+  const { getAllProjects } = await import('./projectService')
+  const projects = await getAllProjects()
+  if (projects.some(p => p.clientId === clientId)) return false
+  return (await deleteClient(clientId)).ok
+}
+
 export async function deleteClient(id: string): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: 'Not configured.' }
   const { error } = await supabase.from(TABLE).delete().eq('id', id)

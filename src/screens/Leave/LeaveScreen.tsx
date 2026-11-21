@@ -220,11 +220,11 @@ export default function LeaveScreen() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Leave From Date *</label>
-              <DateField value={fromDate} min={todayStr()} onChange={setFromDate} />
+              <DateField value={fromDate} onChange={setFromDate} />
             </div>
             <div>
               <label className={lbl}>Leave To Date *</label>
-              <DateField value={toDate} min={fromDate || todayStr()} onChange={setToDate} />
+              <DateField value={toDate} min={fromDate || undefined} onChange={setToDate} />
             </div>
           </div>
           <div>

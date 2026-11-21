@@ -27,11 +27,6 @@ import type {
   Project, Vendor, PurchaseRequest, VendorQuote, PurchaseOrder, GoodsReceipt, VendorBill, Payable, AuditLog,
 } from '../../types'
 
-function todayStr(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
 
 function fmtCurrency(n?: number): string {
   if (n == null) return '—'
@@ -482,7 +477,7 @@ export default function ProcurementScreen() {
           </div>
           <div>
             <label className={label}>Needed By</label>
-            <DateField value={form.neededBy?.slice(0, 10) ?? ''} min={todayStr()}
+            <DateField value={form.neededBy?.slice(0, 10) ?? ''}
               onChange={v => setForm(f => ({ ...f, neededBy: v || undefined }))} />
           </div>
           <button onClick={handleSavePR} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:bg-indigo-700">

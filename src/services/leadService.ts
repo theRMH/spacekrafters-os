@@ -35,14 +35,22 @@ export async function insertLead(lead: Lead): Promise<{ ok: boolean; error?: str
 
 export async function upsertLead(lead: Lead): Promise<{ ok: boolean; error?: string }> {
   if (!supabase) return { ok: false, error: 'Not configured.' }
-  const { error } = await supabase.from(TABLE).upsert({
-    id:         lead.id,
+  const row = {
     owner_id:   lead.ownerId || null, // never '' — that's not a valid sks_managed_users FK reference
     status:     lead.status,
     data:       lead,
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'id' })
-  if (error) return { ok: false, error: error.message }
+  }
+  // Update first: a plain upsert is also checked against the INSERT policy (owner / admin / PC only), which blocks
+  // the QS / designer a lead is assigned to from saving it. Insert only when the lead is genuinely new.
+  const updated = await supabase.from(TABLE).update(row).eq('id', lead.id).select('id')
+  if (updated.error) return { ok: false, error: updated.error.message }
+  if (updated.data && updated.data.length > 0) return { ok: true }
+  const { error } = await supabase.from(TABLE).insert({ id: lead.id, ...row })
+  if (error) {
+    // The row exists but the update touched 0 rows → a permission (RLS) block, not a missing lead.
+    return { ok: false, error: error.code === '23505' ? 'The database blocked this update (permissions).' : error.message }
+  }
   return { ok: true }
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronDown, Phone, MessageCircle, CheckCircle2, Circle } from 'lucide-react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { ChevronLeft, ChevronDown, CheckCircle2, Circle } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { AppHeader } from '../../components/layout/AppHeader'
 import { MultiFileUploadField } from '../../components/forms/MultiFileUploadField'
@@ -37,6 +37,8 @@ function fmtDateTime(iso?: string): string {
 export default function MyProjectDetailScreen() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
+  // Back goes to wherever the page was opened from (Projects list or My Tasks).
+  const backTo = (useLocation().state as { from?: string } | null)?.from ?? '/my-tasks'
   const { user } = useAuth()
   const { leads } = useCRM()
 
@@ -77,14 +79,6 @@ export default function MyProjectDetailScreen() {
   const progressPct = project?.status === 'closed' ? 100 : stageIdx >= 0 ? Math.round(((stageIdx + 1) / PROJECT_STAGE_ORDER.length) * 100) : 0
   const daysToDue = project?.expectedHandoverDate ? Math.ceil((new Date(project.expectedHandoverDate).getTime() - Date.now()) / 86400000) : null
 
-  function waLink(): string | null {
-    if (!project?.clientPhone) return null
-    const digits = project.clientPhone.replace(/\D/g, '')
-    if (!digits) return null
-    const intl = digits.length === 10 ? `91${digits}` : digits
-    return `https://wa.me/${intl}?text=${encodeURIComponent(`Hi, this is regarding your project "${project.name}" with SpaceKrafters.`)}`
-  }
-
   function Section({ id, title, sub, children }: { id: string; title: string; sub: string; children: React.ReactNode }) {
     const open = openSection === id
     return (
@@ -119,7 +113,6 @@ export default function MyProjectDetailScreen() {
   }
 
   const responsibleRole = ROLE_FOR_PROJECT_STAGE[project.stage]
-  const wa = waLink()
   const showFinance = !FIELD_ROLES.includes(user?.role ?? '')
 
   return (
@@ -129,7 +122,7 @@ export default function MyProjectDetailScreen() {
       {/* Hero header */}
       <div className="px-5 pt-5 pb-6 text-white" style={{ background: 'linear-gradient(135deg, #0F2A4A, #16385E)' }}>
         <div className="flex items-start justify-between gap-3 mb-4">
-          <button onClick={() => navigate('/my-tasks')} className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center active:bg-white/25">
+          <button onClick={() => navigate(backTo)} className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center active:bg-white/25">
             <ChevronLeft size={19} />
           </button>
           <div className="relative w-14 h-14 shrink-0">
@@ -165,18 +158,6 @@ export default function MyProjectDetailScreen() {
       </div>
 
       <div className="px-4 pt-4 space-y-3">
-        {/* Actions */}
-        <div className="grid grid-cols-2 gap-2.5">
-          <a href={project.clientPhone ? `tel:${project.clientPhone}` : undefined}
-            className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold ${project.clientPhone ? 'bg-emerald-50 text-emerald-700 active:bg-emerald-100' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}>
-            <Phone size={15} /> Call
-          </a>
-          <a href={wa ?? undefined} target="_blank" rel="noopener noreferrer"
-            className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold ${wa ? 'bg-emerald-50 text-emerald-700 active:bg-emerald-100' : 'bg-slate-100 text-slate-300 pointer-events-none'}`}>
-            <MessageCircle size={15} /> WhatsApp
-          </a>
-        </div>
-
         {/* Coordinator / responsible */}
         <div className="bg-white rounded-2xl shadow-card border border-slate-100 divide-y divide-slate-100">
           <div className="px-4 py-3 flex items-center justify-between">
@@ -206,6 +187,11 @@ export default function MyProjectDetailScreen() {
             </button>
           </div>
         )}
+
+        <button onClick={() => navigate(`/projects/${project.id}`)}
+          className="w-full py-3 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 active:bg-slate-50">
+          Open Project Workspace
+        </button>
 
         {/* Notes & Activity */}
         <Section id="activity" title="Notes & Activity" sub={`${journey.length} entries`}>
